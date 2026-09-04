@@ -1,4 +1,4 @@
-using OwnaudioNET.Effects;
+using Ownaudio.Safe.Effects;
 using OwnaudioNET.Sources;
 using Logger;
 using System;
@@ -260,25 +260,23 @@ namespace OwnaudioNET.Features.Matchering
 
             Log.Info("\n=== MASTERING CHAIN CONFIGURATION ===");
 
-            var directEQ = new Equalizer30BandEffect(sampleRate);
-
             Log.Info($"\n[1] EQUALIZER (30-Band Parametric):");
 
             for (int i = 0; i < _freqBands.Length; i++)
-            {
-                directEQ.SetBandGain(i, _freqBands[i], qFactors[i], bandGains[i]);
                 Log.Info($"    Band {i,2} ({_bandNames[i],8}): {bandGains[i],+6:F1} dB, Q={qFactors[i]:F2}");
-            }
+
+            using StandaloneEffect directEQ = NativeMastering.Equalizer30(
+                sampleRate, channels, _freqBands, qFactors, bandGains);
 
             float compThreshold = Math.Clamp(compSettings.Threshold + preGainDb, -40f, -0.5f);
 
-            var globalCompressor = new CompressorEffect(
-                CompressorEffect.DbToLinear(compThreshold),
-                compSettings.Ratio,
-                10.0f,
-                100.0f,
-                1.0f
-            );
+            using StandaloneEffect globalCompressor = NativeMastering.Compressor(
+                sampleRate, channels,
+                thresholdDb: compThreshold,
+                ratio: compSettings.Ratio,
+                attackMs: 10.0f,
+                releaseMs: 100.0f,
+                makeupDb: 0.0f);
 
             Log.Info($"\n[2] COMPRESSOR:");
             Log.Info($"    Threshold: {compThreshold:F1} dB (measured {compSettings.Threshold:F1} dB, shifted by the {preGainDb:F1} dB pre-gain)");
@@ -288,18 +286,17 @@ namespace OwnaudioNET.Features.Matchering
             float headroomRecoveryGain = (effectiveBoost > 0) ? (float)Math.Pow(10, (effectiveBoost + 2.0f) / 20.0f) : 1.0f;
             float maxGain = Math.Min(dynamicAmp.MaxGain * headroomRecoveryGain, 3.0f);
 
-            var dynamicAmplifier = new DynamicAmpEffect(
-                targetLevel: dynamicAmp.TargetLevel,
-                attackTimeSeconds: dynamicAmp.AttackTime,
-                releaseTimeSeconds: dynamicAmp.ReleaseTime,
-                noiseThresholdDbOrLinear: -50.0f,
-                maxGainValue: maxGain,
-                sampleRateHz: sampleRate,
+            using StandaloneEffect dynamicAmplifier = NativeMastering.DynamicAmp(
+                sampleRate, channels,
+                targetRmsDb: dynamicAmp.TargetLevel,
+                attackSeconds: dynamicAmp.AttackTime,
+                releaseSeconds: dynamicAmp.ReleaseTime,
+                noiseGateDb: -50.0f,
+                maxGain: maxGain,
+                maxGainReductionDb: 6.0f,
                 rmsWindowSeconds: 0.8f,
-                initialGain: headroomRecoveryGain,
-                maxGainChangePerSecondDb: 12.0f,
-                maxGainReductionDb: 6.0f
-            );
+                maxGainChangeDbPerSec: 12.0f,
+                initialGain: headroomRecoveryGain);
 
             Log.Info($"\n[3] DYNAMIC AMPLIFIER (AGC - Optimized):");
             Log.Info($"    Target Level: {dynamicAmp.TargetLevel:F1} dB");
@@ -307,73 +304,33 @@ namespace OwnaudioNET.Features.Matchering
             Log.Info($"    Max Gain: {maxGain:F2}x ({20 * MathF.Log10(maxGain):+F1} dB - CAPPED)");
             Log.Info($"    Initial Gain: {headroomRecoveryGain:F2}x ({20 * MathF.Log10(headroomRecoveryGain):+F1} dB compensation)");
 
-            var outputLimiter = new LimiterEffect(
-                sampleRate,
-                threshold: -0.5f,
-                ceiling: -0.2f,
-                release: 60.0f,
-                lookAheadMs: 5.0f
-            );
+            using StandaloneEffect outputLimiter = NativeMastering.Limiter(
+                sampleRate, channels,
+                thresholdDb: -0.5f,
+                ceilingDb: -0.2f,
+                releaseMs: 60.0f,
+                lookaheadMs: 5.0f);
 
             Log.Info($"\n[4] LIMITER (True Peak):");
             Log.Info($"    Threshold: -0.5 dB, Ceiling: -0.2 dB");
-
-            var audioConfig = new Ownaudio.Core.AudioConfig
-            {
-                SampleRate = sampleRate,
-                Channels = channels,
-                BufferSize = 512
-            };
-
-            globalCompressor.Initialize(audioConfig);
-            directEQ.Initialize(audioConfig);
-            dynamicAmplifier.Initialize(audioConfig);
-            outputLimiter.Initialize(audioConfig);
 
             Log.Info("\n=== PROCESSING AUDIO ===");
             Log.Info($"Chain: EQ → Compressor → DynamicAmp → Limiter");
             Log.Info($"Sample Rate: {sampleRate} Hz, Channels: {channels}");
             Log.Info($"Total Samples: {audioData.Length:N0}, Total Frames: {audioData.Length / channels:N0}");
 
-            int samplesPerChunk = 512 * channels;
             int totalSamples = (audioData.Length / channels) * channels;
 
-            for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
-            {
-                int count = Math.Min(samplesPerChunk, totalSamples - offset);
-                int frames = count / channels;
-                var chunk = audioData.AsSpan(offset, count);
+            NativeMastering.Render(
+                audioData, channels,
+                new[] { directEQ, globalCompressor, dynamicAmplifier, outputLimiter },
+                done => Log.Info($"\rProcessing: {done * 100f:F1}%"));
 
-                directEQ.Process(chunk, frames);
-                globalCompressor.Process(chunk, frames);
-                dynamicAmplifier.Process(chunk, frames);
-                outputLimiter.Process(chunk, frames);
-
-                Log.Info($"\rProcessing: {(float)(offset + count) / totalSamples * 100f:F1}%");
-            }
-
-            _compensateLimiterLatency(audioData, totalSamples, channels, outputLimiter);
+            NativeMastering.CompensateLatency(audioData, totalSamples, channels, outputLimiter);
 
             Log.Info("\nWriting to file...");
             OwnaudioNET.Recording.WaveFile.Create(outputFile, audioData, sampleRate, channels, 24);
             Log.Info($"Processing completed: {outputFile}");
-        }
-
-        /// <summary>
-        /// The limiter's lookahead delays the whole render, so the head is silence
-        /// and the last few ms are still sitting in its delay line. Pushes silence
-        /// through to get the tail back, then slides everything into place.
-        /// </summary>
-        private static void _compensateLimiterLatency(float[] audioData, int totalSamples, int channels, LimiterEffect limiter)
-        {
-            int shift = limiter.LatencySamples * channels;
-            if (shift <= 0 || shift >= totalSamples) return;
-
-            float[] tail = new float[shift];
-            limiter.Process(tail, limiter.LatencySamples);
-
-            Array.Copy(audioData, shift, audioData, 0, totalSamples - shift);
-            Array.Copy(tail, 0, audioData, totalSamples - shift, shift);
         }
 
         #endregion

@@ -1,4 +1,4 @@
-using OwnaudioNET.Effects;
+using Ownaudio.Safe.Effects;
 using OwnaudioNET.Sources;
 using Logger;
 using System;
@@ -118,27 +118,16 @@ namespace OwnaudioNET.Features.Matchering
                 Log.Info($"Headroom for the preset boosts: {20 * MathF.Log10(preGain):F1}dB (max band {maxBoost:F1}dB)");
             }
 
-            var presetEQ = new Equalizer30BandEffect(sampleRate);
-            for (int i = 0; i < _freqBands.Length; i++)
-                presetEQ.SetBandGain(i, _freqBands[i], qFactors[i], bandGains[i]);
+            using StandaloneEffect presetEQ = NativeMastering.Equalizer30(
+                sampleRate, channels, _freqBands, qFactors, bandGains);
 
-            CompressorEffect? compressor = eqOnlyMode ? null : new CompressorEffect(
-                CompressorEffect.DbToLinear(preset.Compression.Threshold),
-                preset.Compression.Ratio,
-                preset.Compression.AttackTime,
-                preset.Compression.ReleaseTime,
-                CompressorEffect.DbToLinear(preset.Compression.MakeupGain),
-                sampleRate);
-
-            var audioConfig = new Ownaudio.Core.AudioConfig
-            {
-                SampleRate = sampleRate,
-                Channels = channels,
-                BufferSize = 512
-            };
-
-            presetEQ.Initialize(audioConfig);
-            compressor?.Initialize(audioConfig);
+            using StandaloneEffect? compressor = eqOnlyMode ? null : NativeMastering.Compressor(
+                sampleRate, channels,
+                thresholdDb: preset.Compression.Threshold,
+                ratio: preset.Compression.Ratio,
+                attackMs: preset.Compression.AttackTime,
+                releaseMs: preset.Compression.ReleaseTime,
+                makeupDb: preset.Compression.MakeupGain);
 
             Log.Info($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} chain to base sample...");
 
@@ -146,18 +135,10 @@ namespace OwnaudioNET.Features.Matchering
                 Log.Info($"Preset compressor: {preset.Compression.Threshold:F1}dB, {preset.Compression.Ratio:F1}:1, " +
                          $"{preset.Compression.AttackTime:F0}/{preset.Compression.ReleaseTime:F0}ms, makeup {preset.Compression.MakeupGain:F1}dB");
 
-            int samplesPerChunk = 512 * channels;
             int totalSamples = (audioData.Length / channels) * channels;
 
-            for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
-            {
-                int count = Math.Min(samplesPerChunk, totalSamples - offset);
-                int frames = count / channels;
-                var chunk = audioData.AsSpan(offset, count);
-
-                presetEQ.Process(chunk, frames);
-                compressor?.Process(chunk, frames);
-            }
+            NativeMastering.Render(audioData, channels,
+                compressor is null ? new[] { presetEQ } : new[] { presetEQ, compressor });
 
             _normalizeToPreset(audioData, totalSamples, channels, sampleRate, preset);
         }
@@ -177,23 +158,12 @@ namespace OwnaudioNET.Features.Matchering
 
             Log.Info($"Level pushed by {20 * MathF.Log10(gain):+0.0;-0.0}dB toward {preset.TargetLoudness:F1}dBFS");
 
-            var limiter = new LimiterEffect(sampleRate, threshold: -0.5f, ceiling: -0.2f, release: 60f, lookAheadMs: 5f);
-            limiter.Initialize(new Ownaudio.Core.AudioConfig
-            {
-                SampleRate = sampleRate,
-                Channels = channels,
-                BufferSize = 512
-            });
+            using StandaloneEffect limiter = NativeMastering.Limiter(
+                sampleRate, channels,
+                thresholdDb: -0.5f, ceilingDb: -0.2f, releaseMs: 60f, lookaheadMs: 5f);
 
-            int samplesPerChunk = 512 * channels;
-
-            for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
-            {
-                int count = Math.Min(samplesPerChunk, totalSamples - offset);
-                limiter.Process(audioData.AsSpan(offset, count), count / channels);
-            }
-
-            _compensateLimiterLatency(audioData, totalSamples, channels, limiter);
+            NativeMastering.Render(audioData, channels, new[] { limiter });
+            NativeMastering.CompensateLatency(audioData, totalSamples, channels, limiter);
 
             float peak = 0f;
             for (int i = 0; i < audioData.Length; i++) peak = Math.Max(peak, Math.Abs(audioData[i]));

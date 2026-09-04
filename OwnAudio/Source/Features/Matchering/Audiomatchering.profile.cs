@@ -16,7 +16,10 @@ namespace OwnaudioNET.Features.Matchering
         #region Constants and Fields
 
         /// <summary>
-        /// Constant Q of the native 30 band equalizer - the only Q that ever plays.
+        /// The native 30 band equalizer's default Q, and the default the deconvolution
+        /// solves against. The engine takes a Q per band now, so `fixedQ: 0` gives the
+        /// optimized ones and they do reach the filter - the default stays here so an
+        /// existing profile keeps producing the curve it always did.
         /// </summary>
         public const float NativeBandQ = 4.318474f;
 
@@ -235,7 +238,7 @@ namespace OwnaudioNET.Features.Matchering
         public float[] QFactors { get; init; } = new float[30];
 
         /// <summary>
-        /// Threshold in dB; CompressorEffect wants it linear, see DbToLinear.
+        /// Threshold in dB, which is what the native compressor takes.
         /// </summary>
         public float CompThresholdDb { get; init; }
 

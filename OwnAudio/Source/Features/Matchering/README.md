@@ -144,19 +144,15 @@ compressor.Ratio = profile.CompRatio;
 ```
 
 **`fixedQ`** — the Q the deconvolution assumes on every band. It defaults to
-`AudioAnalyzer.NativeBandQ` (4.318474), the constant Q of the *native* 30-band
-equalizer, because the engine has no per-band Q parameter: that is the only Q that
-ever actually plays. Handing the deconvolution the optimized per-band Qs would solve
-for a filter bank that isn't the one making the sound. Pass `fixedQ: 0` to get the
-per-band Qs anyway — but note that nothing plays them any more: `Process` runs the
-native EQ now, and only the 30 band gains are mirrored across, so the offline render
-hears the same constant Q the mixer does even though it still calls `SetBandGain`
-with its own.
+`AudioAnalyzer.NativeBandQ` (4.318474), the native 30-band equalizer's own default,
+so a profile calculated today produces the curve it always did. The engine takes a Q
+per band now, so `fixedQ: 0` gives you the optimized per-band Qs and they do reach
+the filter — the render sets frequency, Q and gain on every band.
 
 **`cutOnly`** — subtracts the curve's maximum from all 30 bands, so the loudest band
 lands on 0 dB and everything else goes negative. The offline chain buys its headroom
 with a pre-gain stage; a real-time chain built from native effects has no gain stage,
-so the level comes off the EQ instead and the `DynamicAmpEffect` behind it brings it
+so the level comes off the EQ instead and the gain rider behind it brings it
 back to `TargetLoudness`. Since `_calcEqAdjustments` has already removed the broadband
 offset, this shift is a pure level change and leaves the tonal shape alone. The shift
 stops short if it would push the deepest cut past the ±9 dB clamp — a curve that hits
@@ -170,8 +166,8 @@ actually applied.
 | `WantedCurveDb[30]` | The curve we want to hear, dB. The one worth drawing. |
 | `BandGainsDb[30]` | What the filter bank has to be *set to* for that curve to come out (deconvolved). |
 | `QFactors[30]` | The Q the deconvolution assumed per band. |
-| `CompThresholdDb`, `CompRatio` | Compressor settings. The threshold is dB — `CompressorEffect` wants it linear, run it through `CompressorEffect.DbToLinear`. |
-| `TargetLoudness`, `MaxGain` | AGC target and gain ceiling for `DynamicAmpEffect`. |
+| `CompThresholdDb`, `CompRatio` | Compressor settings. The threshold is dB, which is what the native compressor takes. |
+| `TargetLoudness`, `MaxGain` | AGC target and gain ceiling for the gain rider. |
 | `AmpAttackSeconds`, `AmpReleaseSeconds` | AGC timing. Comes off the preset on the preset overload, otherwise the 0.1 / 0.5 default. |
 | `SourceLoudness`, `SourceCrestDb`, `TargetCrestDb` | Measured values, for a status readout. |
 | `CutOnlyShiftDb` | How far the curve got pushed down; 0 when `cutOnly` was off. |
@@ -268,18 +264,26 @@ that are outliers in more than 30% of bands are discarded.
 
 ### Mastering chain
 
+Built and run by [Audiomatchering.chain.cs](Audiomatchering.chain.cs), which talks to the
+engine directly — native effects addressed by param id, no `IEffectProcessor` in between.
+The managed effects are a parameter model for a mixer chain; routing the render through
+them meant anything they don't mirror (the per-band Q, the rider's starting gain) was
+dropped, and their unit conversions sat between the preset and the DSP for nothing.
+
 Rendered chunk-by-chunk (512-frame buffers) in this fixed order:
 
 | # | Effect | Role |
 | --- | --- | --- |
-| 1 | `CompressorEffect` | Stabilize dynamics first (settings from crest-factor analysis). |
-| 2 | `Equalizer30BandEffect` | Shape frequency response with optimized per-band Q. |
-| 3 | `DynamicAmpEffect` | AGC toward the target loudness (gain capped ~3×, gentle). |
-| 4 | `LimiterEffect` | True-peak safety (−0.5 dB threshold, −0.2 dB ceiling). |
+| 1 | `EffectType.Equalizer30` | Shape frequency response — frequency, Q and gain per band. |
+| 2 | `EffectType.Compressor` | Stabilize dynamics (settings from crest-factor analysis). |
+| 3 | `EffectType.DynamicAmp` | AGC toward the target loudness (gain capped ~3×, gentle). |
+| 4 | `EffectType.Limiter` | True-peak safety (−0.5 dB threshold, −0.2 dB ceiling). |
 
 Before the chain, **smart headroom** pre-gain is applied: the source is
-attenuated proportionally to the largest boosts (clamped to −12…0 dB) and the
-dynamic amp compensates back, avoiding intersample clipping from EQ boosts.
+attenuated proportionally to the largest boosts (clamped to −12…0 dB) and the gain
+rider compensates back, avoiding intersample clipping from EQ boosts. It starts from
+the inverse of the pre-gain rather than slewing there, which is what the rider's
+`initialGain` seed is for.
 Output is written as 24-bit WAV via `OwnaudioNET.Recording.WaveFile.Create`.
 
 ---
