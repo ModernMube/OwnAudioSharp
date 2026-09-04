@@ -10,7 +10,9 @@ JSON preset library.
 The real-time DSP lives in Rust
 ([`ownaudio-core/src/effects/smartmaster/`](../../../../OwnAudioEngineRust/ownaudio-core/src/effects/smartmaster/));
 the managed side here is the parameter model, the preset owner and the
-measurement (cold path), plus a managed mirror of the chain for non-native mode.
+measurement (cold path). `Process()` talks to a standalone native SmartMaster
+instance — the same engine the mixer twin uses. There is no non-native
+production path.
 
 Namespace root: `OwnaudioNET.Effects.SmartMaster`
 Public entry point: `SmartMasterEffect`.
@@ -21,8 +23,7 @@ Public entry point: `SmartMasterEffect`.
 
 | File | Responsibility |
 | --- | --- |
-| [SmartMasterEffect.cs](SmartMasterEffect.cs) | Public `IEffectProcessor` facade; coordinates chain, presets, measurement, mic monitor. |
-| [SmartMasterAudioChain.cs](SmartMasterAudioChain.cs) | The internal DSP chain; zero-allocation hot path with SIMD + optional parallelism. |
+| [SmartMasterEffect.cs](SmartMasterEffect.cs) | Public `IEffectProcessor` facade; coordinates the native engine, presets, measurement, mic monitor. |
 | [SmartMasterConfig.cs](SmartMasterConfig.cs) | Serializable configuration + `MeasurementResults`. |
 | [SmartMasterPresetManager.cs](SmartMasterPresetManager.cs) | Load/save presets, create factory presets on disk. |
 | [SmartMasterPresetFactory.cs](SmartMasterPresetFactory.cs) | `SpeakerType` enum + built-in speaker preset definitions. |
@@ -30,21 +31,25 @@ Public entry point: `SmartMasterEffect`.
 | [SmartMasterMicMonitor.cs](SmartMasterMicMonitor.cs) | Background mic-level meter for the UI. |
 | [SmartMasterStatus.cs](SmartMasterStatus.cs) | `MeasurementStatus` enum + `MeasurementStatusInfo`. |
 | [SmartMasterJsonContext.cs](SmartMasterJsonContext.cs) | Source-generated JSON context (AOT/trim-safe). |
-| [Components/](Components/) | Reusable DSP building blocks (see below). |
+| [Components/](Components/) | DSP building blocks the measurement uses, plus the public filter types (see below). |
 
 ### Components
 
-| Component | Role |
-| --- | --- |
-| [Biquad.cs](Components/Biquad.cs) | RBJ coefficient builders (HP/LP/BP/peaking/shelf) + denormal-flushed TDF-II state. |
-| [SubsonicFilter.cs](Components/SubsonicFilter.cs) | 4th-order Butterworth subsonic high-pass, 24 dB/oct. |
-| [ParametricEqStage.cs](Components/ParametricEqStage.cs) | 8-band sweepable input PEQ (bell / low shelf / high shelf). |
-| [CrossoverFilter.cs](Components/CrossoverFilter.cs) | Linkwitz-Riley 4th-order (2× cascaded Butterworth) low/high split. |
-| [PhaseAlignment.cs](Components/PhaseAlignment.cs) | Per-channel (main L / main R / Sub) time delay + phase inversion. |
-| [SubharmonicSynth.cs](Components/SubharmonicSynth.cs) | Two-band octave divider (48–72→24–36 Hz, 72–112→36–56 Hz), added in parallel. |
-| [FIRFilter.cs](Components/FIRFilter.cs) | Generic linear-phase windowed-sinc FIR. Unused by the chain now, kept as a utility. |
-| [NoiseGenerator.cs](Components/NoiseGenerator.cs) | White / pink (Voss-McCartney) / low-frequency test noise. |
-| [SmartMasterSpectrumAnalyzer.cs](Components/SmartMasterSpectrumAnalyzer.cs) | FFT-based 30-band ISO spectrum + RMS for calibration. |
+The mastering chain itself is rust now, so nothing here sits on an audio path any
+more. The measurement uses the bottom two; the rest are public standalone filter
+types, kept because they are on the frozen API surface and are usable on their own.
+
+| Component | Role | Used by |
+| --- | --- | --- |
+| [NoiseGenerator.cs](Components/NoiseGenerator.cs) | White / pink (Voss-McCartney) / low-frequency test noise. | measurement |
+| [SmartMasterSpectrumAnalyzer.cs](Components/SmartMasterSpectrumAnalyzer.cs) | FFT-based 30-band ISO spectrum + RMS for calibration. | measurement, mic monitor |
+| [Biquad.cs](Components/Biquad.cs) | RBJ coefficient builders (HP/LP/BP/peaking/shelf) + denormal-flushed TDF-II state. | the filters below |
+| [SubsonicFilter.cs](Components/SubsonicFilter.cs) | 4th-order Butterworth subsonic high-pass, 24 dB/oct. | callers only |
+| [ParametricEqStage.cs](Components/ParametricEqStage.cs) | 8-band sweepable input PEQ (bell / low shelf / high shelf). | callers only |
+| [CrossoverFilter.cs](Components/CrossoverFilter.cs) | Linkwitz-Riley 4th-order (2× cascaded Butterworth) low/high split. | callers only |
+| [PhaseAlignment.cs](Components/PhaseAlignment.cs) | Per-channel (main L / main R / Sub) time delay + phase inversion. | callers only |
+| [SubharmonicSynth.cs](Components/SubharmonicSynth.cs) | Two-band octave divider (48–72→24–36 Hz, 72–112→36–56 Hz), added in parallel. | callers only |
+| [FIRFilter.cs](Components/FIRFilter.cs) | Generic linear-phase windowed-sinc FIR. | callers only |
 
 ---
 
@@ -70,25 +75,20 @@ threshold they sit open and only bite when a preset pulls them down.
 
 ### Hot-path guarantees
 
-- `SmartMasterAudioChain.Process` **must not allocate**. All scratch buffers are
-  pre-allocated in `Configure()` (sized for 2048 frames, grown only on the rare
-  oversize block).
-- No `Parallel.Invoke` on the audio thread — it allocated a closure per block and
-  handed the work to the thread pool, which is exactly what a real-time path must
-  not do.
-- No logging from `Process` either; NaN/Inf input is zeroed silently and counted
-  in `SanitizedSampleCount` for whoever wants to poll it.
-- Every IIR state is denormal-flushed, so a decaying tail can't park in the
-  subnormal range and cost a fortune on x86.
-- Only the limiters add latency (their lookahead). `LatencySamples` reports the
-  output limiter plus, when the crossover runs, the main-band limiter in series.
+The DSP is in rust, so the guarantees live there. On the managed side:
 
-### Reconfiguration is atomic
+- `Process()` scans the block for NaN/Inf, zeroes what it finds and counts it in
+  `SanitizedSampleCount` — no logging, nothing else per block.
+- A bypassed effect returns before that scan.
+- Only the limiters add latency (their lookahead). `LatencySamples` comes from the
+  native instance.
 
-`Configure()` builds a brand-new set of components and swaps them in at the end
-(field-by-field). `Load`, `LoadSpeakerPreset`, `ResetToDefaults` and measurement
-completion all build a **new** `SmartMasterAudioChain` under `_configLock` and
-dispose the old one, so the audio thread never observes a half-updated chain.
+### Reconfiguration
+
+`Load`, `LoadSpeakerPreset`, `ResetToDefaults`, `ApplyConfiguration` and a finished
+measurement all store the config under `_configLock` and push it onto the native
+effect. `Process()` takes the same lock, so a block never straddles a half-applied
+config.
 
 ---
 
@@ -116,10 +116,9 @@ sm.ApplyConfiguration(otherConfig);        // or hand it one built elsewhere
 ```
 
 Editing the object `GetConfiguration()` returns does **not** change the sound on
-its own — the managed chain keeps running the components it was built with until
-`ApplyConfiguration` (or a preset load) swaps in a new one. In rust-native mode
-the control tick mirrors the config onto the native effect every ~15 ms, so edits
-are audible immediately and the call is only a no-op safety net.
+its own — call `ApplyConfiguration` (or load a preset) to push it onto the native
+effect. On a mixer the control tick mirrors it every ~15 ms anyway, so there the
+call is only a safety net.
 
 Presets are JSON files under
 `%UserProfile%/.ownaudio/smartmasterpresets/*.smartmaster.json`. Factory presets

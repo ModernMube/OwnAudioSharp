@@ -100,6 +100,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
         private AudioConfig? _config;
 
         private static readonly float[] StandardFrequencies = {
@@ -128,7 +129,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// EQ has no dry path, this stays at 1.0.
+        /// Dry/wet. The native 30-band engine honours it; 0 is fully dry.
         /// </summary>
         public float Mix { get; set; } = 1.0f;
 
@@ -205,6 +206,7 @@ namespace OwnaudioNET.Effects
                     _z2[i] = new float[TOTAL_FILTERS];
                 }
             }
+            _native.Initialize(this, config);
         }
 
         #region Band Properties
@@ -397,40 +399,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Runs the active bands over every channel, with a wide safety clip at the end.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> samples, int frameCount)
         {
-            if (_config == null || !_enabled || _activeCount == 0) return;
-
-            int channels = _config.Channels;
-            int totalLen = frameCount * channels;
-
-            for (int ch = 0; ch < channels; ch++)
-            {
-                float[] z1 = _z1[ch];
-                float[] z2 = _z2[ch];
-
-                for (int i = ch; i < totalLen; i += channels)
-                {
-                    float input = samples[i];
-
-                    for (int b = 0; b < _activeCount; b++)
-                    {
-                        int f = _activeBands[b] * FILTERS_PER_BAND;
-
-                        float output = _b0[f] * input + z1[f];
-                        z1[f] = _b1[f] * input - _a1[f] * output + z2[f];
-                        z2[f] = _b2[f] * input - _a2[f] * output;
-                        input = output;
-                    }
-
-                    if (Math.Abs(input) > 1.5f) input = Math.Sign(input) * 1.5f;
-
-                    samples[i] = input;
-                }
-            }
+            _native.Process(this, samples, frameCount);
         }
 
         /// <summary>
@@ -444,6 +417,7 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
+            _native.Reset();
             for (int i = 0; i < _z1.Length; i++)
             {
                 Array.Clear(_z1[i], 0, _z1[i].Length);
@@ -458,6 +432,7 @@ namespace OwnaudioNET.Effects
         {
             if (_disposed) return;
             Reset();
+            _native.Dispose();
             _disposed = true;
         }
 

@@ -58,23 +58,17 @@ namespace OwnaudioNET.Effects
     {
         private readonly int _sampleRate;
 
-        /// <summary>
-        /// All-pass state, x[n-1] and y[n-1] for the 8 possible stages.
-        /// </summary>
-        private readonly float[] _apX1 = new float[8];
-        private readonly float[] _apY1 = new float[8];
-
         private float _rate = 0.45f;
         private float _depth = 0.65f;
         private float _feedback = 0.40f;
         private float _mix = 0.45f;
         private int _stages = 4;
-        private float _lfoPhase = 0.0f;
 
         private readonly Guid _id;
         private readonly string _name;
         private bool _enabled;
         private bool _disposed;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
         private AudioConfig? _config;
 
         /// <summary>
@@ -192,6 +186,7 @@ namespace OwnaudioNET.Effects
         public void Initialize(AudioConfig config)
         {
             _config = config;
+            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -237,47 +232,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Sweeps the notch between 200Hz and 2kHz and runs the chain per sample.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled) return;
-
-            int sampleCount = frameCount * _config.Channels;
-            int stages = _stages;
-            float depth = _depth;
-            float fb = _feedback;
-            float mx = _mix;
-
-            float lfoIncrement = (float)(2.0 * Math.PI * _rate / _sampleRate);
-
-            for (int i = 0; i < sampleCount; i++)
-            {
-                float input = buffer[i];
-
-                float lfo = MathF.Sin(_lfoPhase);
-                float freq = 200.0f + 1800.0f * (0.5f + 0.5f * lfo * depth);
-                float coeff = _allPassCoeff(freq);
-
-                float processed = input;
-                for (int s = 0; s < stages; s++)
-                {
-                    float output = coeff * processed + _apX1[s] - coeff * _apY1[s];
-                    _apX1[s] = processed;
-                    _apY1[s] = output;
-                    processed = output;
-                }
-
-                processed += input * fb;
-                buffer[i] = input * (1.0f - mx) + processed * mx;
-
-                _lfoPhase += lfoIncrement;
-                if (_lfoPhase >= 2.0 * Math.PI) _lfoPhase -= (float)(2.0 * Math.PI);
-            }
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -291,9 +250,7 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
-            _lfoPhase = 0.0f;
-            Array.Clear(_apX1, 0, _apX1.Length);
-            Array.Clear(_apY1, 0, _apY1.Length);
+            _native.Reset();
         }
 
         /// <summary>
@@ -304,6 +261,7 @@ namespace OwnaudioNET.Effects
             if (_disposed) return;
 
             Reset();
+            _native.Dispose();
             _disposed = true;
         }
 

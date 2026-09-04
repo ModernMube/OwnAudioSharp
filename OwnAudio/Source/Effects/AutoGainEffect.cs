@@ -46,6 +46,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
         private AudioConfig? _config;
 
         private float _targetLevel = 0.25f;
@@ -59,15 +60,10 @@ namespace OwnaudioNET.Effects
         private float _rmsLevel = 0.0f;
 
         /// <summary>
-        /// 5ms ring, we read the delayed sample out of it.
+        /// 5ms of lookahead in frames — the fallback for LatencySamples until the native
+        /// instance is up, and what PDC gets from a freshly built effect.
         /// </summary>
-        private float[]? _lookaheadBuffer;
-        private int _lookaheadIndex;
         private int _lookaheadLength;
-
-        private const int RmsWindowSize = 64;
-        private float _rmsAccumulator = 0.0f;
-        private int _rmsSampleCount = 0;
 
         /// <summary>
         /// Instance id.
@@ -120,20 +116,21 @@ namespace OwnaudioNET.Effects
         public float MinimumGain { get => _minGain; set => _minGain = Math.Clamp(value, 0.1f, 1.0f); }
 
         /// <summary>
-        /// Gain we are applying right now.
+        /// Gain we are applying right now, read back off the native rider. Reads 1.0 until
+        /// the first Process — a mixer twin has its own meter, this one follows Process().
         /// </summary>
-        public float CurrentGain => _currentGain;
+        public float CurrentGain => _native.GetParam(NativeEffectEngine.MeterCurrentGain) ?? _currentGain;
 
         /// <summary>
-        /// Detected input RMS.
+        /// Detected input RMS, off the same meter.
         /// </summary>
-        public float InputLevel => _rmsLevel;
+        public float InputLevel => _native.GetParam(NativeEffectEngine.MeterInputLevel) ?? _rmsLevel;
 
         /// <summary>
         /// Lookahead latency in samples, the mixer uses this for PDC.
         /// 240 @48k, 220 @44.1k.
         /// </summary>
-        public int LatencySamples => _lookaheadLength;
+        public int LatencySamples => _native.IsReady ? _native.LatencySamples : _lookaheadLength;
 
         /// <summary>
         /// Builds the effect with hand picked values.
@@ -171,92 +168,23 @@ namespace OwnaudioNET.Effects
         {
             _config = config ?? throw new AudioException("AutoGainEffect ERROR: ", new ArgumentNullException(nameof(config)));
             _initLookahead(config.SampleRate);
+            _native.Initialize(this, config);
         }
 
         /// <summary>
-        /// 5ms worth of ring buffer for the given rate.
+        /// 5ms of lookahead in frames for the given rate.
         /// </summary>
         private void _initLookahead(int sampleRate)
         {
-            int _needed = (int)(0.005f * sampleRate);
-            if (_lookaheadBuffer == null || _lookaheadBuffer.Length != _needed)
-                _lookaheadBuffer = new float[_needed];
-
-            _lookaheadLength = _needed;
-            _lookaheadIndex = 0;
+            _lookaheadLength = (int)(0.005f * sampleRate);
         }
 
         /// <summary>
-        /// Runs the gain rider over the interleaved buffer.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null || !_enabled || _lookaheadBuffer == null) return;
-
-            int sampleCount = frameCount * _config.Channels;
-
-            float rmsLevel = _rmsLevel;
-            float gain = _currentGain;
-            float rmsAcc = _rmsAccumulator;
-            int rmsCount = _rmsSampleCount;
-
-            float att = _attackCoeff;
-            float rel = _releaseCoeff;
-            float gate = _gateThreshold;
-            float target = _targetLevel;
-            float maxG = _maxGain;
-            float minG = _minGain;
-
-            float invAtt = 1.0f - att;
-            float invRel = 1.0f - rel;
-            const float slew = 0.001f;
-
-            for (int i = 0; i < sampleCount; i++)
-            {
-                float input = buffer[i];
-
-                rmsAcc += input * input;
-                rmsCount++;
-
-                if (rmsCount >= RmsWindowSize)
-                {
-                    float currentRms = MathF.Sqrt(rmsAcc / RmsWindowSize);
-
-                    if (currentRms > rmsLevel)
-                        rmsLevel = att * rmsLevel + invAtt * currentRms;
-                    else
-                        rmsLevel = rel * rmsLevel + invRel * currentRms;
-
-                    rmsAcc = 0.0f;
-                    rmsCount = 0;
-                }
-
-                float delayed = _lookaheadBuffer[_lookaheadIndex];
-                _lookaheadBuffer[_lookaheadIndex] = input;
-                _lookaheadIndex++;
-                if (_lookaheadIndex >= _lookaheadLength) _lookaheadIndex = 0;
-
-                if (rmsLevel >= gate)
-                {
-                    float targetGain = Math.Clamp(target / Math.Max(rmsLevel, 0.0001f), minG, maxG);
-                    gain += Math.Clamp(targetGain - gain, -slew, slew);
-                }
-
-                float output = delayed * gain;
-
-                if (output > 0.95f)
-                    output = 0.95f + (output - 0.95f) * 0.1f;
-                else if(output < -0.95f)
-                    output = -0.95f + (output + 0.95f) * 0.1f;
-
-                buffer[i] = Math.Clamp(output, -0.99f, 0.99f);
-            }
-
-            _rmsLevel = rmsLevel;
-            _currentGain = gain;
-            _rmsAccumulator = rmsAcc;
-            _rmsSampleCount = rmsCount;
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -301,12 +229,9 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
+            _native.Reset();
             _currentGain = 1.0f;
             _rmsLevel = 0.0f;
-            _rmsAccumulator = 0.0f;
-            _rmsSampleCount = 0;
-            if (_lookaheadBuffer != null) Array.Clear(_lookaheadBuffer, 0, _lookaheadBuffer.Length);
-            _lookaheadIndex = 0;
         }
 
         /// <summary>
@@ -316,6 +241,7 @@ namespace OwnaudioNET.Effects
         {
             if (_disposed) return;
             Reset();
+            _native.Dispose();
             _disposed = true;
         }
 

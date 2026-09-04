@@ -65,16 +65,8 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private AudioConfig? _config;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
 
-        private float[]? _delayBufferL;
-        private float[]? _delayBufferR;
-        private int _writeIndex;
-
-        /// <summary>
-        /// One-pole damping filter state per side.
-        /// </summary>
-        private float _lastOutputL;
-        private float _lastOutputR;
         private float _sampleRate;
 
         private int _timeMs;
@@ -82,8 +74,6 @@ namespace OwnaudioNET.Effects
         private float _mix;
         private float _damping;
         private bool _pingPong;
-
-        private float _delaySamples;
 
         /// <summary>
         /// Instance id.
@@ -106,7 +96,7 @@ namespace OwnaudioNET.Effects
         public int Time
         {
             get => _timeMs;
-            set { _timeMs = Math.Clamp(value, 1, 5000); _updateDelaySamples(); }
+            set => _timeMs = Math.Clamp(value, 1, 5000);
         }
 
         /// <summary>
@@ -154,7 +144,7 @@ namespace OwnaudioNET.Effects
         public int SampleRate
         {
             get => (int)_sampleRate;
-            set { _sampleRate = Math.Clamp(value, 8000, 192000); _updateDelaySamples(); _initBuffer(); }
+            set => _sampleRate = Math.Clamp(value, 8000, 192000);
         }
 
         /// <summary>
@@ -176,9 +166,6 @@ namespace OwnaudioNET.Effects
             _mix = mix;
             _damping = damping;
             _pingPong = pingPong;
-
-            _updateDelaySamples();
-            _initBuffer();
         }
 
         /// <summary>
@@ -191,116 +178,22 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// ms to samples.
-        /// </summary>
-        private void _updateDelaySamples()
-        {
-            _delaySamples = (_timeMs / 1000.0f) * _sampleRate;
-        }
-
-        /// <summary>
-        /// Allocates the 5s delay lines, or just wipes them if the size already fits.
-        /// </summary>
-        private void _initBuffer()
-        {
-            int _needed = (int)(5.0f * _sampleRate);
-            if (_delayBufferL == null || _delayBufferL.Length != _needed)
-            {
-                _delayBufferL = new float[_needed];
-                _delayBufferR = new float[_needed];
-            }
-            else
-            {
-#nullable disable
-                Array.Clear(_delayBufferL, 0, _delayBufferL.Length);
-                Array.Clear(_delayBufferR, 0, _delayBufferR.Length);
-#nullable restore
-            }
-            _writeIndex = 0;
-            _lastOutputL = 0.0f;
-            _lastOutputR = 0.0f;
-        }
-
-        /// <summary>
-        /// Takes the engine config, rebuilds the lines on a rate change.
+        /// Takes the engine config and builds the native line on it.
         /// </summary>
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
                 SampleRate = config.SampleRate;
+            _native.Initialize(this, config);
         }
 
         /// <summary>
-        /// Reads back the delayed signal with interpolation, damps the feedback and mixes it in.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null || !_enabled || _mix < 0.001f || _delayBufferL == null || _delayBufferR == null) return;
-            if (_config.Channels != 2) return;
-
-            int bufLen = _delayBufferL.Length;
-
-            float rep = _repeat;
-            float mx = _mix;
-            float damp = _damping;
-            float ds = _delaySamples;
-            bool pp = _pingPong;
-
-            float lastL = _lastOutputL;
-            float lastR = _lastOutputR;
-
-            for (int frame = 0; frame < frameCount; frame++)
-            {
-                int idxL = frame * 2;
-                int idxR = idxL + 1;
-
-                float inputL = buffer[idxL];
-                float inputR = buffer[idxR];
-
-                float readPos = _writeIndex - ds;
-                if (readPos < 0) readPos += bufLen;
-
-                //ms to samples rarely lands on a whole number, so readPos can come out a
-                //hair below zero and the wrap rounds it right back up to bufLen in float
-                if (readPos >= bufLen) readPos -= bufLen;
-
-                int readIdxA = (int)readPos;
-                int readIdxB = readIdxA + 1;
-                if (readIdxB >= bufLen) readIdxB = 0;
-
-                float frac = readPos - readIdxA;
-
-                float delayedL = _delayBufferL[readIdxA] + frac * (_delayBufferL[readIdxB] - _delayBufferL[readIdxA]);
-                float delayedR = _delayBufferR[readIdxA] + frac * (_delayBufferR[readIdxB] - _delayBufferR[readIdxA]);
-
-                lastL += damp * (delayedL - lastL);
-                lastR += damp * (delayedR - lastR);
-
-                float fbL = Math.Clamp(lastL * rep, -1.0f, 1.0f);
-                float fbR = Math.Clamp(lastR * rep, -1.0f, 1.0f);
-
-                if (pp)
-                {
-                    _delayBufferL[_writeIndex] = inputL + fbR;
-                    _delayBufferR[_writeIndex] = inputR + fbL;
-                }
-                else
-                {
-                    _delayBufferL[_writeIndex] = inputL + fbL;
-                    _delayBufferR[_writeIndex] = inputR + fbR;
-                }
-
-                buffer[idxL] = inputL * (1.0f - mx) + lastL * mx;
-                buffer[idxR] = inputR * (1.0f - mx) + lastR * mx;
-
-                _writeIndex++;
-                if (_writeIndex >= bufLen) _writeIndex = 0;
-            }
-
-            _lastOutputL = lastL;
-            _lastOutputR = lastR;
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -329,16 +222,12 @@ namespace OwnaudioNET.Effects
         public int ResetGeneration { get; private set; }
 
         /// <summary>
-        /// Empties the lines and the filter state.
+        /// Empties the native lines and the filter state.
         /// </summary>
         public void Reset()
         {
             ResetGeneration++;
-            if (_delayBufferL != null) Array.Clear(_delayBufferL, 0, _delayBufferL.Length);
-            if (_delayBufferR != null) Array.Clear(_delayBufferR, 0, _delayBufferR.Length);
-            _writeIndex = 0;
-            _lastOutputL = 0.0f;
-            _lastOutputR = 0.0f;
+            _native.Reset();
         }
 
         /// <summary>
@@ -346,6 +235,7 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public void Dispose()
         {
+            _native.Dispose();
         }
 
         /// <summary>

@@ -56,23 +56,18 @@ namespace OwnaudioNET.Effects
     /// </summary>
     public sealed class FlangerEffect : IEffectProcessor
     {
-        /// <summary>
-        /// 20ms delay line, sized once at construction.
-        /// </summary>
-        private readonly float[] _delayBuffer;
         private readonly int _sampleRate;
-        private int _bufferIndex;
 
         private float _rate = 0.35f;
         private float _depth = 0.60f;
         private float _feedback = 0.45f;
         private float _mix = 0.40f;
-        private float _lfoPhase = 0.0f;
 
         private readonly Guid _id;
         private readonly string _name;
         private bool _enabled;
         private bool _disposed;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
         private AudioConfig? _config;
 
         /// <summary>
@@ -154,8 +149,6 @@ namespace OwnaudioNET.Effects
             Depth = depth;
             Feedback = feedback;
             Mix = mix;
-
-            _delayBuffer = new float[(int)(0.02 * sampleRate)];
         }
 
         /// <summary>
@@ -173,7 +166,6 @@ namespace OwnaudioNET.Effects
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
 
             _sampleRate = sampleRate;
-            _delayBuffer = new float[(int)(0.02 * sampleRate)];
 
             SetPreset(preset);
         }
@@ -184,6 +176,7 @@ namespace OwnaudioNET.Effects
         public void Initialize(AudioConfig config)
         {
             _config = config;
+            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -229,44 +222,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Sweeps the read tap with the LFO and blends the delayed signal back in.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled) return;
-
-            int sampleCount = frameCount * _config.Channels;
-            int bufLen = _delayBuffer.Length;
-
-            float lfoIncrement = (float)(2.0 * Math.PI * _rate / _sampleRate);
-            float depth = _depth;
-            float fb = _feedback;
-            float mx = _mix;
-
-            for (int i = 0; i < sampleCount; i++)
-            {
-                float input = buffer[i];
-
-                float lfo = MathF.Sin(_lfoPhase);
-                float delayTime = 0.001f + 0.009f * (1.0f + lfo * depth) * 0.5f;
-                int delaySamples = Math.Clamp((int)(delayTime * _sampleRate), 1, bufLen - 1);
-
-                int readIndex = (_bufferIndex - delaySamples + bufLen) % bufLen;
-                float delayed = _delayBuffer[readIndex];
-
-                _delayBuffer[_bufferIndex] = Math.Clamp(input + delayed * fb, -1.0f, 1.0f);
-                buffer[i] = input * (1.0f - mx) + delayed * mx;
-
-                _bufferIndex++;
-                if (_bufferIndex >= bufLen) _bufferIndex = 0;
-
-                _lfoPhase += lfoIncrement;
-                if (_lfoPhase >= 2.0 * Math.PI) _lfoPhase -= (float)(2.0 * Math.PI);
-            }
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -275,14 +235,12 @@ namespace OwnaudioNET.Effects
         public int ResetGeneration { get; private set; }
 
         /// <summary>
-        /// Empties the delay line and parks the LFO.
+        /// Empties the native delay line and parks the LFO.
         /// </summary>
         public void Reset()
         {
             ResetGeneration++;
-            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
-            _bufferIndex = 0;
-            _lfoPhase = 0.0f;
+            _native.Reset();
         }
 
         /// <summary>
@@ -293,6 +251,7 @@ namespace OwnaudioNET.Effects
             if (_disposed) return;
 
             Reset();
+            _native.Dispose();
             _disposed = true;
         }
 

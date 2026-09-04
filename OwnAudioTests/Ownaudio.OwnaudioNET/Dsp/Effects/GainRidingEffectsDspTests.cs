@@ -148,24 +148,26 @@ public class GainRidingEffectsDspTests
     [Fact]
     public void NoiseGateStopsDynamicAmpChasingAQuietPassage()
     {
-        float _gated = _gainOnQuietInput(gateDb: -40.0f);
-        float _open = _gainOnQuietInput(gateDb: -90.0f);
+        (double Level, float Gain) _gated = _quietSettled(gateDb: -40.0f);
+        (double Level, float Gain) _open = _quietSettled(gateDb: -90.0f);
 
-        _open.Should().BeGreaterThan(5.5f, "with the gate out of the way the rider runs up to its 6x ceiling");
-        _gated.Should().BeLessThan(5.0f,
-            $"a -40 dB gate has to stop the climb short of the ceiling ({_gated:F2}x against {_open:F2}x ungated)");
+        _open.Level.Should().BeGreaterThan(_gated.Level + 6.0,
+            $"a -40 dB gate has to hold the rider back ({_gated.Level:F1} dB gated vs {_open.Level:F1} dB open)");
+
+        //CurrentGain reads the native meter, so it has to tell the same story as the output
+        _open.Gain.Should().BeGreaterThan(5.5f, "with the gate out of the way the rider runs up to its 6x ceiling");
+        _gated.Gain.Should().BeLessThan(5.0f,
+            $"a -40 dB gate has to stop the climb short of the ceiling ({_gated.Gain:F2}x against {_open.Gain:F2}x ungated)");
     }
 
-    private static float _gainOnQuietInput(float gateDb)
+    private static (double Level, float Gain) _quietSettled(float gateDb)
     {
         using (var _fx = new DynamicAmpEffect(DynamicAmpPreset.Default, Rate))
         {
             _fx.NoiseGateThresholdDb = gateDb;
             _fx.TargetRmsLevelDb = -12.0f;
             _fx.MaxGain = 6.0f;
-
-            _settledRmsDb(_fx, -70.0, 8);
-            return _fx.CurrentGain;
+            return (_settledRmsDb(_fx, -70.0, 8), _fx.CurrentGain);
         }
     }
 }

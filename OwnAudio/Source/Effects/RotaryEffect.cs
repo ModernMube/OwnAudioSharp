@@ -66,6 +66,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
         private AudioConfig _config = null!;
 
         /// <summary>
@@ -75,27 +76,11 @@ namespace OwnaudioNET.Effects
         private const float FastHornRatio = 9.0f;
         private const float FastRotorRatio = 8.0f;
 
-        private readonly int _sampleRate;
-        private readonly float[] _hornDelayBuffer;
-        private readonly float[] _rotorDelayBuffer;
-
         private float _hornSpeed = 0.8f;
         private float _rotorSpeed = 0.7f;
         private float _intensity = 0.7f;
         private float _mix = 1.0f;
         private bool _isFast = false;
-
-        private float _hornPhase = 0.0f;
-        private float _rotorPhase = 0.0f;
-        private int _hornBufferIndex = 0;
-        private int _rotorBufferIndex = 0;
-
-        /// <summary>
-        /// 800Hz crossover: one one-pole coefficient and a state for each side.
-        /// </summary>
-        private readonly float _xoverCoeff;
-        private float _lpState;
-        private float _hpState;
 
         /// <summary>
         /// Instance id.
@@ -176,18 +161,11 @@ namespace OwnaudioNET.Effects
             _name = "Rotary";
             _enabled = true;
 
-            _sampleRate = sampleRate;
             HornSpeed = hornSpeed;
             RotorSpeed = rotorSpeed;
             Intensity = intensity;
             Mix = mix;
             IsFast = isFast;
-
-            int maxDelay = (int)(0.01 * sampleRate);
-            _hornDelayBuffer = new float[maxDelay];
-            _rotorDelayBuffer = new float[maxDelay];
-
-            _xoverCoeff = (float)(2.0 * Math.PI * 800.0 / sampleRate);
         }
 
         /// <summary>
@@ -207,6 +185,7 @@ namespace OwnaudioNET.Effects
         public void Initialize(AudioConfig config)
         {
             _config = config;
+            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -256,57 +235,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Splits the band, sweeps both delay lines with their own LFO and sums them back.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled || _mix < 0.001f) return;
-
-            int sampleCount = frameCount * _config.Channels;
-            int hornLen = _hornDelayBuffer.Length;
-            int rotorLen = _rotorDelayBuffer.Length;
-
-            float intensity = _intensity;
-            float mx = _mix;
-            float k = _xoverCoeff;
-
-            float hornInc = (float)(2.0 * Math.PI * (_isFast ? _hornSpeed * FastHornRatio : _hornSpeed) / _sampleRate);
-            float rotorInc = (float)(2.0 * Math.PI * (_isFast ? _rotorSpeed * FastRotorRatio : _rotorSpeed) / _sampleRate);
-
-            for (int i = 0; i < sampleCount; i++)
-            {
-                float input = buffer[i];
-
-                _lpState += k * (input - _lpState);
-                _hpState += k * (input - _hpState);
-                float lowFreq = _lpState;
-                float highFreq = input - _hpState;
-
-                float hornLfo = MathF.Sin(_hornPhase);
-                int hornDelay = Math.Clamp((int)((0.001f + 0.003f * hornLfo * intensity) * _sampleRate), 1, hornLen - 1);
-                float hornOut = _hornDelayBuffer[(_hornBufferIndex - hornDelay + hornLen) % hornLen] * (0.8f + 0.2f * hornLfo * intensity);
-                _hornDelayBuffer[_hornBufferIndex] = highFreq;
-
-                float rotorLfo = MathF.Sin(_rotorPhase);
-                int rotorDelay = Math.Clamp((int)((0.002f + 0.004f * rotorLfo * intensity) * _sampleRate), 1, rotorLen - 1);
-                float rotorOut = _rotorDelayBuffer[(_rotorBufferIndex - rotorDelay + rotorLen) % rotorLen] * (0.9f + 0.1f * rotorLfo * intensity);
-                _rotorDelayBuffer[_rotorBufferIndex] = lowFreq;
-
-                buffer[i] = input * (1.0f - mx) + (hornOut + rotorOut) * mx;
-
-                _hornBufferIndex = (_hornBufferIndex + 1) % hornLen;
-                _rotorBufferIndex = (_rotorBufferIndex + 1) % rotorLen;
-
-                _hornPhase += hornInc;
-                _rotorPhase += rotorInc;
-
-                if (_hornPhase >= 2.0 * Math.PI) _hornPhase -= (float)(2.0 * Math.PI);
-                if (_rotorPhase >= 2.0 * Math.PI) _rotorPhase -= (float)(2.0 * Math.PI);
-            }
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -320,14 +253,7 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
-            Array.Clear(_hornDelayBuffer, 0, _hornDelayBuffer.Length);
-            Array.Clear(_rotorDelayBuffer, 0, _rotorDelayBuffer.Length);
-            _hornBufferIndex = 0;
-            _rotorBufferIndex = 0;
-            _hornPhase = 0.0f;
-            _rotorPhase = 0.0f;
-            _lpState = 0.0f;
-            _hpState = 0.0f;
+            _native.Reset();
         }
 
         /// <summary>
@@ -337,6 +263,7 @@ namespace OwnaudioNET.Effects
         {
             if (_disposed) return;
 
+            _native.Dispose();
             _disposed = true;
         }
 

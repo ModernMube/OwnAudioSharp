@@ -65,29 +65,14 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private AudioConfig? _config;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
 
-        /// <summary>
-        /// 50ms circular delay line, plenty for chorus.
-        /// </summary>
-        private readonly float[] _delayBuffer;
-        private int _bufferIndex;
         private float _sampleRate;
 
-        private float _lfoPhase;
         private float _rate = 0.5f;
         private float _depth = 0.35f;
         private float _mix = 0.35f;
         private int _voices = 3;
-
-        /// <summary>
-        /// Phase step per sample, recalculated when rate changes.
-        /// </summary>
-        private float _lfoIncrement;
-
-        /// <summary>
-        /// Fixed phase offset per voice so they don't move together.
-        /// </summary>
-        private readonly float[] _voicePhases;
 
         /// <summary>
         /// Instance id.
@@ -123,7 +108,6 @@ namespace OwnaudioNET.Effects
             set
             {
                 _rate = Math.Clamp(value, 0.1f, 10.0f);
-                _recalcIncrement();
             }
         }
 
@@ -161,13 +145,6 @@ namespace OwnaudioNET.Effects
             _mix = mix;
             _voices = voices;
 
-            _delayBuffer = new float[(int)(0.05f * sampleRate)];
-            _voicePhases = new float[6];
-
-            for (int i = 0; i < 6; i++)
-                _voicePhases[i] = (float)(i * Math.PI * 2.0 / 6.0);
-
-            _recalcIncrement();
         }
 
         /// <summary>
@@ -181,15 +158,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Phase step per sample from rate and sample rate.
-        /// </summary>
-        private void _recalcIncrement()
-        {
-            _lfoIncrement = (float)(2.0 * Math.PI * _rate / _sampleRate);
-        }
-
-        /// <summary>
-        /// Takes the engine config, retunes the LFO if the rate moved.
+        /// Takes the engine config and builds the native voice bank on it.
         /// </summary>
         public void Initialize(AudioConfig config)
         {
@@ -197,61 +166,16 @@ namespace OwnaudioNET.Effects
             if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
             {
                 _sampleRate = config.SampleRate;
-                _recalcIncrement();
             }
+            _native.Initialize(this, config);
         }
 
         /// <summary>
-        /// Reads every voice out of the delay line with linear interpolation, then blends with the dry.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null || !_enabled || _mix < 0.001f) return;
-
-            int totalSamples = frameCount * _config.Channels;
-            int bufLen = _delayBuffer.Length;
-
-            float currentDepth = _depth;
-            float currentMix = _mix;
-            int currentVoices = _voices;
-            float lfoInc = _lfoIncrement;
-
-            float baseDelaySamples = 0.015f * _sampleRate;
-            float modDepthSamples = 0.005f * _sampleRate * currentDepth;
-
-            for (int i = 0; i < totalSamples; i++)
-            {
-                float input = buffer[i];
-                _delayBuffer[_bufferIndex] = input;
-
-                float wet = 0.0f;
-                for (int v = 0; v < currentVoices; v++)
-                {
-                    float lfo = MathF.Sin(_lfoPhase + _voicePhases[v]);
-                    float readPos = _bufferIndex - (baseDelaySamples + lfo * modDepthSamples);
-
-                    while (readPos < 0) readPos += bufLen;
-                    while (readPos >= bufLen) readPos -= bufLen;
-
-                    int idxA = (int)readPos;
-                    int idxB = idxA + 1;
-                    if (idxB >= bufLen) idxB = 0;
-
-                    float frac = readPos - idxA;
-                    float a = _delayBuffer[idxA];
-                    wet += a + frac * (_delayBuffer[idxB] - a);
-                }
-
-                wet /= currentVoices;
-                buffer[i] = input * (1.0f - currentMix) + wet * currentMix;
-
-                _bufferIndex++;
-                if (_bufferIndex >= bufLen) _bufferIndex = 0;
-
-                _lfoPhase += lfoInc;
-                if (_lfoPhase >= Math.PI * 2) _lfoPhase -= (float)(Math.PI * 2);
-            }
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -294,9 +218,7 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
-            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
-            _bufferIndex = 0;
-            _lfoPhase = 0.0f;
+            _native.Reset();
         }
 
         /// <summary>
@@ -304,6 +226,7 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public void Dispose()
         {
+            _native.Dispose();
         }
 
         /// <summary>

@@ -62,6 +62,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
         private AudioConfig? _config;
 
         private float _threshold = 0.5f;
@@ -71,10 +72,6 @@ namespace OwnaudioNET.Effects
         private float _makeupGain = 1.2f;
         private float _sampleRate = 44100f;
 
-        private float _envelope = 0.0f;
-
-        private float _attackCoeff;
-        private float _releaseCoeff;
         private float _thresholdDb;
 
         /// <summary>
@@ -86,8 +83,6 @@ namespace OwnaudioNET.Effects
         /// dbx calls this OverEasy - how wide the transition into full ratio is.
         /// </summary>
         private float _kneeDb = 6.0f;
-        private float _kneeLowerBoundDb;
-        private float _kneeUpperBoundDb;
 
         /// <summary>
         /// Instance id.
@@ -171,6 +166,7 @@ namespace OwnaudioNET.Effects
                 _sampleRate = config.SampleRate;
                 _recalcCoeffs();
             }
+            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -179,14 +175,9 @@ namespace OwnaudioNET.Effects
         /// </summary>
         private void _recalcCoeffs(bool isMakeUoGain = false)
         {
-            _attackCoeff = MathF.Exp(-1.0f / (_sampleRate * _attackTime));
-            _releaseCoeff = MathF.Exp(-1.0f / (_sampleRate * _releaseTime));
-
             _thresholdDb = 20.0f * MathF.Log10(Math.Max(_threshold, 1e-6f));
             _slope = 1.0f / _ratio - 1.0f;
 
-            _kneeLowerBoundDb = _thresholdDb - _kneeDb * 0.5f;
-            _kneeUpperBoundDb = _thresholdDb + _kneeDb * 0.5f;
 
             if (isMakeUoGain) _autoMakeupGain();
         }
@@ -210,70 +201,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Runs the detector and the gain stage over the interleaved buffer, in place.
-        /// The loudest channel of each frame drives one shared envelope, so every
-        /// channel gets the same gain and the stereo image doesn't wander.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled) return;
-
-            float env = _envelope;
-            float att = _attackCoeff;
-            float rel = _releaseCoeff;
-            float mkp = _makeupGain;
-            float slope = _slope;
-            float tDb = _thresholdDb;
-            float kLower = _kneeLowerBoundDb;
-            float kUpper = _kneeUpperBoundDb;
-            float knee = Math.Max(_kneeDb, 0.001f);
-
-            int channels = _config.Channels;
-
-            for (int f = 0; f < frameCount; f++)
-            {
-                int b = f * channels;
-
-                float linked = 0.0f;
-                for (int c = 0; c < channels; c++)
-                {
-                    float a = Math.Abs(buffer[b + c]);
-                    if (a > linked) linked = a;
-                }
-
-                if (linked > env)
-                    env = att * env + (1.0f - att) * linked;
-                else
-                    env = rel * env + (1.0f - rel) * linked;
-
-                float gain = mkp;
-                if (env >= 1e-6f)
-                {
-                    float envDb = 20.0f * MathF.Log10(env);
-                    float grDb = 0.0f;
-
-                    if (envDb > kUpper)
-                    {
-                        grDb = slope * (envDb - tDb);
-                    }
-                    else if (envDb >= kLower)
-                    {
-                        float over = envDb - kLower;
-                        grDb = slope * (over * over) / (2.0f * knee);
-                    }
-
-                    gain = MathF.Pow(10.0f, grDb * 0.05f) * mkp;
-                }
-
-                for (int c = 0; c < channels; c++)
-                    buffer[b + c] *= gain;
-            }
-
-            _envelope = env < 1e-10f ? 0.0f : env;
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -355,7 +287,7 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
-            _envelope = 0.0f;
+            _native.Reset();
         }
 
         /// <summary>
@@ -366,6 +298,7 @@ namespace OwnaudioNET.Effects
             if (_disposed) return;
 
             Reset();
+            _native.Dispose();
             _disposed = true;
         }
 

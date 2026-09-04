@@ -55,6 +55,7 @@ namespace OwnaudioNET.Effects
         private readonly string _name;
         private bool _enabled;
         private AudioConfig? _config;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
 
         private float _targetRmsLevelDb;
         private float _attackTime;
@@ -81,11 +82,6 @@ namespace OwnaudioNET.Effects
         private float _initialRmsState;
 
         private float _initialGain = 1.0f;
-
-        /// <summary>
-        /// Gate state, kept between blocks so the hysteresis works.
-        /// </summary>
-        private bool _isAboveNoiseGate;
 
         /// <summary>
         /// Instance id.
@@ -184,9 +180,10 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gain we are applying right now.
+        /// Gain we are applying right now, read back off the native amp. Reads the initial
+        /// gain until the first Process — a mixer twin meters itself, this follows Process().
         /// </summary>
-        public float CurrentGain => _currentGain;
+        public float CurrentGain => _native.GetParam(NativeEffectEngine.MeterCurrentGain) ?? _currentGain;
 
         /// <summary>
         /// Builds the effect with hand picked values. The noise threshold takes dB, but a
@@ -222,7 +219,6 @@ namespace OwnaudioNET.Effects
             _lastGainDb = LinearToDb(initialGain);
             _initialGain = initialGain;
             _initialRmsState = 0.0f;
-            _isAboveNoiseGate = false;
         }
 
         /// <summary>
@@ -249,7 +245,6 @@ namespace OwnaudioNET.Effects
             _rmsState = startRms * startRms;
             _initialGain = 1.0f;
             _initialRmsState = _rmsState;
-            _isAboveNoiseGate = false;
         }
 
         /// <summary>
@@ -257,79 +252,18 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public void Initialize(AudioConfig config)
         {
-            _config = config;
-            if (config != null && Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
+            _config = config ?? throw new ArgumentNullException(nameof(config));
+            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
                 _sampleRate = config.SampleRate;
+            _native.Initialize(this, config);
         }
 
         /// <summary>
-        /// One gain value per block: measure, gate, move the gain, then apply it with a soft ceiling.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null || !_enabled) return;
-
-            int totalSamples = frameCount * _config.Channels;
-            if (totalSamples == 0) return;
-
-            float sumSq = 0.0f;
-            for (int i = 0; i < totalSamples; i++)
-            {
-                float s = buffer[i];
-                sumSq += s * s;
-            }
-
-            float blockTime = (float)frameCount / _sampleRate;
-            float alphaRms = MathF.Exp(-blockTime / _rmsWindowSeconds);
-
-            _rmsState = alphaRms * _rmsState + (1.0f - alphaRms) * (sumSq / totalSamples);
-
-            float rms = MathF.Sqrt(Math.Max(0, _rmsState));
-            if (float.IsNaN(rms)) { rms = 0f; _rmsState = 0f; }
-
-            float gateLinear = DbToLinear(_noiseGateThresholdDb);
-
-            if (!_isAboveNoiseGate)
-            {
-                if (rms > gateLinear * 1.5f) _isAboveNoiseGate = true;
-            }
-            else if (rms < gateLinear)
-            {
-                _isAboveNoiseGate = false;
-            }
-
-            float desiredGainDb = _lastGainDb;
-            if (_isAboveNoiseGate)
-            {
-                float levelDb = LinearToDb(Math.Max(rms, 1e-6f));
-                desiredGainDb = Math.Clamp(_targetRmsLevelDb - levelDb, -_maxGainReductionDb, LinearToDb(_maxGain));
-            }
-
-            float changeDb = desiredGainDb - _lastGainDb;
-            float alpha = MathF.Exp(-blockTime / (changeDb < 0 ? _attackTime : _releaseTime));
-            float maxChange = _maxGainChangePerSecondDb * blockTime;
-
-            float step = Math.Clamp((1.0f - alpha) * changeDb, -maxChange, maxChange);
-            _currentGain = Math.Clamp(DbToLinear(_lastGainDb + step), 0.1f, _maxGain);
-
-            float gain = _currentGain;
-            for (int i = 0; i < totalSamples; i++)
-            {
-                float val = buffer[i] * gain;
-                float absVal = MathF.Abs(val);
-
-                if (absVal > 0.95f)
-                {
-                    float excess = absVal - 0.95f;
-                    float limited = 0.95f + excess / (1.0f + excess * 20.0f);
-                    val = val > 0 ? limited : -limited;
-                }
-
-                buffer[i] = Math.Clamp(val, -1.0f, 1.0f);
-            }
-
-            _lastGainDb = LinearToDb(_currentGain);
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -437,10 +371,10 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
+            _native.Reset();
             _currentGain = _initialGain;
             _rmsState = _initialRmsState;
             _lastGainDb = LinearToDb(_initialGain);
-            _isAboveNoiseGate = false;
         }
 
         /// <summary>
@@ -448,6 +382,7 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public void Dispose()
         {
+            _native.Dispose();
         }
 
         /// <summary>

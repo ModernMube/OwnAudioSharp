@@ -50,6 +50,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
         private AudioConfig? _config;
 
         private float _mix;
@@ -57,12 +58,6 @@ namespace OwnaudioNET.Effects
         private float _cutFreq;
         private float _sampleRate;
 
-        /// <summary>
-        /// HP filter coefficient, rebuilt from cutoff and rate.
-        /// </summary>
-        private float _alpha;
-        private float _xPrev;
-        private float _yPrev;
 
         /// <summary>
         /// Instance id.
@@ -111,11 +106,7 @@ namespace OwnaudioNET.Effects
         public float CutoffFrequency
         {
             get => _cutFreq;
-            set
-            {
-                _cutFreq = Math.Clamp(value, 100.0f, 20000.0f);
-                _updateAlpha();
-            }
+            set => _cutFreq = Math.Clamp(value, 100.0f, 20000.0f);
         }
 
         /// <summary>
@@ -124,11 +115,7 @@ namespace OwnaudioNET.Effects
         public float SampleRate
         {
             get => _sampleRate;
-            set
-            {
-                _sampleRate = Math.Clamp(value, 8000.0f, 192000.0f);
-                _updateAlpha();
-            }
+            set => _sampleRate = Math.Clamp(value, 8000.0f, 192000.0f);
         }
 
         /// <summary>
@@ -170,43 +157,15 @@ namespace OwnaudioNET.Effects
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _native.Initialize(this, config);
         }
 
         /// <summary>
-        /// RC/(RC+dt) with RC = 1/(2pi*fc).
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        private void _updateAlpha()
-        {
-            if(_cutFreq > 0 && _sampleRate > 0)
-            {
-                float rc = 1f / (2f * MathF.PI * _cutFreq);
-                _alpha = rc / (rc + 1f / _sampleRate);
-            }
-        }
-
-        /// <summary>
-        /// Filters, saturates and adds the high band back sample by sample.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled || _mix < 0.001f) return;
-
-            int sampleCount = frameCount * _config.Channels;
-
-            for (int i = 0; i < sampleCount; i++)
-            {
-                float original = buffer[i];
-
-                float high = _alpha * (_yPrev + original - _xPrev);
-                _xPrev = original;
-                _yPrev = high;
-
-                buffer[i] = original + MathF.Tanh(high * _gain * 0.5f) * 2f * _mix;
-            }
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -266,8 +225,7 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
-            _xPrev = 0.0f;
-            _yPrev = 0.0f;
+            _native.Reset();
         }
 
         /// <summary>
@@ -278,6 +236,7 @@ namespace OwnaudioNET.Effects
             if (_disposed) return;
 
             Reset();
+            _native.Dispose();
             _disposed = true;
         }
 

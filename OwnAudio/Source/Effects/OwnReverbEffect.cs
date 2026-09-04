@@ -93,6 +93,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
 
         private float _mix = 0.30f;
         private float _preDelay = 20.0f;
@@ -393,14 +394,15 @@ namespace OwnaudioNET.Effects
         /// <param name="config"></param>
         public void Initialize(AudioConfig config)
         {
+            _native.Initialize(this, config);
         }
 
         /// <summary>
-        /// No-op by design. The reverb runs in the Rust engine, this object only carries the
-        /// parameters the mixer mirrors across - so nothing touches the samples here.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
         public void Process(Span<float> buffer, int frameCount)
         {
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -409,6 +411,7 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
+            _native.Reset();
         }
 
         /// <summary>
@@ -417,6 +420,7 @@ namespace OwnaudioNET.Effects
         public void Dispose()
         {
             if (_disposed) return;
+            _native.Dispose();
             _disposed = true;
         }
 

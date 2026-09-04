@@ -70,6 +70,7 @@ namespace OwnaudioNET.Effects
         private float _drive = 2.0f;
         private float _mix = 0.85f;
         private float _outputGain = 0.55f;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
 
         /// <summary>
         /// Instance id.
@@ -149,11 +150,12 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Stores the engine config, nothing else to set up here.
+        /// Stores the engine config and spins up the standalone native instance.
         /// </summary>
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -203,25 +205,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Drives, clips and blends every sample in place.
+        /// Same DSP the mixer twin runs, on this instance's native handle.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled || _mix < 0.001f) return;
-
-            int sampleCount = frameCount * _config.Channels;
-            float dry = 1.0f - _mix;
-
-            for (int i = 0; i < sampleCount; i++)
-            {
-                float input = buffer[i];
-                float wet = SoftClip(input * _drive) * _outputGain;
-                buffer[i] = input * dry + wet * _mix;
-            }
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -235,6 +223,7 @@ namespace OwnaudioNET.Effects
         public void Reset()
         {
             ResetGeneration++;
+            _native.Reset();
         }
 
         /// <summary>
@@ -245,6 +234,7 @@ namespace OwnaudioNET.Effects
             if (_disposed) return;
 
             Reset();
+            _native.Dispose();
             _disposed = true;
         }
 

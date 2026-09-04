@@ -157,6 +157,38 @@ public class LimiterEffectDspTests
     }
 
     /// <summary>
+    /// And the reported latency has to be the delay the samples actually see. Matchering
+    /// renders through this limiter and then slides the whole file back by LatencySamples;
+    /// if the two disagree the master comes out offset.
+    /// </summary>
+    [Theory]
+    [InlineData(5.0f)]
+    [InlineData(8.0f)]
+    public void ReportedLatencyIsTheDelayTheSignalActuallySees(float lookaheadMs)
+    {
+        using (LimiterEffect _fx = _limiter(-6.0f, -0.1f, lookaheadMs: lookaheadMs))
+        {
+            _fx.Initialize(EffectHarness.Config());
+
+            //-20 dB is well under the threshold, so nothing moves the impulse but the delay line
+            float[] _in = SignalGenerator.Impulse(Rate / 2, Ch, levelDb: -20.0);
+            float[] _out = EffectHarness.Render(_fx, _in, Ch);
+
+            int _peakFrame = 0;
+            float _peak = 0f;
+            for (int f = 0; f < _out.Length / Ch; f++)
+            {
+                float _abs = Math.Abs(_out[f * Ch]);
+                if (_abs > _peak) { _peak = _abs; _peakFrame = f; }
+            }
+
+            _peak.Should().BeGreaterThan(0.05f, "a quiet impulse has to survive the limiter");
+            _peakFrame.Should().BeCloseTo(_fx.LatencySamples, 2,
+                $"the impulse came out at frame {_peakFrame}, LatencySamples says {_fx.LatencySamples}");
+        }
+    }
+
+    /// <summary>
     /// Limiting a sine should stay reasonably clean — this is a limiter, not a clipper.
     /// </summary>
     [Fact]

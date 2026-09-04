@@ -93,12 +93,7 @@ public static class EffectCatalog
             new EffectCase("Enhancer", () => new EnhancerEffect(EnhancerPreset.Default, Rate)),
             new EffectCase("Equalizer", () => new EqualizerEffect(Rate, 6f, 0f, -6f, 0f, 0f, 0f, 0f, 3f, 0f, 0f)),
 
-            //The 10 band EQ does crossfade on Mix, this one does not — worth lining up one day
-            new EffectCase("Equalizer30Band", () => _eq30())
-            {
-                MixHonored = false,
-                Deviation = "The 30 band EQ has no dry path, unlike EqualizerEffect which honours Mix."
-            },
+            new EffectCase("Equalizer30Band", () => _eq30()),
 
             new EffectCase("Flanger", () => new FlangerEffect(FlangerPreset.Default, Rate)),
 

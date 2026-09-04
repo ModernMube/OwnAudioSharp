@@ -34,7 +34,9 @@ public interface IEffectProcessor : IDisposable
     void Initialize(AudioConfig config);
 
     /// <summary>
-    /// Process frameCount frames in the buffer, in-place.
+    /// Process frameCount frames in the buffer, in-place. Built-ins run the
+    /// native engine here (same DSP as the mixer twin, own handle). The mixer
+    /// itself does not call this — it talks to the twin on the audio thread.
     /// </summary>
     /// <param name="buffer"></param>
     /// <param name="frameCount"></param>

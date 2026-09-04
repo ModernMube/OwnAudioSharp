@@ -1,5 +1,6 @@
 using Ownaudio.Core;
 using OwnaudioNET.Interfaces;
+using NativeEffectEngine = OwnaudioNET.Effects.NativeEffectEngine;
 
 namespace OwnaudioNET.Effects.SmartMaster
 {
@@ -20,7 +21,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         private SmartMasterConfig _configuration;
         private MeasurementStatusInfo _measurementStatus;
         
-        private SmartMasterAudioChain? _audioChain;
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
         private SmartMasterPresetManager? _presetManager;
         private SmartMasterMeasurementService? _measurementService;
         private SmartMasterMicMonitor? _micMonitor;
@@ -63,7 +64,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// window). All other components are zero-latency IIR processors.
         /// Returns 0 before <see cref="Initialize"/> has been called.
         /// </remarks>
-        public int LatencySamples => _audioChain?.LimiterLatencySamples ?? 0;
+        public int LatencySamples => _native.LatencySamples;
 
         #endregion
         
@@ -104,29 +105,20 @@ namespace OwnaudioNET.Effects.SmartMaster
             _presetManager.CreateFactoryPresetsIfNeeded();
             
             _measurementService = new SmartMasterMeasurementService(config, presetsDirectory);
-            
-            if (_audioChain == null)
-            {
-                _audioChain = new SmartMasterAudioChain(config.SampleRate, config.Channels);
-                _audioChain.Configure(config, _configuration);
-                Logger.Log.Info($"[SmartMaster] Audio chain created with current configuration");
-            }
-            else
-            {
-                Logger.Log.Info($"[SmartMaster] Audio chain already exists - preserving state");
-            }
+            _native.Initialize(this, config);
         }
         
         #endregion
         
-        #region Audio Processing (Hot Path - Lock-Free Read)
-        
+        #region Audio Processing
+
+        /// <summary>
+        /// Sanitises the block, then hands it to the standalone native chain. Bypassed means
+        /// bypassed — we don't even scan the buffer.
+        /// </summary>
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (buffer.Length == 0 || frameCount == 0)
-                return;
-
-            if (!_enabled || _audioChain == null)
+            if (!_enabled || buffer.Length == 0 || frameCount == 0)
                 return;
 
             for (int i = 0; i < buffer.Length; i++)
@@ -138,7 +130,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                 }
             }
 
-            _audioChain.Process(buffer, frameCount);
+            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -162,9 +154,10 @@ namespace OwnaudioNET.Effects.SmartMaster
         public void Reset()
         {
             ResetGeneration++;
+            _native.Reset();
+            _sanitizedSamples = 0;
             lock (_configLock)
             {
-                _audioChain?.Reset();
                 _measurementStatus = new MeasurementStatusInfo();
             }
         }
@@ -175,17 +168,14 @@ namespace OwnaudioNET.Effects.SmartMaster
         public void OnPlaybackStopped()
         {
             Logger.Log.Info("[SmartMaster] Playback stopped - explicitly resetting components");
-            lock (_configLock)
-            {
-                _audioChain?.Reset();
-            }
+            _native.Reset();
         }
         
         public void Dispose()
         {
             if (_disposed) return;
             
-            _audioChain?.Dispose();
+            _native.Dispose();
             _micMonitor?.Dispose();
             
             _disposed = true;
@@ -384,10 +374,8 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
 
         /// <summary>
-        /// Rebuilds the chain from the current configuration. Call it after editing what
-        /// <see cref="GetConfiguration"/> handed you, otherwise the managed chain keeps
-        /// running the values it was built with. Rust-native mode picks the edits up on
-        /// its own, but calling this there is harmless.
+        /// Pushes the current configuration onto the native engine. Call it after editing
+        /// what <see cref="GetConfiguration"/> handed you so the next Process() sees it.
         /// </summary>
         public void ApplyConfiguration()
         {
@@ -422,8 +410,8 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
 
         /// <summary>
-        /// Builds a fresh chain for the given config and swaps it in, so the audio thread
-        /// never sees a half configured one.
+        /// Stores the config and pushes it onto the native engine. The managed chain
+        /// is not on the audio path.
         /// </summary>
         private void _swapChain(SmartMasterConfig configuration)
         {
@@ -433,13 +421,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             lock (_configLock)
             {
                 _configuration = configuration;
-
-                var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
-                newChain.Configure(_config, _configuration);
-
-                var oldChain = _audioChain;
-                _audioChain = newChain;
-                oldChain?.Dispose();
+                _native.Push(this);
             }
         }
 
