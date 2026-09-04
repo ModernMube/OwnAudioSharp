@@ -1639,3 +1639,152 @@ mod vst_effect {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Standalone effect (no mixer) — Process() path
+// ---------------------------------------------------------------------------
+
+mod standalone_effect {
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_standalone_effect::{
+        ownaudio_v1_standalone_effect_create, ownaudio_v1_standalone_effect_destroy,
+        ownaudio_v1_standalone_effect_get_param, ownaudio_v1_standalone_effect_latency,
+        ownaudio_v1_standalone_effect_process, ownaudio_v1_standalone_effect_reset,
+        ownaudio_v1_standalone_effect_set_param,
+    };
+    use ownaudio_ffi::handles::OwnAudioStandaloneEffectHandle;
+
+    const EFFECT_TYPE_DISTORTION: u32 = 6;
+    const PARAM_DRIVE: u32 = 2;
+
+    #[test]
+    fn create_null_out_is_null_pointer() {
+        unsafe {
+            assert_eq!(
+                ownaudio_v1_standalone_effect_create(
+                    EFFECT_TYPE_DISTORTION,
+                    48_000.0,
+                    2,
+                    std::ptr::null_mut()
+                ),
+                OwnAudioErrorCode::NullPointer as i32
+            );
+        }
+    }
+
+    #[test]
+    fn create_unknown_type_is_invalid_handle() {
+        unsafe {
+            let mut effect: *mut OwnAudioStandaloneEffectHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_standalone_effect_create(9_999, 48_000.0, 2, &mut effect),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+        }
+    }
+
+    #[test]
+    fn create_bad_rate_is_unsupported_config() {
+        unsafe {
+            let mut effect: *mut OwnAudioStandaloneEffectHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_standalone_effect_create(EFFECT_TYPE_DISTORTION, 0.0, 2, &mut effect),
+                OwnAudioErrorCode::UnsupportedConfig as i32
+            );
+        }
+    }
+
+    #[test]
+    fn destroy_null_is_safe() {
+        unsafe {
+            ownaudio_v1_standalone_effect_destroy(std::ptr::null_mut());
+        }
+    }
+
+    #[test]
+    fn set_process_reset_smoke() {
+        unsafe {
+            let mut effect: *mut OwnAudioStandaloneEffectHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_standalone_effect_create(
+                    EFFECT_TYPE_DISTORTION,
+                    48_000.0,
+                    2,
+                    &mut effect
+                ),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert!(!effect.is_null());
+
+            assert_eq!(
+                ownaudio_v1_standalone_effect_set_param(effect, PARAM_DRIVE, 4.0),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(
+                ownaudio_v1_standalone_effect_set_param(effect, 1, 1.0),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            let mut drive = 0.0f32;
+            assert_eq!(
+                ownaudio_v1_standalone_effect_get_param(effect, PARAM_DRIVE, &mut drive),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert!((drive - 4.0).abs() < 1e-6);
+
+            let mut buf = [0.5f32, 0.5];
+            assert_eq!(
+                ownaudio_v1_standalone_effect_process(effect, buf.as_mut_ptr(), 1, 2),
+                OwnAudioErrorCode::Success as i32
+            );
+            // Drive 4 into 0.5 is 2.0, which soft-clips — wet output is not the dry 0.5.
+            assert_ne!(buf[0], 0.5);
+
+            assert_eq!(
+                ownaudio_v1_standalone_effect_set_param(effect, 0, 0.0),
+                OwnAudioErrorCode::Success as i32
+            );
+            buf = [0.5, 0.5];
+            assert_eq!(
+                ownaudio_v1_standalone_effect_process(effect, buf.as_mut_ptr(), 1, 2),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(buf[0], 0.5);
+
+            assert_eq!(
+                ownaudio_v1_standalone_effect_reset(effect),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            let mut latency: u32 = 99;
+            assert_eq!(
+                ownaudio_v1_standalone_effect_latency(effect, &mut latency),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(latency, 0);
+
+            ownaudio_v1_standalone_effect_destroy(effect);
+        }
+    }
+
+    #[test]
+    fn unknown_param_is_invalid_handle() {
+        unsafe {
+            let mut effect: *mut OwnAudioStandaloneEffectHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_standalone_effect_create(
+                    EFFECT_TYPE_DISTORTION,
+                    48_000.0,
+                    2,
+                    &mut effect
+                ),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(
+                ownaudio_v1_standalone_effect_set_param(effect, 42, 1.0),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            ownaudio_v1_standalone_effect_destroy(effect);
+        }
+    }
+}

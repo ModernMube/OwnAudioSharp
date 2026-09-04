@@ -17,7 +17,7 @@ use crate::handles::{
 
 // Helper: construct an effect from its numeric type tag
 
-fn create_effect(effect_type_raw: u32, sample_rate: f32) -> Option<Box<dyn Effect>> {
+pub(crate) fn create_effect(effect_type_raw: u32, sample_rate: f32) -> Option<Box<dyn Effect>> {
     let effect_type = EffectType::try_from(effect_type_raw).ok()?;
 
     let effect: Box<dyn Effect> = match effect_type {

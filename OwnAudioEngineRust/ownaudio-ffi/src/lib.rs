@@ -30,6 +30,7 @@ pub mod ffi_fx_tap;
 pub mod ffi_input_source;
 pub mod ffi_memory_source;
 pub mod ffi_source;
+pub mod ffi_standalone_effect;
 pub mod ffi_stream;
 pub mod ffi_track;
 pub mod handles;
@@ -49,7 +50,8 @@ pub use ffi_stream::OwnAudioLoadStats;
 pub use handles::{
     OwnAudioCaptureHandle, OwnAudioDecoderHandle, OwnAudioEffectHandle, OwnAudioEngineHandle,
     OwnAudioFileSourceHandle, OwnAudioInputStreamHandle, OwnAudioMixerHandle,
-    OwnAudioOutputStreamHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
+    OwnAudioOutputStreamHandle, OwnAudioStandaloneEffectHandle, OwnAudioTrackHandle,
+    OwnAudioTrackSourceHandle,
 };
 pub use host_api::OwnHostApi;
 pub use ownaudio_core::effects::{VstAudioBuffer, VstProcessFn};

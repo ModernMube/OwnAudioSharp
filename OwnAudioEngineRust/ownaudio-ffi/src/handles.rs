@@ -191,6 +191,16 @@ pub struct OwnAudioEffectHandle {
     _private: [u8; 0],
 }
 
+/// Mixer-free effect: create, set params, process, destroy — all on the caller's thread.
+///
+/// Create with `ownaudio_v1_standalone_effect_create`; release with
+/// `ownaudio_v1_standalone_effect_destroy`. Not the same object as a mixer twin;
+/// sharing one handle between those two paths would race the audio thread.
+#[repr(C)]
+pub struct OwnAudioStandaloneEffectHandle {
+    _private: [u8; 0],
+}
+
 /// Opaque handle to the write side of a track's audio-feed ring buffer.
 ///
 /// Create with `ownaudio_v1_track_set_ring_source`; release with
@@ -343,6 +353,15 @@ pub(crate) struct TrackWrapper {
     pub shared: Arc<TrackShared>,
 }
 
+/// Owns a boxed [`ownaudio_core::effects::Effect`] that is not on any mixer chain.
+///
+/// `set_param` / `process` / `reset` run immediately on the caller's thread — there is
+/// no command queue. The matching mixer twin, if any, is a different allocation.
+pub(crate) struct StandaloneEffectWrapper {
+    pub effect: Box<dyn ownaudio_core::effects::Effect>,
+    pub channels: u16,
+}
+
 /// References a single effect inside a track's effect chain.
 ///
 /// All pointer fields are non-owning; the mixer must outlive all effect handles.
@@ -485,6 +504,7 @@ unsafe impl Send for MixerWrapper {}
 unsafe impl Sync for MixerWrapper {}
 unsafe impl Send for TrackWrapper {}
 unsafe impl Send for EffectWrapper {}
+unsafe impl Send for StandaloneEffectWrapper {}
 unsafe impl Send for TrackSourceWrapper {}
 unsafe impl Send for FileSourceWrapper {}
 unsafe impl Sync for FileSourceWrapper {}
@@ -527,6 +547,17 @@ pub(crate) unsafe fn effect_from_ptr<'a>(
         None
     } else {
         Some(&mut *(ptr as *mut EffectWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioStandaloneEffectHandle` back to `&mut StandaloneEffectWrapper`.
+pub(crate) unsafe fn standalone_effect_from_ptr<'a>(
+    ptr: *mut OwnAudioStandaloneEffectHandle,
+) -> Option<&'a mut StandaloneEffectWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut StandaloneEffectWrapper))
     }
 }
 

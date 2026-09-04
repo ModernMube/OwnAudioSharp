@@ -388,6 +388,17 @@ typedef struct OwnAudioTrackSourceHandle {
 } OwnAudioTrackSourceHandle;
 
 /**
+ * Mixer-free effect: create, set params, process, destroy — all on the caller's thread.
+ *
+ * Create with `ownaudio_v1_standalone_effect_create`; release with
+ * `ownaudio_v1_standalone_effect_destroy`. Not the same object as a mixer twin;
+ * sharing one handle between those two paths would race the audio thread.
+ */
+typedef struct OwnAudioStandaloneEffectHandle {
+    uint8_t _private[0];
+} OwnAudioStandaloneEffectHandle;
+
+/**
  * Parameters for opening an audio stream, passed across the FFI boundary.
  *
  * `buffer_size_frames = 0` means "let the engine choose the platform default".
@@ -1687,6 +1698,83 @@ int32_t ownaudio_v1_track_clear_source(struct OwnAudioMixerHandle *mixer,
  * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_track_source_destroy(struct OwnAudioTrackSourceHandle *source);
+
+/**
+ * Builds a standalone effect of `effect_type`, sized for `sample_rate`.
+ *
+ * `channels` is the layout `process` will see unless the caller passes a different
+ * count later. VST cannot be built from a type tag — that stays on the mixer path.
+ *
+ * # Safety
+ * - `out_effect` must point to a writable pointer slot.
+ * - Null pointers come back as an error code, not a dereference.
+ */
+int32_t ownaudio_v1_standalone_effect_create(uint32_t effect_type,
+                                             float sample_rate,
+                                             uint16_t channels,
+                                             struct OwnAudioStandaloneEffectHandle **out_effect);
+
+/**
+ * Applies `param_id` immediately. Unknown ids are `InvalidHandle`; out of range
+ * values clamp the same way the mixer twin does.
+ *
+ * # Safety
+ * - `effect` must be a live handle from [`ownaudio_v1_standalone_effect_create`].
+ */
+int32_t ownaudio_v1_standalone_effect_set_param(struct OwnAudioStandaloneEffectHandle *effect,
+                                                uint32_t param_id,
+                                                float value);
+
+/**
+ * Reads a param back. Same unknown-id contract as set.
+ *
+ * # Safety
+ * - `out_value` must point to a writable `f32`.
+ */
+int32_t ownaudio_v1_standalone_effect_get_param(struct OwnAudioStandaloneEffectHandle *effect,
+                                                uint32_t param_id,
+                                                float *out_value);
+
+/**
+ * In-place process of `frame_count` interleaved frames.
+ *
+ * `channels == 0` uses the count from create. Empty / zero-frame calls succeed
+ * without touching the buffer.
+ *
+ * # Safety
+ * - `buffer` must be valid for `frame_count * channels` `f32` values when both
+ *   are non-zero.
+ */
+int32_t ownaudio_v1_standalone_effect_process(struct OwnAudioStandaloneEffectHandle *effect,
+                                              float *buffer,
+                                              uint32_t frame_count,
+                                              uint16_t channels);
+
+/**
+ * Drops delay lines / envelopes / LFO phase. Parameters stay put.
+ *
+ * # Safety
+ * - `effect` must be a live standalone handle.
+ */
+int32_t ownaudio_v1_standalone_effect_reset(struct OwnAudioStandaloneEffectHandle *effect);
+
+/**
+ * Look-ahead / plugin delay in frames. Zero-latency effects report 0.
+ *
+ * # Safety
+ * - `out_latency` must point to a writable `u32`.
+ */
+int32_t ownaudio_v1_standalone_effect_latency(struct OwnAudioStandaloneEffectHandle *effect,
+                                              uint32_t *out_latency);
+
+/**
+ * Frees a standalone effect. Null is a no-op.
+ *
+ * # Safety
+ * - `effect` must be a live handle from [`ownaudio_v1_standalone_effect_create`],
+ *   not yet destroyed.
+ */
+void ownaudio_v1_standalone_effect_destroy(struct OwnAudioStandaloneEffectHandle *effect);
 
 /**
  * Creates a new `AudioEngine` instance and writes its handle to `*out_handle`.
