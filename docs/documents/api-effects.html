@@ -54,7 +54,7 @@
     <tr><td><code>Mix</code></td><td><code>float</code></td><td>Wet/dry mix (0.0 = dry only, 1.0 = wet only).</td></tr>
     <tr><td><code>IsReady</code></td><td><code>bool</code></td><td>Whether initialized and ready to process.</td></tr>
     <tr><td><code>Initialize(AudioConfig)</code></td><td>method</td><td>Called automatically when added to mixer or chain.</td></tr>
-    <tr><td><code>Process(Span&lt;float&gt;, int)</code></td><td>method</td><td>Zero-allocation in-place processing.</td></tr>
+    <tr><td><code>Process(Span&lt;float&gt;, int)</code></td><td>method</td><td>In-place processing through the native engine. The mixer does not call this — it uses a separate native twin on the audio thread. Direct <code>Process</code> (Matchering, tests, <code>ReadSamples</code>) is the same DSP, own handle.</td></tr>
     <tr><td><code>Reset()</code></td><td>method</td><td>Clear internal state (delay lines, filter history, etc.).</td></tr>
   </tbody>
 </table></div>
@@ -258,7 +258,7 @@ host.Dispose();</code></pre></div>
 
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Call <code>PauseDeviceMonitoring()</code> before opening the VST3 editor window and <code>ResumeDeviceMonitoring()</code> after closing to prevent device enumeration interference.</p></div>
 
-<div class="callout callout-danger"><div class="callout-icon">🚫</div><p>Take an effect out of its chain before disposing it, and leave a moment in between — the audio thread may still be inside <code>Process()</code>. <a href="recipes.html#fx-live">Safe removal →</a></p></div>
+<div class="callout callout-danger"><div class="callout-icon">🚫</div><p>Take an effect out of its chain before disposing it, and leave a moment in between — the audio thread may still be inside the native twin. <a href="recipes.html#fx-live">Safe removal →</a></p></div>
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="analysis">Seeing what an effect actually does</h2>

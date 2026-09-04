@@ -30,7 +30,7 @@ List<Note>                (pitch, start/end time, amplitude, program, isDrum)
 (List<TimedChord>, MusicalKey, int bpm)
 ```
 
-BPM is detected in parallel with `BpmDetect` (SoundTouch auto-correlation) and
+BPM is detected in parallel with `Ownaudio.Safe.BpmDetect` (native detector) and
 drives the analysis window, hop and minimum chord length (see
 [Beat-driven window sizing](#beat-driven-window-sizing)).
 

@@ -6,7 +6,7 @@ namespace Ownaudio.Audio.Effects;
 
 /// <summary>
 /// 30 band 1/3 octave EQ on the rust engine. ISO centres from 20 Hz up to 16 kHz,
-/// every band takes -12 - +12 dB.
+/// every band takes -18 - +18 dB.
 /// </summary>
 public sealed class Equalizer30Effect : IDisposable
 {

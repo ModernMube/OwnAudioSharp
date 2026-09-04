@@ -33,7 +33,7 @@ the UI. Three logical threads, all mediated by `ThreadedVst3Wrapper`:
 | Thread | What runs there |
 | --- | --- |
 | **Plugin thread** | *All* native VST operations: load, audio-init, parameter reads, state get/set, editor size. Never blocks the UI. Async methods (`…Async`) marshal here. |
-| **Audio thread** | `VST3EffectProcessor.Process`. The wrapper drains a **lock-free SPSC queue** of pending parameter/tempo/transport changes before each block — no locks, no allocation. |
+| **Audio thread** | Mixer path: Rust calls `VST3Plugin_ProcessAudio` through the native VST effect. Direct `VST3EffectProcessor.Process` is a separate host path (interleaved ↔ planar), not the mixer bus. |
 | **UI thread** | `SetParameter` / `SetTempo` / `SetTransportPlaying` / `ResetPosition` — lock-free enqueue, return immediately. Editor create/close must run here (VST3 / macOS Cocoa requirement). |
 
 Reads of `IsReady`, `Enabled`, `Mix` are `volatile`-safe from any thread.

@@ -6,7 +6,7 @@ using OwnaudioNET.Interfaces;
 namespace OwnaudioNET.Synchronization
 {
     /// <summary>
-    /// Sample-accurate timeline clock the MixThread advances; drives multi-track sync.
+    /// Sample-accurate timeline clock the rust session / control tick advances; drives multi-track sync.
     /// </summary>
     public sealed class MasterClock : IDisposable
     {

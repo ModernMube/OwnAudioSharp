@@ -11,9 +11,9 @@ namespace OwnaudioNET.Mixing;
 
 /// <summary>
 /// Blends many audio sources into one output stream. Dynamic source add/remove,
-/// master volume, metering, recording. Three threads: main drives the public API,
-/// a top-priority mix thread does the real-time blending, and each source may run
-/// its own decode thread. The hot path is lock-free (volatile fields + ring buffers).
+/// master volume, metering, recording. The rust session renders on the cpal
+/// audio thread; a control tick (~15 ms) mirrors transport and effect params.
+/// There is no managed mix thread.
 /// </summary>
 public sealed partial class AudioMixer : IDisposable
 {
@@ -229,7 +229,7 @@ public sealed partial class AudioMixer : IDisposable
 #pragma warning restore CS0067
 
     /// <summary>
-    /// Fires when a source blows up mid-mix. Dispatched from the mix thread — handlers must be thread-safe.
+    /// Fires when a source blows up mid-mix. Comes off the control tick — handlers must be thread-safe.
     /// </summary>
     public event EventHandler<AudioErrorEventArgs>? SourceError;
 
@@ -281,7 +281,7 @@ public sealed partial class AudioMixer : IDisposable
 
     /// <summary>
     /// Main ctor: wired straight to an engine. Allocates the buffers and builds the master
-    /// clock. The mix thread only actually spins up on the first Start.
+    /// clock. Rendering starts with the rust session on the first Start.
     /// </summary>
     /// <param name="engine"></param>
     /// <param name="bufferSizeInFrames"></param>
