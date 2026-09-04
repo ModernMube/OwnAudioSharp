@@ -19,7 +19,7 @@
 //! decaying tail would otherwise park in the subnormal range and stall the CPU
 //! on the audio thread.
 
-use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
+use super::{Effect, EffectType, METER_CURRENT_GAIN, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
 
 /// Param ID 2 — target RMS level in dB (-60.0 … -3.0).
@@ -251,6 +251,7 @@ impl Effect for DynamicAmp {
             PARAM_MAX_GAIN_REDUCTION_DB => Some(self.max_gain_reduction_db),
             PARAM_RMS_WINDOW_SECONDS => Some(self.rms_window_seconds),
             PARAM_MAX_GAIN_CHANGE_DB_S => Some(self.max_gain_change_db_s),
+            METER_CURRENT_GAIN => Some(self.current_gain),
             _ => None,
         }
     }

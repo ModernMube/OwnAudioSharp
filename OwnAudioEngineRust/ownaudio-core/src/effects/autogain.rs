@@ -27,7 +27,7 @@
 //! on the audio thread.  The per-channel look-ahead lines are pre-allocated
 //! during construction and never reallocated on the audio thread.
 
-use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
+use super::{Effect, EffectType, METER_CURRENT_GAIN, METER_INPUT_LEVEL, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
 
 /// Param ID 2 — target RMS level (0.01 … 1.0).
@@ -240,6 +240,8 @@ impl Effect for AutoGain {
             PARAM_MAX_GAIN => Some(self.max_gain),
             PARAM_MIN_GAIN => Some(self.min_gain),
             PARAM_GATE_THRESHOLD => Some(self.gate_threshold),
+            METER_CURRENT_GAIN => Some(self.current_gain),
+            METER_INPUT_LEVEL => Some(self.rms_level),
             _ => None,
         }
     }

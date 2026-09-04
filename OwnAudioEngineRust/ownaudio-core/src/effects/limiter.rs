@@ -32,7 +32,7 @@
 //! and the gain-reduction floor is 0.1, so the recursive state is always bounded
 //! well away from the subnormal range.
 
-use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
+use super::{Effect, EffectType, METER_CURRENT_GAIN, PARAM_ENABLED, PARAM_MIX};
 
 /// Param ID 2 — threshold in dB (-20 … 0).
 pub const PARAM_THRESHOLD: u32 = 2;
@@ -449,6 +449,7 @@ impl Effect for Limiter {
             PARAM_CEILING => Some(self.ceiling_db),
             PARAM_RELEASE => Some(self.release_ms),
             PARAM_LOOKAHEAD => Some(self.lookahead_ms),
+            METER_CURRENT_GAIN => Some(self.current_gain),
             _ => None,
         }
     }

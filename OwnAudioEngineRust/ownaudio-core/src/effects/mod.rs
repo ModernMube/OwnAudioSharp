@@ -191,6 +191,14 @@ pub const PARAM_ENABLED: u32 = 0;
 /// Parameter ID 1 — dry/wet mix (0.0 = fully dry, 1.0 = fully wet).
 pub const PARAM_MIX: u32 = 1;
 
+// Meter IDs. Read-only: `get_param` answers, `set_param` rejects them like any
+// unknown id. They sit far above the settings so a new setting never collides.
+
+/// Meter 1000 — gain the effect is applying right now, linear.
+pub const METER_CURRENT_GAIN: u32 = 1000;
+/// Meter 1001 — detected input level, linear.
+pub const METER_INPUT_LEVEL: u32 = 1001;
+
 // EffectChain
 
 /// A single effect together with its stable identifier within a chain.
