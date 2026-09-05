@@ -49,6 +49,43 @@ public sealed class StandaloneEffect : IDisposable
         Marshal.InitHandle(_handle, raw);
     }
 
+    private StandaloneEffect(IntPtr raw, int channels)
+    {
+        _channels = channels;
+        _handle = new StandaloneEffectHandle();
+        Marshal.InitHandle(_handle, raw);
+    }
+
+    /// <summary>
+    /// Bridges an already-loaded vst3 plugin. Same engine-side bridge the mixer chain uses,
+    /// so bypass and dry/wet behave the same either way, both delayed by latencySamples so
+    /// the dry sits level with the plugin's own output. A block wider than maxBlockFrames is
+    /// passed through untouched rather than reallocated, so size it for the biggest you feed.
+    /// </summary>
+    public static StandaloneEffect ForVst(IntPtr pluginHandle, IntPtr processFn,
+        int channels, int maxBlockFrames, int latencySamples)
+    {
+        if (processFn == IntPtr.Zero)
+            throw new ArgumentException("A vst bridge needs the plugin's process entry point.", nameof(processFn));
+        if (maxBlockFrames <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxBlockFrames), maxBlockFrames, "Block size has to be positive.");
+
+        int _ch = Math.Max(1, channels);
+
+        int code = OwnAudioNative.ownaudio_v1_standalone_effect_create_vst(
+            pluginHandle,
+            processFn,
+            (ushort)_ch,
+            (uint)maxBlockFrames,
+            (uint)Math.Max(0, latencySamples),
+            out IntPtr raw);
+        ErrorCodeMapper.ThrowIfError(code, nameof(ForVst));
+        if (raw == IntPtr.Zero)
+            throw new OwnAudioException(Ownaudio.Safe.AudioEngineErrorCode.InternalError, "Standalone vst effect create returned a null handle.");
+
+        return new StandaloneEffect(raw, _ch);
+    }
+
     /// <summary>
     /// Channel count this instance was built for.
     /// </summary>

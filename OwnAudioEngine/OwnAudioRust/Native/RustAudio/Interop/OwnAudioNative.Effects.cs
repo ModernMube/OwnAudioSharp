@@ -170,6 +170,25 @@ internal static partial class OwnAudioNative
         out IntPtr outEffect);
 
     /// <summary>
+    /// Standalone bridge around an already-loaded vst3 plugin. The type tag can't reach vst —
+    /// the instance belongs to the caller — so this takes the handle and the process entry.
+    /// </summary>
+    /// <param name="pluginHandle">opaque instance, has to outlive the effect</param>
+    /// <param name="processFn">the host's VST3Plugin_ProcessAudio pointer</param>
+    /// <param name="channels"></param>
+    /// <param name="maxBlockSize">samples per channel; a bigger block is skipped, not grown</param>
+    /// <param name="latencySamples">plugin latency in frames, the dry path is delayed by it</param>
+    /// <param name="outEffect"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_standalone_effect_create_vst(
+        IntPtr pluginHandle,
+        IntPtr processFn,
+        ushort channels,
+        uint maxBlockSize,
+        uint latencySamples,
+        out IntPtr outEffect);
+
+    /// <summary>
     /// Applies a param right now, no command queue.
     /// </summary>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
