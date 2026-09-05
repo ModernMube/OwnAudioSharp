@@ -50,6 +50,9 @@ public sealed partial class StreamingSource : IRustNativeChainSource
     /// <inheritdoc/>
     AudioTrack? IRustNativeChainSource.RustTrack => RustTrack;
 
+    /// <inheritdoc/>
+    void IRustNativeChainSource.DetachRustTrack() => DetachRustTrack();
+
     /// <summary>
     /// The native track backing us, null before the backend is built.
     /// </summary>

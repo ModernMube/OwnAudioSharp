@@ -47,6 +47,9 @@ public sealed partial class InputSource : IRustNativeChainSource
     /// <inheritdoc/>
     AudioTrack? IRustNativeChainSource.RustTrack => RustTrack;
 
+    /// <inheritdoc/>
+    void IRustNativeChainSource.DetachRustTrack() => DetachRustTrack();
+
     /// <summary>
     /// The native track backing us, null on legacy or before attach.
     /// </summary>

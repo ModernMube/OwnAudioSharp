@@ -306,45 +306,14 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Digs out the FileSource behind a mixer source, unwrapping SourceWithEffects.
+    /// Digs out whatever T sits behind a mixer source, unwrapping SourceWithEffects on the way.
+    /// The wrapper is no BaseAudioSource itself, so a plain cast would read null off every
+    /// effect-wrapped track.
     /// </summary>
     /// <param name="source"></param>
     /// <returns></returns>
-    private static FileSource? _resolveFileSource(IAudioSource source) =>
-        source as FileSource ?? (source as SourceWithEffects)?.InnerSource as FileSource;
-
-    /// <summary>
-    /// Digs out the SampleSource behind a mixer source, unwrapping SourceWithEffects.
-    /// </summary>
-    /// <param name="source"></param>
-    /// <returns></returns>
-    private static SampleSource? _resolveSampleSource(IAudioSource source) =>
-        source as SampleSource ?? (source as SourceWithEffects)?.InnerSource as SampleSource;
-
-    /// <summary>
-    /// Digs out the InputSource behind a mixer source, unwrapping SourceWithEffects.
-    /// </summary>
-    /// <param name="source"></param>
-    /// <returns></returns>
-    private static InputSource? _resolveInputSource(IAudioSource source) =>
-        source as InputSource ?? (source as SourceWithEffects)?.InnerSource as InputSource;
-
-    /// <summary>
-    /// Digs out the StreamingSource behind a mixer source, unwrapping SourceWithEffects.
-    /// </summary>
-    /// <param name="source"></param>
-    /// <returns></returns>
-    private static StreamingSource? _resolveStreamingSource(IAudioSource source) =>
-        source as StreamingSource ?? (source as SourceWithEffects)?.InnerSource as StreamingSource;
-
-    /// <summary>
-    /// Digs out the source carrying the routing map, unwrapping SourceWithEffects. The wrapper
-    /// is no BaseAudioSource, so a plain cast would read null off every effect-wrapped track.
-    /// </summary>
-    /// <param name="source"></param>
-    /// <returns></returns>
-    private static BaseAudioSource? _resolveMapOwner(IAudioSource source) =>
-        source as BaseAudioSource ?? (source as SourceWithEffects)?.InnerSource as BaseAudioSource;
+    private static T? _resolve<T>(IAudioSource source) where T : class =>
+        source as T ?? (source as SourceWithEffects)?.InnerSource as T;
 
     /// <summary>
     /// Hooks a source onto the shared session: file to a native file track, samples to a
@@ -353,28 +322,28 @@ public sealed partial class AudioMixer
     /// <param name="source"></param>
     private void _attachSourceToRustSession(IAudioSource source)
     {
-        FileSource? _fs = _resolveFileSource(source);
+        FileSource? _fs = _resolve<FileSource>(source);
         if (_fs?.FilePath is not null)
         {
             _attachFileSource(source, _fs);
             return;
         }
 
-        SampleSource? _ss = _resolveSampleSource(source);
+        SampleSource? _ss = _resolve<SampleSource>(source);
         if (_ss is not null)
         {
             _attachSampleSource(source, _ss);
             return;
         }
 
-        InputSource? _ins = _resolveInputSource(source);
+        InputSource? _ins = _resolve<InputSource>(source);
         if (_ins is not null)
         {
             _attachInputSource(source, _ins);
             return;
         }
 
-        StreamingSource? _sts = _resolveStreamingSource(source);
+        StreamingSource? _sts = _resolve<StreamingSource>(source);
         if (_sts is not null) _attachStreamingSource(source, _sts);
     }
 
@@ -594,29 +563,10 @@ public sealed partial class AudioMixer
     /// <param name="source"></param>
     private void _detachSourceFromRustSession(IAudioSource source)
     {
-        FileSource? _fs = _resolveFileSource(source);
-        if (_fs is not null)
-        {
-            _detachBackedSource(source, _fs.Id, _fs.RustTrack, _fs.DetachRustTrack);
-            return;
-        }
+        BaseAudioSource? _owner = _resolve<BaseAudioSource>(source);
+        if (_owner is not IRustNativeChainSource _backed) return;
 
-        SampleSource? _ss = _resolveSampleSource(source);
-        if (_ss is not null)
-        {
-            _detachBackedSource(source, _ss.Id, _ss.RustTrack, _ss.DetachRustTrack);
-            return;
-        }
-
-        InputSource? _ins = _resolveInputSource(source);
-        if (_ins is not null)
-        {
-            _detachBackedSource(source, _ins.Id, _ins.RustTrack, _ins.DetachRustTrack);
-            return;
-        }
-
-        StreamingSource? _sts = _resolveStreamingSource(source);
-        if (_sts is not null) _detachBackedSource(source, _sts.Id, _sts.RustTrack, _sts.DetachRustTrack);
+        _detachBackedSource(source, _owner.Id, _backed.RustTrack, _backed.DetachRustTrack);
     }
 
     /// <summary>
@@ -662,62 +612,27 @@ public sealed partial class AudioMixer
         IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in _sources)
         {
-            FileSource? _fs = _resolveFileSource(source);
-            if (_fs is not null)
+            BaseAudioSource? _owner = _resolve<BaseAudioSource>(source);
+            if (_owner is not IRustNativeChainSource _backed) continue;
+
+            AudioTrack? _track = _backed.RustTrack;
+            if (_track is null) continue;
+
+            _track.Gain = _owner.Volume;
+            _track.Pan = _owner.Pan;
+
+            //Only the file and memory tracks loop natively, the other two have nowhere to put it
+            switch (_owner)
             {
-                AudioTrack? _track = _fs.RustTrack;
-                if (_track is null) continue;
-
-                _track.Gain = _fs.Volume;
-                _track.Pan = _fs.Pan;
-
-                FileTrack? _fileTrack = _fs.RustFileTrack;
-                if (_fileTrack is not null) _fileTrack.Loop = _fs.Loop;
-
-                _fs.SetOutputLevels(_fs.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
-                continue;
+                case FileSource _fs when _fs.RustFileTrack is not null:
+                    _fs.RustFileTrack.Loop = _fs.Loop;
+                    break;
+                case SampleSource _ss when _ss.RustMemoryTrack is not null:
+                    _ss.RustMemoryTrack.Loop = _ss.Loop;
+                    break;
             }
 
-            SampleSource? _ss = _resolveSampleSource(source);
-            if (_ss is not null)
-            {
-                AudioTrack? _track = _ss.RustTrack;
-                if (_track is null) continue;
-
-                _track.Gain = _ss.Volume;
-                _track.Pan = _ss.Pan;
-
-                MemoryTrack? _memTrack = _ss.RustMemoryTrack;
-                if (_memTrack is not null) _memTrack.Loop = _ss.Loop;
-
-                _ss.SetOutputLevels(_ss.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
-                continue;
-            }
-
-            InputSource? _ins = _resolveInputSource(source);
-            if (_ins is not null)
-            {
-                AudioTrack? _track = _ins.RustTrack;
-                if (_track is null) continue;
-
-                _track.Gain = _ins.Volume;
-                _track.Pan = _ins.Pan;
-
-                _ins.SetOutputLevels(_ins.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
-                continue;
-            }
-
-            StreamingSource? _sts = _resolveStreamingSource(source);
-            if (_sts is not null)
-            {
-                AudioTrack? _track = _sts.RustTrack;
-                if (_track is null) continue;
-
-                _track.Gain = _sts.Volume;
-                _track.Pan = _sts.Pan;
-
-                _sts.SetOutputLevels(_sts.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
-            }
+            _owner.SetOutputLevels(_owner.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
         }
     }
 
@@ -783,7 +698,7 @@ public sealed partial class AudioMixer
     {
         if (!_rustNative) return;
 
-        FileSource? _fs = _resolveFileSource(source);
+        FileSource? _fs = _resolve<FileSource>(source);
         if (_fs?.RustTrack is null) return;
 
         lock (_rustSessionLock)
@@ -806,7 +721,7 @@ public sealed partial class AudioMixer
         {
             foreach (IAudioSource source in _sources)
             {
-                FileSource? _fs = _resolveFileSource(source);
+                FileSource? _fs = _resolve<FileSource>(source);
                 if (_fs?.RustTrack is null)
                     continue;
 
@@ -833,7 +748,7 @@ public sealed partial class AudioMixer
         if (track is null)
             return;
 
-        int[]? _current = _resolveMapOwner(source)?.OutputChannelMapping;
+        int[]? _current = _resolve<BaseAudioSource>(source)?.OutputChannelMapping;
 
         if (_current is null && !_rustAppliedChannelMaps.ContainsKey(key))
             return;
@@ -901,7 +816,7 @@ public sealed partial class AudioMixer
         if (track is null)
             return;
 
-        OutputRoute? _current = _resolveMapOwner(source)?.OutputRoute;
+        OutputRoute? _current = _resolve<BaseAudioSource>(source)?.OutputRoute;
 
         if (_current is null && !_rustAppliedRoutes.ContainsKey(key))
             return;
@@ -1024,7 +939,7 @@ public sealed partial class AudioMixer
 
             foreach (IAudioSource source in _sources)
             {
-                InputSource? _ins = _resolveInputSource(source);
+                InputSource? _ins = _resolve<InputSource>(source);
                 if (_ins?.RustTrack is null || _ins.RustCapture is null) continue;
 
                 try { _applyCaptureChannels(_ins, _ins.RustTrack); }
@@ -1053,19 +968,9 @@ public sealed partial class AudioMixer
     /// <returns></returns>
     private static (Guid Id, AudioTrack? Track) _resolveRustBacked(IAudioSource source)
     {
-        FileSource? _fs = _resolveFileSource(source);
-        if (_fs is not null) return (_fs.Id, _fs.RustTrack);
+        BaseAudioSource? _owner = _resolve<BaseAudioSource>(source);
 
-        SampleSource? _ss = _resolveSampleSource(source);
-        if (_ss is not null) return (_ss.Id, _ss.RustTrack);
-
-        InputSource? _ins = _resolveInputSource(source);
-        if (_ins is not null) return (_ins.Id, _ins.RustTrack);
-
-        StreamingSource? _sts = _resolveStreamingSource(source);
-        if (_sts is not null) return (_sts.Id, _sts.RustTrack);
-
-        return (Guid.Empty, null);
+        return _owner is IRustNativeChainSource _backed ? (_owner.Id, _backed.RustTrack) : (Guid.Empty, null);
     }
 
     /// <summary>
@@ -1295,7 +1200,7 @@ public sealed partial class AudioMixer
         IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in _sources)
         {
-            _resolveFileSource(source)?.ApplyRustNativeSync();
+            _resolve<FileSource>(source)?.ApplyRustNativeSync();
         }
     }
 
@@ -1418,7 +1323,7 @@ public sealed partial class AudioMixer
         IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in _sources)
         {
-            FileSource? _fs = _resolveFileSource(source);
+            FileSource? _fs = _resolve<FileSource>(source);
             if (_fs is not null && _fs.State == AudioState.Playing)
             {
                 //A track still sitting in its start-offset silence would drag the clock to its offset
@@ -1507,7 +1412,7 @@ public sealed partial class AudioMixer
         {
             foreach (IAudioSource source in _sources.Values)
             {
-                FileSource? _fs = _resolveFileSource(source);
+                FileSource? _fs = _resolve<FileSource>(source);
                 if (_fs is null)
                     continue;
 
@@ -1581,7 +1486,7 @@ public sealed partial class AudioMixer
             double _project = _masterClock.CurrentTimestamp;
             foreach (IAudioSource source in _sources.Values)
             {
-                FileSource? _fs = _resolveFileSource(source);
+                FileSource? _fs = _resolve<FileSource>(source);
                 if (_fs?.RustTrack is null)
                     continue;
 

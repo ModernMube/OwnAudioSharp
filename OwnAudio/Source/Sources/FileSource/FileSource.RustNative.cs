@@ -16,6 +16,9 @@ public partial class FileSource : IRustNativeChainSource
     /// <inheritdoc/>
     AudioTrack? IRustNativeChainSource.RustTrack => RustTrack;
 
+    /// <inheritdoc/>
+    void IRustNativeChainSource.DetachRustTrack() => DetachRustTrack();
+
     /// <summary>
     /// Rust-native mode flag, fixed at construction.
     /// </summary>

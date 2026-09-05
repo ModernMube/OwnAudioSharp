@@ -13,4 +13,9 @@ internal interface IRustNativeChainSource
     /// The native track rendering this source, null on legacy or before the backend exists.
     /// </summary>
     AudioTrack? RustTrack { get; }
+
+    /// <summary>
+    /// Drops our refs to the mixer-owned track. The mixer disposes it, we never do.
+    /// </summary>
+    void DetachRustTrack();
 }
