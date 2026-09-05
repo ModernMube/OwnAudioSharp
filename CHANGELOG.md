@@ -3,6 +3,70 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.8-preview.7 — 2026-09-05
+
+A cleanup pass over the managed side: the copy-paste the 4.0 native migration left behind, and
+the dead managed DSP it stranded. Most of it is invisible from outside, but the drift between the
+copies had produced a handful of real differences, and unifying them changes behaviour.
+
+### Fixed
+
+- **`TrackEffectChain.RemoveAt` and `Clear` left the effect running natively.** Both dropped the
+  managed lists and returned without calling `ownaudio_v1_effect_remove`, so the effect stayed in
+  the native chain and kept processing audio, and its `EffectHandle` later destroyed an effect the
+  mixer still owned. `Remove` had it right all along. Latent rather than hit — nothing in the tree
+  calls either method — but `MasterEffectChain` had the correct path and the two had silently
+  diverged. Note both can now throw from `ErrorCodeMapper` where they previously could not fail.
+- **`Dispose` was not idempotent on `ChorusEffect`, `DynamicAmpEffect`, `EqualizerEffect` and
+  `DelayEffect`.** They had no `_disposed` guard, so a second `Dispose()` — a `using` inside a
+  chain that also disposes its effects, for instance — freed the native handle twice.
+- **The MT3 native loader could not find its library on x86 or 32-bit ARM.** Its runtime-id table
+  had lost the `X86` and `Arm` cases the engine and MIDI loaders have, so it fell through to
+  `x64` and looked in a folder that does not exist on those hosts.
+
+### Changed
+
+- **Seven effects now reject a null `AudioConfig`.** `LimiterEffect`, `PhaserEffect`,
+  `FlangerEffect`, `GateEffect`, `OverdriveEffect`, `PitchShiftEffect` and `RotaryEffect` stored
+  it without checking and failed later with a `NullReferenceException` from somewhere unrelated;
+  they throw `ArgumentNullException` from `Initialize` like the other eleven now.
+- **`AutoGainEffect.Initialize` throws `ArgumentNullException` instead of wrapping it in an
+  `AudioException`.** It was the only one of the eighteen that did.
+- **`Dispose` no longer calls `Reset()`** on the seven effects that did. It bumped
+  `ResetGeneration` on the way out, which made the mixer carry a reset over to a twin that was
+  about to be dropped.
+- **`Equalizer30BandEffect.Process` names its span `buffer`, not `samples`.** Only matters to a
+  caller passing it by name.
+
+### Deprecated
+
+- **`AudioFramePool` and `PooledAudioFrame`.** Decoding is native, nothing rents from them any
+  more. `AudioBufferPool` is the managed pool still in use. They join `LockFreeRingBuffer<T>`,
+  `AudioRecorder`, `CircularBuffer` and `TrackPerformanceMetrics`, all of which go in 5.0.
+
+### Documentation
+
+- **`EqualizerEffect.SetBandGain` never applied its `frequency` and `q` arguments.** The native
+  10-band filter bank runs fixed ISO centres at Q = 1.0 and takes gain only, so the two have been
+  inert since 4.0 while the docs told you to set them. The signature stays for source
+  compatibility and both the API reference and the XML comment now say what it actually does.
+  `Equalizer30BandEffect` is the one that honours a centre and a width.
+
+### Internal
+
+- Dead managed DSP deleted: the complete biquad engine both equalizers still carried after the
+  native migration (coefficients written and never read, per-channel state only ever cleared),
+  plus `DistortionEffect.SoftClip`, `OverdriveEffect.TubeSaturation` and its tone filter.
+- The `#if WINDOWS` MTA init thread removed from both `AudioEngineFactory` copies. No project
+  defines `WINDOWS`, and WASAPI lives in cpal on the Rust side now.
+- Shared base classes for what was eighteen, nineteen and two copies of the same scaffolding:
+  `NativeBackedEffect`, `NativePtrHandle`/`MidiPtrHandle` and `NativeEffectChain`. The effects'
+  public surface is unchanged member for member.
+- One `NativeLibResolver` behind the three native library loaders, source-linked into the three
+  assemblies since they have nothing in common to reference.
+- Seven files over 400 code lines split into 32 partials and per-type files; the largest managed
+  file is now 381 code lines.
+
 ## 4.0.7 — 2026-09-03
 
 ### Added

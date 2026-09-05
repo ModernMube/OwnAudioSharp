@@ -12,18 +12,22 @@ This package provides the **core foundation** for OwnAudioSharp's audio engine a
 - **Zero-allocation primitives** (object pools, ring buffers, pooled frame types)
 - **AOT-compatible factory pattern** for automatic engine and decoder selection
 
-**IMPORTANT**: This is a **core library only** — it does not contain platform-specific implementations. For actual audio I/O, use **[Ownaudio.Native](../Ownaudio.Native/)** — the cross-platform native engine built on **cpal** (Rust), supporting Windows, Linux, macOS, Android, and iOS.
+**IMPORTANT**: This is a **core library only** — it does not contain platform-specific implementations. For actual audio I/O, use **[OwnAudioRust](../OwnAudioRust/)** — the cross-platform native engine built on **cpal** (Rust), supporting Windows, Linux, macOS, Android, and iOS.
 
-> **Version**: 3.4.0  
+> **Version**: 4.0.8  
 > **Target Framework**: `net10.0` (mobile: `net10.0-android`, `net10.0-ios`)
+
+> **Note on the managed buffering primitives.** `LockFreeRingBuffer<T>`, `AudioFramePool` and
+> `PooledAudioFrame` are documented below but are `[Obsolete]` and slated for removal in 5.0.
+> Nothing in OwnAudioSharp uses them any more: buffering and decoding both happen on the Rust
+> side, so audio is pushed with `OwnaudioNet.Send` and pulled with `OwnaudioNet.Receive` rather
+> than staged in a managed ring. They still work if you have your own use for them.
 
 ### Key Features
 
 - **Zero-allocation design**: No heap activity in real-time audio paths
-- **Lock-free architecture**: Wait-free SPSC ring buffers for thread-safe communication
 - **Pure managed code**: No native dependencies for core infrastructure
 - **AOT & trim compatible**: `IsAotCompatible = true`, `IsTrimmable = true`
-- **Object pooling**: Reusable `PooledAudioFrame` buffers to minimize allocations
 - **Broad format support**: Native Rust (Symphonia) decoder handles MP3, FLAC, WAV, AAC, ALAC, OGG/Vorbis, AIFF, M4A out of the box
 
 ## Architecture
@@ -116,7 +120,7 @@ Both factories use a **delegate-based, AOT-safe registration** — no reflection
 #### AudioEngineFactory
 
 ```csharp
-// Automatic platform detection (Ownaudio.Native registers itself at module-init time)
+// Automatic platform detection (OwnAudioRust registers itself at module-init time)
 var engine = AudioEngineFactory.CreateDefault();
 
 // Or with custom configuration
@@ -150,11 +154,11 @@ using var decoder = AudioDecoderFactory.Create(stream, AudioFormat.Flac);
 // Detect format from stream magic bytes
 AudioFormat fmt = AudioDecoderFactory.DetectFormat(stream);
 
-// Register native decoder (called automatically by Ownaudio.Native at module-init)
+// Register native decoder (called automatically by OwnAudioRust at module-init)
 AudioDecoderFactory.RegisterNativeDecoder((path, rate, ch) => new MyDecoder(path, rate, ch));
 ```
 
-**Supported formats** (via native Rust/Symphonia engine, loaded by Ownaudio.Native):
+**Supported formats** (via native Rust/Symphonia engine, loaded by OwnAudioRust):
 
 | Format | Extensions |
 |--------|-----------|
@@ -210,10 +214,10 @@ Ownaudio.Core/
 
 ### Decoder Architecture (v4.0+)
 
-All decoding is performed by the **native Rust (Symphonia) engine**, registered by the `Ownaudio.Native` assembly via a `[ModuleInitializer]`. No manual setup is needed.
+All decoding is performed by the **native Rust (Symphonia) engine**, registered by the `OwnAudioRust` assembly via a `[ModuleInitializer]`. No manual setup is needed.
 
 ```csharp
-// The factory will throw AudioException if Ownaudio.Native is not loaded
+// The factory will throw AudioException if OwnAudioRust is not loaded
 using var decoder = AudioDecoderFactory.Create("audio.flac");
 Console.WriteLine($"Duration: {decoder.StreamInfo.Duration}");
 ```
@@ -274,6 +278,9 @@ AudioFormat format = AudioDecoderFactory.DetectFormat(stream);
 
 ## Lock-Free Ring Buffer
 
+> **Obsolete, removed in 5.0.** Kept for anyone already building on it; OwnAudioSharp itself
+> buffers natively now.
+
 Core primitive for real-time audio communication between threads:
 
 ```csharp
@@ -309,6 +316,9 @@ ringBuffer.Clear();
 ## Object Pooling
 
 ### AudioFramePool — Byte-Buffer–Based Pool
+
+> **Obsolete, removed in 5.0.** Decoding runs on the Rust side, so nothing rents frames here any
+> more. `AudioBufferPool` in the `OwnaudioNET` package is the managed pool still in use.
 
 ```csharp
 using Ownaudio.Core.Common;
@@ -376,7 +386,8 @@ public sealed class AudioConfig
     public string? OutputDeviceId { get; set; } = null; // null = system default
     public string? InputDeviceId  { get; set; } = null; // null = system default
 
-    // Host API selector — only used with PortAudio backend; MiniAudio ignores it
+    // Host API selector — mapped onto the cpal host api; ASIO also switches the engine
+    // to a single duplex stream, see EngineHostType below
     public EngineHostType HostType { get; set; } = EngineHostType.None;
 
     // Channel routing — null = sequential (0, 1, 2, …)
@@ -449,7 +460,9 @@ AudioConfig.HighLatency // 48 kHz, Stereo, 2048 frames (~42.7 ms)
 
 ### EngineHostType
 
-Selects the host audio API (only when using the PortAudio backend):
+Selects the host audio API. The Rust engine maps it onto the matching cpal host; `ASIO` additionally
+makes the engine open one duplex stream instead of separate input and output streams, which is what
+ASIO drivers expect. Unsupported values on a platform fall back to the default host.
 
 | Value | Platform | Description |
 |-------|----------|-------------|
@@ -624,18 +637,18 @@ The following operations produce **zero allocations** after warmup:
 
 - ✅ `Send(Span<float>)` — audio output
 - ✅ `Receives(Span<float>)` — audio input (caller provides pre-allocated buffer)
-- ✅ `LockFreeRingBuffer<T>.Write/Read` — thread communication
-- ✅ `AudioFramePool.Rent/Return` — object pooling
 - ✅ `decoder.ReadFrames(byte[])` — decode into caller-provided buffer
+- ✅ `LockFreeRingBuffer<T>.Write/Read` and `AudioFramePool.Rent/Return` — both obsolete, but
+  still allocation-free if you use them
 
 ### CPU & Memory
 
 | Component | Footprint |
 |-----------|-----------|
 | `AudioConfig` | ~80 bytes |
-| `LockFreeRingBuffer<float>` (8192 elements) | ~32 KB |
-| `AudioFramePool` (16 × 64 KB) | ~1 MB |
-| `PooledAudioFrame` (64 KB buffer) | ~64 KB |
+| `LockFreeRingBuffer<float>` (8192 elements) *(obsolete)* | ~32 KB |
+| `AudioFramePool` (16 × 64 KB) *(obsolete)* | ~1 MB |
+| `PooledAudioFrame` (64 KB buffer) *(obsolete)* | ~64 KB |
 
 ## Usage Examples
 
@@ -704,7 +717,7 @@ var config = new AudioConfig
 using var engine = AudioEngineFactory.Create(config);
 ```
 
-### Cross-Thread Ring Buffer
+### Cross-Thread Ring Buffer *(obsolete)*
 
 ```csharp
 using Ownaudio.Core.Common;
@@ -829,7 +842,7 @@ dotnet build OwnAudioEngine/Ownaudio.Core/Ownaudio.Core.csproj \
 
 ```bash
 # Run Core library tests
-dotnet test OwnAudioTests/Ownaudio.EngineTest/Ownaudio.EngineTest.csproj \
+dotnet test OwnAudioTests/Ownaudio.EngineTest/Ownaudio.Test.Engine.csproj \
     --filter "TestCategory=Core"
 
 # Run specific component tests
@@ -840,17 +853,17 @@ dotnet test --filter "FullyQualifiedName~AudioFramePool"
 
 ## Known Limitations
 
-1. **Platform-specific implementations required**: Core library alone cannot play audio — load `Ownaudio.Native`.
+1. **Platform-specific implementations required**: Core library alone cannot play audio — load `OwnAudioRust`.
 2. **Float32 only**: All audio I/O uses interleaved Float32 internally.
 3. **SPSC only**: `LockFreeRingBuffer<T>` supports a single producer and a single consumer.
 4. **Power-of-2 buffers**: Ring buffer capacity is automatically rounded up to the next power of 2.
-5. **Native decoder required**: `AudioDecoderFactory.Create()` throws if `Ownaudio.Native` has not been loaded.
+5. **Native decoder required**: `AudioDecoderFactory.Create()` throws if `OwnAudioRust` has not been loaded.
 6. **No built-in DSP**: Signal processing (EQ, reverb, …) is out of scope for this library.
 
 ## Related Documentation
 
 - [OwnAudioSharp Documentation](https://modernmube.github.io/OwnAudioSharp/)
-- [Native Engine (Ownaudio.Native)](../Ownaudio.Native/)
+- [Native Engine (OwnAudioRust)](../OwnAudioRust/)
 - [Threading Analysis](../../../THREAD_BLOCKING_ANALYSIS.md)
 
 ## License

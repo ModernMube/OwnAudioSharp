@@ -95,11 +95,12 @@ eq.Band0Gain = +6.0f;       // boost 31.25Hz by 6dB
 eq.Band9Gain = -3.0f;       // cut 16kHz by 3dB
 float g = eq.Band4Gain;     // query 500Hz band
 
-// Retune a band completely: index, centre frequency, Q, gain in dB
+// Sets the gain of band 4. The frequency and Q arguments are ignored.
 eq.SetBandGain(4, 500f, 1.0f, +2.5f);
 
 eq.SetPreset(EqualizerPreset.Rock);</code></pre></div>
 <p><strong>Presets:</strong> <code>Default</code>, <code>Bass</code>, <code>Treble</code>, <code>Rock</code>, <code>Classical</code>, <code>Pop</code>, <code>Jazz</code>, <code>Voice</code></p>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>The band centres and Q of this EQ are fixed: the native filter bank runs the ISO frequencies above at Q&nbsp;=&nbsp;1.0 and takes gain only. <code>SetBandGain</code> keeps its <code>frequency</code> and <code>q</code> parameters for source compatibility but does nothing with them — setting them is silent, not an error. Use <a href="#equalizer30">Equalizer30BandEffect</a> when you need to move a bell or change its width.</p></div>
 
 <h2 id="compressor">CompressorEffect</h2>
 <p>Professional dynamic range compressor with makeup gain.</p>
@@ -125,7 +126,7 @@ comp.SetPreset(CompressorPreset.VocalGentle);</code></pre></div>
     <tr><td><code>OwnReverbEffect</code></td><td>16-line FDN reverb with diffusion, damping, modulation and a ducker</td></tr>
     <tr><td><code>DelayEffect</code></td><td>Stereo delay with ping-pong and damping</td></tr>
     <tr><td><code>EqualizerEffect</code></td><td>10-band parametric EQ</td></tr>
-    <tr><td><code>Equalizer30BandEffect</code></td><td>30-band graphic EQ</td></tr>
+    <tr id="equalizer30"><td><code>Equalizer30BandEffect</code></td><td>30-band graphic EQ on 1/3-octave ISO centres. Unlike the 10-band one, its <code>SetBandGain</code> really does carry the centre frequency and Q through to the engine.</td></tr>
     <tr><td><code>CompressorEffect</code></td><td>Dynamic range compressor</td></tr>
     <tr><td><code>LimiterEffect</code></td><td>Soft/hard peak limiter</td></tr>
     <tr><td><code>ChorusEffect</code></td><td>Chorus / spatial thickening</td></tr>

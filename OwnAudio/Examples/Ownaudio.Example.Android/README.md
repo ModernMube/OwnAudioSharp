@@ -41,9 +41,9 @@ OwnaudioAndroidTest/
 
 ## Dependencies
 
-- **Ownaudio.Native** - Miniaudio engine implementation
+- **OwnAudioRust** - Rust/cpal engine implementation
 - **Ownaudio.Core** - Core library (decoders, buffer management)
-- **OwnaudioNET** - High-level API (net9.0-android target)
+- **OwnaudioNET** - High-level API (net10.0-android target)
 - **Xamarin.AndroidX.AppCompat** - UI components
 
 ## Building the Application
