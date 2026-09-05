@@ -97,6 +97,17 @@ public static class EffectCatalog
 
             new EffectCase("Flanger", () => new FlangerEffect(FlangerPreset.Default, Rate)),
 
+            new EffectCase("Gate", () => new GateEffect(GatePreset.Default, Rate)),
+
+            new EffectCase("PitchShift", () => new PitchShiftEffect(sampleRate: Rate))
+            {
+                MixHonored = false,
+                Deviation = "Mix works, but against the delay-aligned dry: the WSOLA pipeline delays " +
+                            "everything by the latency it reports, so Mix=0 gives the dry signal shifted " +
+                            "by LatencySamples rather than the original samples. Aligning the two is the " +
+                            "whole point — a raw dry blend would comb-filter."
+            },
+
             //The limiter takes its rate from the ctor only — Initialize() ignores config.SampleRate
             new EffectCase("Limiter", () => new LimiterEffect(Rate, LimiterPreset.Default))
             {

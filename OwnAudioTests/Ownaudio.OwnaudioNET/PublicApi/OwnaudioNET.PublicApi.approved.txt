@@ -397,6 +397,36 @@ namespace OwnaudioNET.Effects
         AmbientWash = 6,
         Percussive = 7,
     }
+    public sealed class GateEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public GateEffect(OwnaudioNET.Effects.GatePreset preset, int sampleRate = 44100) { }
+        public GateEffect(float threshold = -40, float attack = 1, float release = 100, float hold = 50, float mix = 1, int sampleRate = 44100) { }
+        public float Attack { get; set; }
+        public bool Enabled { get; set; }
+        public float Hold { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float Release { get; set; }
+        public int ResetGeneration { get; }
+        public int SampleRate { get; }
+        public float Threshold { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.GatePreset preset) { }
+        public override string ToString() { }
+    }
+    public enum GatePreset
+    {
+        Default = 0,
+        Vocal = 1,
+        DrumTight = 2,
+        GuitarNoise = 3,
+        Broadcast = 4,
+        Subtle = 5,
+    }
     public sealed class LimiterEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public LimiterEffect(float sampleRate, OwnaudioNET.Effects.LimiterPreset preset) { }
@@ -542,6 +572,23 @@ namespace OwnaudioNET.Effects
         GuitarSolo = 5,
         Vocal = 6,
         SynthPad = 7,
+    }
+    public sealed class PitchShiftEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public PitchShiftEffect(float semitones = 0, float mix = 1, int sampleRate = 44100) { }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public int LatencySamples { get; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public int ResetGeneration { get; }
+        public int SampleRate { get; }
+        public float Semitones { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public override string ToString() { }
     }
     public sealed class ReverbEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {

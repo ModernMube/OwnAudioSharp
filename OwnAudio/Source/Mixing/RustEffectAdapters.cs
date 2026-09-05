@@ -53,6 +53,8 @@ internal static class RustEffectAdapters
             [typeof(ME.RotaryEffect)]           = new Adapter(EffectType.Rotary, _mirrorRotary),
             [typeof(ME.AutoGainEffect)]         = new Adapter(EffectType.AutoGain, _mirrorAutoGain),
             [typeof(ME.EnhancerEffect)]         = new Adapter(EffectType.Enhancer, _mirrorEnhancer),
+            [typeof(ME.GateEffect)]             = new Adapter(EffectType.Gate, _mirrorGate),
+            [typeof(ME.PitchShiftEffect)]       = new Adapter(EffectType.PitchShift, _mirrorPitchShift),
             [typeof(ME.DynamicAmpEffect)]       = new Adapter(EffectType.DynamicAmp, _mirrorDynamicAmp),
             [typeof(SM.SmartMasterEffect)]      = new Adapter(EffectType.SmartMaster, _mirrorSmartMaster),
         };
@@ -239,6 +241,21 @@ internal static class RustEffectAdapters
         var h = (ME.EnhancerEffect)e;
         sink(2, h.Gain);
         sink(3, h.CutoffFrequency);
+    }
+
+    private static void _mirrorGate(IEffectProcessor e, ParamSink sink)
+    {
+        var g = (ME.GateEffect)e;
+        sink(2, g.Threshold);
+        sink(3, g.Attack);
+        sink(4, g.Release);
+        sink(5, g.Hold);
+    }
+
+    private static void _mirrorPitchShift(IEffectProcessor e, ParamSink sink)
+    {
+        var p = (ME.PitchShiftEffect)e;
+        sink(2, p.Semitones);
     }
 
     private static void _mirrorDynamicAmp(IEffectProcessor e, ParamSink sink)

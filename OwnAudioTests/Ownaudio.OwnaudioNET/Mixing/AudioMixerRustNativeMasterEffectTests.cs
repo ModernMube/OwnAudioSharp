@@ -92,6 +92,8 @@ public sealed class AudioMixerRustNativeMasterEffectTests : IDisposable
             new RotaryEffect(),
             new AutoGainEffect(),
             new EnhancerEffect(sampleRate: SampleRate),
+            new GateEffect(sampleRate: SampleRate),
+            new PitchShiftEffect(sampleRate: SampleRate),
             new DynamicAmpEffect(),
         };
 
@@ -145,6 +147,20 @@ public sealed class AudioMixerRustNativeMasterEffectTests : IDisposable
             (Func<IEffectProcessor>)(() => new DelayEffect(sampleRate: SampleRate)),
             (Action<IEffectProcessor>)(e => ((DelayEffect)e).Time = 250),
             (uint)2, 250f,
+        };
+        // Gate threshold (native param 2, dB).
+        yield return new object[]
+        {
+            (Func<IEffectProcessor>)(() => new GateEffect(sampleRate: SampleRate)),
+            (Action<IEffectProcessor>)(e => ((GateEffect)e).Threshold = -25.0f),
+            (uint)2, -25.0f,
+        };
+        // Pitch shift amount (native param 2, semitones).
+        yield return new object[]
+        {
+            (Func<IEffectProcessor>)(() => new PitchShiftEffect(sampleRate: SampleRate)),
+            (Action<IEffectProcessor>)(e => ((PitchShiftEffect)e).Semitones = -3.5f),
+            (uint)2, -3.5f,
         };
     }
 

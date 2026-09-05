@@ -105,6 +105,8 @@ public sealed class AudioMixerRustNativeOutputSmokeTests : IDisposable
                 ("Rotary", () => new global::OwnaudioNET.Effects.RotaryEffect()),
                 ("AutoGain", () => new global::OwnaudioNET.Effects.AutoGainEffect()),
                 ("Enhancer", () => new global::OwnaudioNET.Effects.EnhancerEffect(sampleRate: SampleRate)),
+                ("Gate", () => new global::OwnaudioNET.Effects.GateEffect(sampleRate: SampleRate)),
+                ("PitchShift", () => new global::OwnaudioNET.Effects.PitchShiftEffect(sampleRate: SampleRate)),
                 ("DynamicAmp", () => new global::OwnaudioNET.Effects.DynamicAmpEffect()),
             };
 
