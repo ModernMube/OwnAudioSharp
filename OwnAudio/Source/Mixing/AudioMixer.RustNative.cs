@@ -1079,7 +1079,7 @@ public sealed partial class AudioMixer
         if (!_rustNative || effect is null)
             return;
 
-        //VST3 is hosted natively: managed side owns the plugin, the rust bus calls its process entry
+        //The managed side owns the plugin instance; the rust bridge calls its process entry
         if (effect is VST3EffectProcessor vst)
         {
             if (!vst.CanHostNatively)
@@ -1192,21 +1192,10 @@ public sealed partial class AudioMixer
     /// <param name="pair"></param>
     private static void _mirrorPair(RustEffectPair pair)
     {
-        //A hosted VST is toggled through native bypass: JUCE keeps the output time-aligned,
-        //a rust dry/wet switch would jump by the plugin latency on every flip. Its own params
-        //go straight to the plugin, so only the on/off state travels here.
-        if (pair.Managed is VST3EffectProcessor vst)
-        {
-            const uint _enabledId = 0;
-            float _enabled = vst.Enabled ? 1f : 0f;
-            if (pair.LastParams.TryGetValue(_enabledId, out float _last) && _last.Equals(_enabled))
-                return;
-
-            pair.LastParams[_enabledId] = _enabled;
-            vst.SetNativeBypass(!vst.Enabled);
-            return;
-        }
-
+        //A VST needs no special case any more: the rust bridge delays its dry path by the
+        //plugin latency, so its own bypass and dry/wet land level with the wet output. That
+        //is what the host bypass used to be here for. The plugin's own params still go
+        //straight to the plugin; only enable and mix travel through the mirror.
         int _generation = pair.Managed.ResetGeneration;
         if (_generation != pair.LastResetGeneration)
         {

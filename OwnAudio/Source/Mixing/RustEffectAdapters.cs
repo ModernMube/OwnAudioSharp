@@ -12,8 +12,9 @@ namespace OwnaudioNET.Mixing;
 /// parameters onto the native side. The mixer never calls Process — the twin
 /// on the audio thread is the live DSP. Direct Process() / Matchering use a
 /// separate standalone native instance (same engine, different handle).
-/// VST3 isn't routed here (own native bridge); a type with no adapter throws
-/// when it is added to a mixer.
+/// VST3 has no adapter of its own — it is built from the plugin instance, not from a
+/// type tag — but the shared enable and mix ids still travel through Mirror. Any other
+/// type with no adapter throws when it is added to a mixer.
 /// </summary>
 internal static class RustEffectAdapters
 {

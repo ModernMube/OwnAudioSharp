@@ -550,8 +550,8 @@ namespace OwnaudioNET.Effects
         public float Damping { get; set; }
         public float DryLevel { get; set; }
         public bool Enabled { get; set; }
-        [System.Obsolete("The native reverb has no input-gain param, so this never reaches the engine — it " +
-            "only moves the managed Process path. Drive the send with Mix instead.")]
+        [System.Obsolete("The native reverb has no input-gain param and the whole audio path is native now," +
+            " so this reaches nothing. Drive the send with Mix instead.")]
         public float Gain { get; set; }
         public System.Guid Id { get; }
         public float Mix { get; set; }

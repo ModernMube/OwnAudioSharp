@@ -24,24 +24,15 @@ namespace OwnaudioNET.Effects.VST
 
         private readonly ThreadedVst3Wrapper _threaded;
 
+        private readonly NativeEffectEngine _native = new NativeEffectEngine();
+
         private bool _buffersAllocated;
 
-        private float[][]? _planarInputBuffers;
-        private float[][]? _planarOutputBuffers;
-        private float[]? _dryBuffer;
-        private int _allocatedBlockSize;
-        private int _allocatedChannels;
-
         /// <summary>
-        /// Process runs at audio rate, so a throwing plugin gets one line on the first hit and a
-        /// total on Reset/Dispose instead of a log entry per block.
+        /// Channel count the engine bridge was built for: the wider of the mixer's and the
+        /// plugin's, so a plugin asking for more than the mixer runs still gets its planes.
         /// </summary>
-        private int _processFaults;
-
-        /// <summary>
-        /// Latches the first-hit line above.
-        /// </summary>
-        private bool _processFaultLogged;
+        private int _bridgeChannels;
 
         #region IEffectProcessor properties
 
@@ -100,8 +91,9 @@ namespace OwnaudioNET.Effects.VST
         #region Rust-native hosting
 
         /// <summary>
-        /// Can the Rust chain call the plugin directly? Needs a live handle plus a resolvable
-        /// process entry point. If true the managed Process() path is skipped entirely.
+        /// Can the engine call the plugin directly? Needs a live handle plus a resolvable
+        /// process entry point. False means there is no audio path at all — both the mixer
+        /// twin and Process() go through the rust bridge now.
         /// </summary>
         internal bool CanHostNatively =>
             !_disposed
@@ -123,13 +115,6 @@ namespace OwnaudioNET.Effects.VST
             && NativeLibrary.TryGetExport(_threaded.LibraryHandle, "VST3Plugin_ProcessAudio", out IntPtr fn)
                 ? fn
                 : IntPtr.Zero;
-
-        /// <summary>
-        /// Bypass at host level, so JUCE runs processBlockBypassed and keeps the plugin latency.
-        /// A dry/wet switch on our side would jump in time instead. This is how native mode
-        /// honours Enabled without a click.
-        /// </summary>
-        internal void SetNativeBypass(bool bypassed) => _threaded.SetBypass(bypassed);
 
         #endregion
 
@@ -171,8 +156,10 @@ namespace OwnaudioNET.Effects.VST
             int _pluginChannels = inner?.ActualOutputChannels ?? 0;
             int _channels = Math.Max(config.Channels, _pluginChannels);
 
-            _allocateBuffers(config.BufferSize, _channels);
+            _bridgeChannels = _channels;
             _buffersAllocated = true;
+
+            _native.InitializeVst(this, config.SampleRate, _bridgeChannels, config.BufferSize);
 
             if (_pluginChannels > config.Channels)
                 Log.Warning($"[VST3] '{_name}' wants {_pluginChannels} channels but the mixer runs {config.Channels}, buffers sized to {_channels}");
@@ -185,47 +172,17 @@ namespace OwnaudioNET.Effects.VST
         #region IEffectProcessor – Process (audio thread)
 
         /// <summary>
-        /// Pushes the block through the plugin. Pass-through when we are off, not ready or dead.
-        /// The wrapper drains the UI queue before the block, so params land here.
+        /// Hands the block to the same engine bridge the mixer twin runs on, so a direct call
+        /// and a mixer chain sound alike. Bypass and dry/wet happen in the bridge, delayed by
+        /// the plugin latency; the plugin itself sees every block either way.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_disposed || !_enabled || !_buffersAllocated || !_threaded.IsReady)
+            if (_disposed || !_buffersAllocated || !_threaded.IsReady)
                 return;
 
-            int channels     = _config!.Channels;
-            int totalSamples = frameCount * channels;
-
-            if (frameCount > _allocatedBlockSize)
-                _allocateBuffers(frameCount, _allocatedChannels);
-
-            bool needsDryMix = _mix < 0.999f;
-            if (needsDryMix) buffer.Slice(0, totalSamples).CopyTo(_dryBuffer.AsSpan());
-
-            try
-            {
-                VST3BufferConverter.InterleavedToPlanar(buffer, _planarInputBuffers!, channels, frameCount);
-                _threaded.ProcessAudio(_planarInputBuffers!, _planarOutputBuffers!, channels, frameCount);
-                VST3BufferConverter.PlanarToInterleaved(_planarOutputBuffers!, buffer, channels, frameCount);
-            }
-            catch (Exception ex)
-            {
-                _processFaults++;
-                if (!_processFaultLogged)
-                {
-                    _processFaultLogged = true;
-                    Log.Error($"[VST3] '{_name}' threw while processing, its block is passed through dry", ex);
-                }
-            }
-
-            if (needsDryMix)
-            {
-                float wet = _mix;
-                float dry = 1.0f - wet;
-                for (int i = 0; i < totalSamples; i++)
-                    buffer[i] = _dryBuffer![i] * dry + buffer[i] * wet;
-            }
+            _native.EnsureVstBlock(this, _config!.SampleRate, _bridgeChannels, frameCount);
+            _native.Process(this, buffer, frameCount);
         }
 
         #endregion
@@ -240,20 +197,9 @@ namespace OwnaudioNET.Effects.VST
         {
             if (_disposed) return;
 
-            _reportProcessFaults();
+            _native.Reset();
             _threaded.SetTransportState(false);
             _threaded.ResetTransportPosition();
-
-            if (_planarInputBuffers != null)
-            {
-                for (int ch = 0; ch < _planarInputBuffers.Length; ch++)
-                {
-                    Array.Clear(_planarInputBuffers[ch]);
-                    if (_planarOutputBuffers != null) Array.Clear(_planarOutputBuffers[ch]);
-                }
-            }
-
-            if (_dryBuffer != null) Array.Clear(_dryBuffer);
         }
 
         #endregion
@@ -328,50 +274,18 @@ namespace OwnaudioNET.Effects.VST
         {
             if (_disposed) return;
 
-            _reportProcessFaults();
             _disposed = true;
 
+            _native.Dispose();
             _threaded.SetTransportState(false);
             _threaded.ResetTransportPosition();
 
-            _planarInputBuffers  = null;
-            _planarOutputBuffers = null;
-            _dryBuffer           = null;
             _buffersAllocated    = false;
 
             Log.Info($"[VST3] Processor '{_name}' disposed");
         }
 
-        /// <summary>
-        /// Dumps how many blocks the plugin dropped since the last report, then arms the
-        /// first-hit line again. Called off the audio path.
-        /// </summary>
-        private void _reportProcessFaults()
-        {
-            if (_processFaults == 0) return;
-
-            Log.Error($"[VST3] '{_name}' dropped {_processFaults} blocks on process failures");
-            _processFaults = 0;
-            _processFaultLogged = false;
-        }
-
         #region Private helpers
-
-        private void _allocateBuffers(int blockSize, int channels)
-        {
-            _planarInputBuffers  = new float[channels][];
-            _planarOutputBuffers = new float[channels][];
-
-            for (int ch = 0; ch < channels; ch++)
-            {
-                _planarInputBuffers[ch]  = new float[blockSize];
-                _planarOutputBuffers[ch] = new float[blockSize];
-            }
-
-            _dryBuffer = new float[blockSize * channels];
-            _allocatedBlockSize = blockSize;
-            _allocatedChannels = channels;
-        }
 
         #endregion
 

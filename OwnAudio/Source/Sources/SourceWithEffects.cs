@@ -66,7 +66,7 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
     /// <summary>
     /// Set by the mixer next to the reconciler: throws for an effect the native chain can't host.
     /// It runs before the effect goes on the list, so the rebuild never meets one it has to skip.
-    /// Off a mixer anything goes — there the managed Process is the chain.
+    /// Off a mixer anything goes — there ReadSamples calling Process is the chain.
     /// </summary>
     internal Action<IEffectProcessor> NativeChainValidator { get; set; } = NoNativeChainCheck;
 
@@ -126,8 +126,8 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
     #region IAudioSource Propertyes (delegated to inner source)
 
     /// <summary>
-    /// The wrapped source. Native mixer facade reaches through this to route fx to the native
-    /// per-track chain instead of the managed Process path.
+    /// The wrapped source. Native mixer facade reaches through this to route fx onto the
+    /// track's own native chain instead of reading them out through ReadSamples.
     /// </summary>
     internal IAudioSource InnerSource => _innerSource;
 

@@ -33,10 +33,18 @@ the UI. Three logical threads, all mediated by `ThreadedVst3Wrapper`:
 | Thread | What runs there |
 | --- | --- |
 | **Plugin thread** | *All* native VST operations: load, audio-init, parameter reads, state get/set, editor size. Never blocks the UI. Async methods (`…Async`) marshal here. |
-| **Audio thread** | Mixer path: Rust calls `VST3Plugin_ProcessAudio` through the native VST effect. Direct `VST3EffectProcessor.Process` is a separate host path (interleaved ↔ planar), not the mixer bus. |
+| **Audio thread** | Rust calls `VST3Plugin_ProcessAudio` through the native VST bridge. Both a mixer chain and a direct `VST3EffectProcessor.Process` go through that bridge — the mixer's twin lives on the audio thread, `Process` gets its own instance on the caller's. |
 | **UI thread** | `SetParameter` / `SetTempo` / `SetTransportPlaying` / `ResetPosition` — lock-free enqueue, return immediately. Editor create/close must run here (VST3 / macOS Cocoa requirement). |
 
 Reads of `IsReady`, `Enabled`, `Mix` are `volatile`-safe from any thread.
+
+`Enabled` and `Mix` are the only two things the managed side pushes to the bridge;
+the plugin's own parameters go straight to the plugin. Both are applied inside the
+bridge against a dry path delayed by the plugin's latency, so a bypass flip does not
+shift the output and a partial mix does not comb the dry against the wet. Bypass
+still drives the plugin every block, so it never goes cold and resumes without a
+stall. This replaced the host-level bypass the mixer used to toggle, which existed
+only to keep the two paths time-aligned.
 
 `SetParameter` (audio-thread SPSC, ~1 block latency) vs. `ApplyParametersAsync` /
 `SetParametersAsync` (synchronous on the plugin thread, immediate) — use the

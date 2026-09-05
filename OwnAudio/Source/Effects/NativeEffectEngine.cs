@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Ownaudio.Audio.Effects;
 using Ownaudio.Core;
 using Ownaudio.Safe.Effects;
+using OwnaudioNET.Effects.VST;
 using OwnaudioNET.Interfaces;
 using OwnaudioNET.Mixing;
 
@@ -48,6 +49,19 @@ internal sealed class NativeEffectEngine : IDisposable
     private int _channels;
     private bool _disposed;
 
+    /// <summary>
+    /// Set for a VST bridge: the plugin has to see every block even while bypassed, or it
+    /// goes cold and its first resumed block does non-realtime work. The bridge emits the
+    /// delayed dry itself.
+    /// </summary>
+    private bool _drivenWhileBypassed;
+
+    /// <summary>
+    /// Largest block the VST bridge was sized for; a wider one rebuilds it, the way the
+    /// managed path used to reallocate its planar scratch.
+    /// </summary>
+    private int _maxBlock;
+
     internal NativeEffectEngine()
     {
         _sink = _pushParam;
@@ -76,6 +90,12 @@ internal sealed class NativeEffectEngine : IDisposable
     internal void Initialize(IEffectProcessor effect, AudioConfig config)
     {
         if (config == null) throw new ArgumentNullException(nameof(config));
+
+        if (effect is VST3EffectProcessor vst)
+        {
+            InitializeVst(vst, config.SampleRate, config.Channels, config.BufferSize);
+            return;
+        }
 
         if (!RustEffectAdapters.TryGetEffectType(effect, out EffectType type))
             throw new InvalidOperationException(
@@ -112,7 +132,8 @@ internal sealed class NativeEffectEngine : IDisposable
         {
             if (_fx == null)
                 throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-            if (!effect.Enabled || frameCount <= 0 || buffer.IsEmpty) return;
+            if (frameCount <= 0 || buffer.IsEmpty) return;
+            if (!effect.Enabled && !_drivenWhileBypassed) return;
 
             _mirror(effect);
             _fx.Process(buffer, frameCount);
@@ -157,6 +178,59 @@ internal sealed class NativeEffectEngine : IDisposable
             _fx?.Dispose();
             _fx = null;
         }
+    }
+
+    /// <summary>
+    /// The VST bridge is built from the plugin instance, not from a type tag, and it is sized
+    /// for a block rather than a sample rate. channels is the bridge's own width — the wider
+    /// of the mixer's and the plugin's — not whatever the mixer config happens to say.
+    /// </summary>
+    internal void InitializeVst(VST3EffectProcessor vst, int sampleRate, int channels, int blockFrames)
+    {
+        if (!vst.CanHostNatively)
+            throw new InvalidOperationException(
+                $"VST3 '{vst.Name}' is not audio-initialized — await VST3PluginHost.InitializeAudioAsync() first.");
+
+        int _ch = Math.Max(1, channels);
+        int _block = Math.Max(1, blockFrames);
+        int _latency = Math.Max(0, vst.LatencySamples);
+
+        lock (_gate)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(NativeEffectEngine));
+
+            _drivenWhileBypassed = true;
+
+            if (_fx != null && _channels == _ch && _maxBlock >= _block)
+            {
+                _mirror(vst);
+                return;
+            }
+
+            _fx?.Dispose();
+            _fx = StandaloneEffect.ForVst(
+                vst.NativePluginHandle, vst.NativeProcessAudioPointer, _ch, _block, _latency);
+            _sampleRate = sampleRate;
+            _channels = _ch;
+            _maxBlock = _block;
+            _lastParams.Clear();
+            _mirror(vst);
+        }
+    }
+
+    /// <summary>
+    /// Grows the VST bridge for a block wider than it was built for. The engine skips an
+    /// oversized block instead of allocating on the caller's thread, so this has to happen
+    /// before Process sees it.
+    /// </summary>
+    internal void EnsureVstBlock(VST3EffectProcessor vst, int sampleRate, int channels, int frameCount)
+    {
+        lock (_gate)
+        {
+            if (_fx == null || frameCount <= _maxBlock) return;
+        }
+
+        InitializeVst(vst, sampleRate, channels, frameCount);
     }
 
     /// <summary>
