@@ -197,37 +197,14 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case PhaserPreset.Vintage:
-                    Rate = 0.55f; Depth = 0.75f; Feedback = 0.35f; Mix = 0.50f; Stages = 4;
-                    break;
-
-                case PhaserPreset.Ambient:
-                    Rate = 0.15f; Depth = 0.45f; Feedback = 0.25f; Mix = 0.35f; Stages = 6;
-                    break;
-
-                case PhaserPreset.Tremolo:
-                    Rate = 3.50f; Depth = 0.60f; Feedback = 0.15f; Mix = 0.50f; Stages = 2;
-                    break;
-
-                case PhaserPreset.DeepSpace:
-                    Rate = 0.25f; Depth = 1.0f; Feedback = 0.85f; Mix = 0.50f; Stages = 8;
-                    break;
-
-                case PhaserPreset.GuitarSolo:
-                    Rate = 1.00f; Depth = 0.72f; Feedback = 0.50f; Mix = 0.50f; Stages = 4;
-                    break;
-
-                case PhaserPreset.Vocal:
-                    Rate = 0.35f; Depth = 0.40f; Feedback = 0.20f; Mix = 0.25f; Stages = 6;
-                    break;
-
-                case PhaserPreset.SynthPad:
-                    Rate = 0.70f; Depth = 0.80f; Feedback = 0.60f; Mix = 0.45f; Stages = 6;
-                    break;
-
-                default:
-                    Rate = 0.45f; Depth = 0.65f; Feedback = 0.40f; Mix = 0.45f; Stages = 4;
-                    break;
+                case PhaserPreset.Vintage:    Rate=0.55f; Depth=0.75f; Feedback=0.35f; Mix=0.50f; Stages=4; break;
+                case PhaserPreset.Ambient:    Rate=0.15f; Depth=0.45f; Feedback=0.25f; Mix=0.35f; Stages=6; break;
+                case PhaserPreset.Tremolo:    Rate=3.50f; Depth=0.60f; Feedback=0.15f; Mix=0.50f; Stages=2; break;
+                case PhaserPreset.DeepSpace:  Rate=0.25f; Depth=1.0f;  Feedback=0.85f; Mix=0.50f; Stages=8; break;
+                case PhaserPreset.GuitarSolo: Rate=1.00f; Depth=0.72f; Feedback=0.50f; Mix=0.50f; Stages=4; break;
+                case PhaserPreset.Vocal:      Rate=0.35f; Depth=0.40f; Feedback=0.20f; Mix=0.25f; Stages=6; break;
+                case PhaserPreset.SynthPad:   Rate=0.70f; Depth=0.80f; Feedback=0.60f; Mix=0.45f; Stages=6; break;
+                default:                      Rate=0.45f; Depth=0.65f; Feedback=0.40f; Mix=0.45f; Stages=4; break;
             }
         }
 

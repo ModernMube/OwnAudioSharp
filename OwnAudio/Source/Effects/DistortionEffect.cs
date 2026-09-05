@@ -166,41 +166,15 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case DistortionPreset.Default:
-                    Drive = 2.0f; Mix = 0.85f; OutputGain = 0.55f;
-                    break;
-
-                case DistortionPreset.WarmOverdrive:
-                    Drive = 1.8f; Mix = 0.68f; OutputGain = 0.82f;
-                    break;
-
-                case DistortionPreset.ClassicRock:
-                    Drive = 3.5f; Mix = 0.9f; OutputGain = 0.6f;
-                    break;
-
-                case DistortionPreset.HeavyMetal:
-                    Drive = 6.5f; Mix = 1.0f; OutputGain = 0.4f;
-                    break;
-
-                case DistortionPreset.VintageTube:
-                    Drive = 2.2f; Mix = 0.6f; OutputGain = 0.75f;
-                    break;
-
-                case DistortionPreset.BassDrive:
-                    Drive = 2.8f; Mix = 0.8f; OutputGain = 0.7f;
-                    break;
-
-                case DistortionPreset.FuzzBox:
-                    Drive = 8.5f; Mix = 1.0f; OutputGain = 0.3f;
-                    break;
-
-                case DistortionPreset.VocalSaturation:
-                    Drive = 1.4f; Mix = 0.4f; OutputGain = 0.9f;
-                    break;
-
-                case DistortionPreset.DigitalCrush:
-                    Drive = 7.8f; Mix = 0.95f; OutputGain = 0.35f;
-                    break;
+                case DistortionPreset.Default:         Drive=2.0f; Mix=0.85f; OutputGain=0.55f; break;
+                case DistortionPreset.WarmOverdrive:   Drive=1.8f; Mix=0.68f; OutputGain=0.82f; break;
+                case DistortionPreset.ClassicRock:     Drive=3.5f; Mix=0.9f;  OutputGain=0.6f;  break;
+                case DistortionPreset.HeavyMetal:      Drive=6.5f; Mix=1.0f;  OutputGain=0.4f;  break;
+                case DistortionPreset.VintageTube:     Drive=2.2f; Mix=0.6f;  OutputGain=0.75f; break;
+                case DistortionPreset.BassDrive:       Drive=2.8f; Mix=0.8f;  OutputGain=0.7f;  break;
+                case DistortionPreset.FuzzBox:         Drive=8.5f; Mix=1.0f;  OutputGain=0.3f;  break;
+                case DistortionPreset.VocalSaturation: Drive=1.4f; Mix=0.4f;  OutputGain=0.9f;  break;
+                case DistortionPreset.DigitalCrush:    Drive=7.8f; Mix=0.95f; OutputGain=0.35f; break;
             }
         }
 

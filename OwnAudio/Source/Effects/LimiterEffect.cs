@@ -279,37 +279,14 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case LimiterPreset.Mastering:
-                    Threshold = -1.0f; Ceiling = -0.1f; Release = 100f; LookAheadMs = 8.0f;
-                    break;
-
-                case LimiterPreset.Broadcast:
-                    Threshold = -6.0f; Ceiling = -0.3f; Release = 25f; LookAheadMs = 5.0f;
-                    break;
-
-                case LimiterPreset.Live:
-                    Threshold = -3.0f; Ceiling = -0.5f; Release = 50f; LookAheadMs = 3.0f;
-                    break;
-
-                case LimiterPreset.DrumBus:
-                    Threshold = -2.0f; Ceiling = -0.1f; Release = 15f; LookAheadMs = 2.0f;
-                    break;
-
-                case LimiterPreset.VocalSafety:
-                    Threshold = -4.0f; Ceiling = -0.2f; Release = 200f; LookAheadMs = 10.0f;
-                    break;
-
-                case LimiterPreset.Bass:
-                    Threshold = -5.0f; Ceiling = -0.1f; Release = 150f; LookAheadMs = 6.0f;
-                    break;
-
-                case LimiterPreset.Podcast:
-                    Threshold = -8.0f; Ceiling = -0.5f; Release = 300f; LookAheadMs = 12.0f;
-                    break;
-
-                case LimiterPreset.Aggressive:
-                    Threshold = -10.0f; Ceiling = -0.1f; Release = 10f; LookAheadMs = 3.0f;
-                    break;
+                case LimiterPreset.Mastering:   Threshold=-1.0f;  Ceiling=-0.1f; Release=100f; LookAheadMs=8.0f;  break;
+                case LimiterPreset.Broadcast:   Threshold=-6.0f;  Ceiling=-0.3f; Release=25f;  LookAheadMs=5.0f;  break;
+                case LimiterPreset.Live:        Threshold=-3.0f;  Ceiling=-0.5f; Release=50f;  LookAheadMs=3.0f;  break;
+                case LimiterPreset.DrumBus:     Threshold=-2.0f;  Ceiling=-0.1f; Release=15f;  LookAheadMs=2.0f;  break;
+                case LimiterPreset.VocalSafety: Threshold=-4.0f;  Ceiling=-0.2f; Release=200f; LookAheadMs=10.0f; break;
+                case LimiterPreset.Bass:        Threshold=-5.0f;  Ceiling=-0.1f; Release=150f; LookAheadMs=6.0f;  break;
+                case LimiterPreset.Podcast:     Threshold=-8.0f;  Ceiling=-0.5f; Release=300f; LookAheadMs=12.0f; break;
+                case LimiterPreset.Aggressive:  Threshold=-10.0f; Ceiling=-0.1f; Release=10f;  LookAheadMs=3.0f;  break;
 
                 default:
                     Threshold = DEFAULT_THRESHOLD; Ceiling = DEFAULT_CEILING;

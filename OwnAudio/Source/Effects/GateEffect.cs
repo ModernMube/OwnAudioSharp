@@ -184,29 +184,12 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case GatePreset.Vocal:
-                    Threshold = -38.0f; Attack = 2.0f; Release = 180.0f; Hold = 80.0f; Mix = 1.0f;
-                    break;
-
-                case GatePreset.DrumTight:
-                    Threshold = -28.0f; Attack = 0.2f; Release = 60.0f; Hold = 20.0f; Mix = 1.0f;
-                    break;
-
-                case GatePreset.GuitarNoise:
-                    Threshold = -45.0f; Attack = 1.0f; Release = 120.0f; Hold = 40.0f; Mix = 1.0f;
-                    break;
-
-                case GatePreset.Broadcast:
-                    Threshold = -42.0f; Attack = 3.0f; Release = 250.0f; Hold = 150.0f; Mix = 1.0f;
-                    break;
-
-                case GatePreset.Subtle:
-                    Threshold = -60.0f; Attack = 5.0f; Release = 400.0f; Hold = 200.0f; Mix = 0.8f;
-                    break;
-
-                default:
-                    Threshold = -40.0f; Attack = 1.0f; Release = 100.0f; Hold = 50.0f; Mix = 1.0f;
-                    break;
+                case GatePreset.Vocal:       Threshold=-38.0f; Attack=2.0f; Release=180.0f; Hold=80.0f;  Mix=1.0f; break;
+                case GatePreset.DrumTight:   Threshold=-28.0f; Attack=0.2f; Release=60.0f;  Hold=20.0f;  Mix=1.0f; break;
+                case GatePreset.GuitarNoise: Threshold=-45.0f; Attack=1.0f; Release=120.0f; Hold=40.0f;  Mix=1.0f; break;
+                case GatePreset.Broadcast:   Threshold=-42.0f; Attack=3.0f; Release=250.0f; Hold=150.0f; Mix=1.0f; break;
+                case GatePreset.Subtle:      Threshold=-60.0f; Attack=5.0f; Release=400.0f; Hold=200.0f; Mix=0.8f; break;
+                default:                     Threshold=-40.0f; Attack=1.0f; Release=100.0f; Hold=50.0f;  Mix=1.0f; break;
             }
         }
 

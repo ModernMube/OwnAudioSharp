@@ -187,37 +187,14 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case FlangerPreset.Default:
-                    Rate = 0.35f; Depth = 0.60f; Feedback = 0.45f; Mix = 0.40f;
-                    break;
-
-                case FlangerPreset.Classic:
-                    Rate = 0.50f; Depth = 0.70f; Feedback = 0.60f; Mix = 0.45f;
-                    break;
-
-                case FlangerPreset.JetPlane:
-                    Rate = 2.20f; Depth = 0.95f; Feedback = 0.88f; Mix = 0.50f;
-                    break;
-
-                case FlangerPreset.SubtleChorus:
-                    Rate = 0.22f; Depth = 0.30f; Feedback = 0.15f; Mix = 0.25f;
-                    break;
-
-                case FlangerPreset.VocalDoubling:
-                    Rate = 0.30f; Depth = 0.45f; Feedback = 0.20f; Mix = 0.30f;
-                    break;
-
-                case FlangerPreset.GuitarLead:
-                    Rate = 1.10f; Depth = 0.80f; Feedback = 0.70f; Mix = 0.48f;
-                    break;
-
-                case FlangerPreset.AmbientWash:
-                    Rate = 0.12f; Depth = 0.90f; Feedback = 0.55f; Mix = 0.45f;
-                    break;
-
-                case FlangerPreset.Percussive:
-                    Rate = 3.00f; Depth = 0.55f; Feedback = 0.30f; Mix = 0.35f;
-                    break;
+                case FlangerPreset.Default:       Rate=0.35f; Depth=0.60f; Feedback=0.45f; Mix=0.40f; break;
+                case FlangerPreset.Classic:       Rate=0.50f; Depth=0.70f; Feedback=0.60f; Mix=0.45f; break;
+                case FlangerPreset.JetPlane:      Rate=2.20f; Depth=0.95f; Feedback=0.88f; Mix=0.50f; break;
+                case FlangerPreset.SubtleChorus:  Rate=0.22f; Depth=0.30f; Feedback=0.15f; Mix=0.25f; break;
+                case FlangerPreset.VocalDoubling: Rate=0.30f; Depth=0.45f; Feedback=0.20f; Mix=0.30f; break;
+                case FlangerPreset.GuitarLead:    Rate=1.10f; Depth=0.80f; Feedback=0.70f; Mix=0.48f; break;
+                case FlangerPreset.AmbientWash:   Rate=0.12f; Depth=0.90f; Feedback=0.55f; Mix=0.45f; break;
+                case FlangerPreset.Percussive:    Rate=3.00f; Depth=0.55f; Feedback=0.30f; Mix=0.35f; break;
             }
         }
 

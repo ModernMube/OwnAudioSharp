@@ -196,41 +196,15 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case RotaryPreset.Hammond:
-                    HornSpeed = 0.80f; RotorSpeed = 0.70f; Intensity = 0.75f; Mix = 1.0f; IsFast = false;
-                    break;
-
-                case RotaryPreset.Gospel:
-                    HornSpeed = 0.85f; RotorSpeed = 0.72f; Intensity = 0.85f; Mix = 1.0f; IsFast = true;
-                    break;
-
-                case RotaryPreset.Rock:
-                    HornSpeed = 0.78f; RotorSpeed = 0.68f; Intensity = 0.90f; Mix = 1.0f; IsFast = true;
-                    break;
-
-                case RotaryPreset.Jazz:
-                    HornSpeed = 0.70f; RotorSpeed = 0.60f; Intensity = 0.60f; Mix = 1.0f; IsFast = false;
-                    break;
-
-                case RotaryPreset.Psychedelic:
-                    HornSpeed = 1.10f; RotorSpeed = 0.90f; Intensity = 1.0f; Mix = 1.0f; IsFast = true;
-                    break;
-
-                case RotaryPreset.VintageSlow:
-                    HornSpeed = 0.75f; RotorSpeed = 0.65f; Intensity = 0.70f; Mix = 1.0f; IsFast = false;
-                    break;
-
-                case RotaryPreset.VintageFast:
-                    HornSpeed = 0.75f; RotorSpeed = 0.65f; Intensity = 0.78f; Mix = 1.0f; IsFast = true;
-                    break;
-
-                case RotaryPreset.Subtle:
-                    HornSpeed = 0.60f; RotorSpeed = 0.50f; Intensity = 0.35f; Mix = 0.65f; IsFast = false;
-                    break;
-
-                default:
-                    HornSpeed = 0.80f; RotorSpeed = 0.70f; Intensity = 0.70f; Mix = 1.0f; IsFast = false;
-                    break;
+                case RotaryPreset.Hammond:     HornSpeed=0.80f; RotorSpeed=0.70f; Intensity=0.75f; Mix=1.0f;  IsFast=false; break;
+                case RotaryPreset.Gospel:      HornSpeed=0.85f; RotorSpeed=0.72f; Intensity=0.85f; Mix=1.0f;  IsFast=true;  break;
+                case RotaryPreset.Rock:        HornSpeed=0.78f; RotorSpeed=0.68f; Intensity=0.90f; Mix=1.0f;  IsFast=true;  break;
+                case RotaryPreset.Jazz:        HornSpeed=0.70f; RotorSpeed=0.60f; Intensity=0.60f; Mix=1.0f;  IsFast=false; break;
+                case RotaryPreset.Psychedelic: HornSpeed=1.10f; RotorSpeed=0.90f; Intensity=1.0f;  Mix=1.0f;  IsFast=true;  break;
+                case RotaryPreset.VintageSlow: HornSpeed=0.75f; RotorSpeed=0.65f; Intensity=0.70f; Mix=1.0f;  IsFast=false; break;
+                case RotaryPreset.VintageFast: HornSpeed=0.75f; RotorSpeed=0.65f; Intensity=0.78f; Mix=1.0f;  IsFast=true;  break;
+                case RotaryPreset.Subtle:      HornSpeed=0.60f; RotorSpeed=0.50f; Intensity=0.35f; Mix=0.65f; IsFast=false; break;
+                default:                       HornSpeed=0.80f; RotorSpeed=0.70f; Intensity=0.70f; Mix=1.0f;  IsFast=false; break;
             }
         }
 

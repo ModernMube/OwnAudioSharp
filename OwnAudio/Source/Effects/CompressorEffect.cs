@@ -217,61 +217,13 @@ namespace OwnaudioNET.Effects
             Reset();
             switch (preset)
             {
-                case CompressorPreset.Default:
-                    _threshold = 0.50f;
-                    _ratio = 4.0f;
-                    _attackTime = 0.020f;
-                    _releaseTime = 0.200f;
-                    _makeupGain = 1.2f;
-                    break;
-
-                case CompressorPreset.VocalGentle:
-                    _threshold = 0.65f;
-                    _ratio = 2.8f;
-                    _attackTime = 0.018f;
-                    _releaseTime = 0.180f;
-                    _makeupGain = 1.3f;
-                    break;
-
-                case CompressorPreset.VocalAggressive:
-                    _threshold = 0.35f;
-                    _ratio = 8.0f;
-                    _attackTime = 0.005f;
-                    _releaseTime = 0.100f;
-                    _makeupGain = 2.5f;
-                    break;
-
-                case CompressorPreset.Drums:
-                    _threshold = 0.55f;
-                    _ratio = 5.0f;
-                    _attackTime = 0.001f;
-                    _releaseTime = 0.060f;
-                    _makeupGain = 2.0f;
-                    break;
-
-                case CompressorPreset.Bass:
-                    _threshold = 0.42f;
-                    _ratio = 6.0f;
-                    _attackTime = 0.010f;
-                    _releaseTime = 0.200f;
-                    _makeupGain = 2.0f;
-                    break;
-
-                case CompressorPreset.MasteringLimiter:
-                    _threshold = 0.65f;
-                    _ratio = 20.0f;
-                    _attackTime = 0.0001f;
-                    _releaseTime = 0.080f;
-                    _makeupGain = 1.0f;
-                    break;
-
-                case CompressorPreset.Vintage:
-                    _threshold = 0.52f;
-                    _ratio = 3.5f;
-                    _attackTime = 0.025f;
-                    _releaseTime = 0.350f;
-                    _makeupGain = 1.7f;
-                    break;
+                case CompressorPreset.Default:          _threshold=0.50f; _ratio=4.0f;  _attackTime=0.020f;  _releaseTime=0.200f; _makeupGain=1.2f; break;
+                case CompressorPreset.VocalGentle:      _threshold=0.65f; _ratio=2.8f;  _attackTime=0.018f;  _releaseTime=0.180f; _makeupGain=1.3f; break;
+                case CompressorPreset.VocalAggressive:  _threshold=0.35f; _ratio=8.0f;  _attackTime=0.005f;  _releaseTime=0.100f; _makeupGain=2.5f; break;
+                case CompressorPreset.Drums:            _threshold=0.55f; _ratio=5.0f;  _attackTime=0.001f;  _releaseTime=0.060f; _makeupGain=2.0f; break;
+                case CompressorPreset.Bass:             _threshold=0.42f; _ratio=6.0f;  _attackTime=0.010f;  _releaseTime=0.200f; _makeupGain=2.0f; break;
+                case CompressorPreset.MasteringLimiter: _threshold=0.65f; _ratio=20.0f; _attackTime=0.0001f; _releaseTime=0.080f; _makeupGain=1.0f; break;
+                case CompressorPreset.Vintage:          _threshold=0.52f; _ratio=3.5f;  _attackTime=0.025f;  _releaseTime=0.350f; _makeupGain=1.7f; break;
             }
             _recalcCoeffs(false);
         }

@@ -239,39 +239,17 @@ namespace OwnaudioNET.Effects
 
             switch (preset)
             {
-                case ReverbPreset.SmallRoom:
-                    RoomSize = 0.30f; Damping = 0.62f; Width = 0.70f; Mix = 0.18f;
-                    break;
-                case ReverbPreset.LargeHall:
-                    RoomSize = 0.85f; Damping = 0.42f; Width = 1.0f; Mix = 0.30f;
-                    break;
-                case ReverbPreset.Cathedral:
-                    RoomSize = 0.94f; Damping = 0.16f; Width = 1.0f; Mix = 0.38f;
-                    break;
-                case ReverbPreset.Plate:
-                    RoomSize = 0.62f; Damping = 0.18f; Width = 0.85f; Mix = 0.26f;
-                    break;
-                case ReverbPreset.Spring:
-                    RoomSize = 0.42f; Damping = 0.72f; Width = 0.55f; Mix = 0.22f;
-                    break;
-                case ReverbPreset.AmbientPad:
-                    RoomSize = 0.92f; Damping = 0.25f; Width = 1.0f; Mix = 0.50f;
-                    break;
-                case ReverbPreset.VocalBooth:
-                    RoomSize = 0.18f; Damping = 0.88f; Width = 0.40f; Mix = 0.12f;
-                    break;
-                case ReverbPreset.DrumRoom:
-                    RoomSize = 0.58f; Damping = 0.58f; Width = 0.95f; Mix = 0.20f;
-                    break;
-                case ReverbPreset.Gated:
-                    RoomSize = 0.70f; Damping = 0.90f; Width = 1.0f; Mix = 0.28f;
-                    break;
-                case ReverbPreset.Subtle:
-                    RoomSize = 0.28f; Damping = 0.72f; Width = 0.75f; Mix = 0.08f;
-                    break;
-                default:
-                    RoomSize = 0.55f; Damping = 0.50f; Width = 1.0f; Mix = 0.25f;
-                    break;
+                case ReverbPreset.SmallRoom:  RoomSize=0.30f; Damping=0.62f; Width=0.70f; Mix=0.18f; break;
+                case ReverbPreset.LargeHall:  RoomSize=0.85f; Damping=0.42f; Width=1.0f;  Mix=0.30f; break;
+                case ReverbPreset.Cathedral:  RoomSize=0.94f; Damping=0.16f; Width=1.0f;  Mix=0.38f; break;
+                case ReverbPreset.Plate:      RoomSize=0.62f; Damping=0.18f; Width=0.85f; Mix=0.26f; break;
+                case ReverbPreset.Spring:     RoomSize=0.42f; Damping=0.72f; Width=0.55f; Mix=0.22f; break;
+                case ReverbPreset.AmbientPad: RoomSize=0.92f; Damping=0.25f; Width=1.0f;  Mix=0.50f; break;
+                case ReverbPreset.VocalBooth: RoomSize=0.18f; Damping=0.88f; Width=0.40f; Mix=0.12f; break;
+                case ReverbPreset.DrumRoom:   RoomSize=0.58f; Damping=0.58f; Width=0.95f; Mix=0.20f; break;
+                case ReverbPreset.Gated:      RoomSize=0.70f; Damping=0.90f; Width=1.0f;  Mix=0.28f; break;
+                case ReverbPreset.Subtle:     RoomSize=0.28f; Damping=0.72f; Width=0.75f; Mix=0.08f; break;
+                default:                      RoomSize=0.55f; Damping=0.50f; Width=1.0f;  Mix=0.25f; break;
             }
         }
 

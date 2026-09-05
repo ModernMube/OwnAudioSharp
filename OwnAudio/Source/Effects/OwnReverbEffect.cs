@@ -302,89 +302,62 @@ namespace OwnaudioNET.Effects
                 case OwnReverbPreset.SmallRoom:
                     PreDelay = 8f;  Decay = 0.6f;  Size = 0.45f; Damping = 0.65f; LowDamping = 0.30f;
                     Diffusion = 0.60f; ModRate = 1.2f;  ModDepth = 0.20f; Width = 0.80f;
-                    EarlyLevel = 0.55f; LateLevel = 0.85f; Mix = 0.18f;
-                    break;
-
+                    EarlyLevel = 0.55f; LateLevel = 0.85f; Mix = 0.18f; break;
                 case OwnReverbPreset.Chamber:
                     PreDelay = 18f; Decay = 1.6f;  Size = 0.80f; Damping = 0.45f; LowDamping = 0.20f;
                     Diffusion = 0.75f; ModRate = 0.9f;  ModDepth = 0.25f; Width = 1.00f;
-                    EarlyLevel = 0.45f; LateLevel = 0.95f; Mix = 0.24f;
-                    break;
-
+                    EarlyLevel = 0.45f; LateLevel = 0.95f; Mix = 0.24f; break;
                 case OwnReverbPreset.LargeHall:
                     PreDelay = 35f; Decay = 3.8f;  Size = 1.50f; Damping = 0.42f; LowDamping = 0.12f;
                     Diffusion = 0.80f; ModRate = 0.5f;  ModDepth = 0.45f; Width = 1.40f;
-                    EarlyLevel = 0.30f; Mix = 0.30f;
-                    break;
-
+                    EarlyLevel = 0.30f; Mix = 0.30f; break;
                 case OwnReverbPreset.Cathedral:
                     PreDelay = 60f; Decay = 8.5f;  Size = 2.00f; Damping = 0.22f; LowDamping = 0.08f;
                     Diffusion = 0.85f; ModRate = 0.3f;  ModDepth = 0.35f; Width = 1.50f;
-                    EarlyLevel = 0.22f; Mix = 0.38f;
-                    break;
-
+                    EarlyLevel = 0.22f; Mix = 0.38f; break;
                 case OwnReverbPreset.Plate:
                     PreDelay = 6f;  Decay = 1.9f;  Size = 0.60f; Damping = 0.20f; LowDamping = 0.35f;
                     Diffusion = 0.95f; ModRate = 1.6f;  ModDepth = 0.30f; Width = 1.10f;
-                    EarlyLevel = 0.0f; Mix = 0.26f;
-                    break;
-
+                    EarlyLevel = 0.0f; Mix = 0.26f; break;
                 case OwnReverbPreset.VocalPlate:
                     PreDelay = 25f; Decay = 1.7f;  Size = 0.65f; Damping = 0.30f; LowDamping = 0.45f;
                     Diffusion = 0.92f; ModRate = 1.3f;  ModDepth = 0.35f; Width = 1.00f;
                     EarlyLevel = 0.05f; Mix = 0.24f;
-                    DuckDepth = 0.35f; DuckAttack = 12f; DuckRelease = 220f;
-                    break;
-
+                    DuckDepth = 0.35f; DuckAttack = 12f; DuckRelease = 220f; break;
                 case OwnReverbPreset.DrumRoom:
                     PreDelay = 5f;  Decay = 0.9f;  Size = 0.70f; Damping = 0.55f; LowDamping = 0.18f;
                     Diffusion = 0.65f; ModRate = 1.0f;  ModDepth = 0.15f; Width = 1.15f;
-                    EarlyLevel = 0.70f; LateLevel = 0.80f; Mix = 0.22f;
-                    break;
-
+                    EarlyLevel = 0.70f; LateLevel = 0.80f; Mix = 0.22f; break;
                 case OwnReverbPreset.Gated:
                     PreDelay = 2f;  Decay = 0.35f; Size = 0.55f; Damping = 0.75f; LowDamping = 0.30f;
                     Diffusion = 0.50f; ModRate = 0.8f;  ModDepth = 0.10f; Width = 1.00f;
-                    EarlyLevel = 0.60f; Mix = 0.30f;
-                    break;
-
+                    EarlyLevel = 0.60f; Mix = 0.30f; break;
                 case OwnReverbPreset.Bloom:
                     PreDelay = 45f; Decay = 6.0f;  Size = 1.60f; Damping = 0.40f; LowDamping = 0.20f;
                     Diffusion = 0.88f; ModRate = 0.45f; ModDepth = 0.90f; Width = 1.60f;
                     EarlyLevel = 0.15f; Mix = 0.42f;
-                    DuckDepth = 0.45f; DuckAttack = 8f; DuckRelease = 400f;
-                    break;
-
+                    DuckDepth = 0.45f; DuckAttack = 8f; DuckRelease = 400f; break;
                 case OwnReverbPreset.AmbientPad:
                     PreDelay = 80f; Decay = 12.0f; Size = 1.80f; Damping = 0.35f; LowDamping = 0.25f;
                     Diffusion = 0.90f; ModRate = 0.35f; ModDepth = 0.80f; Width = 1.50f;
-                    EarlyLevel = 0.10f; Mix = 0.50f;
-                    break;
-
+                    EarlyLevel = 0.10f; Mix = 0.50f; break;
                 case OwnReverbPreset.DuckedVocal:
                     PreDelay = 30f; Decay = 3.0f;  Size = 1.10f; Damping = 0.45f; LowDamping = 0.40f;
                     Diffusion = 0.85f; ModRate = 0.7f;  ModDepth = 0.40f; Width = 1.30f;
                     EarlyLevel = 0.10f; Mix = 0.35f;
-                    DuckDepth = 0.80f; DuckAttack = 6f; DuckRelease = 300f;
-                    break;
-
+                    DuckDepth = 0.80f; DuckAttack = 6f; DuckRelease = 300f; break;
                 case OwnReverbPreset.InfiniteHold:
                     PreDelay = 0f;  Decay = 20.0f; Size = 1.60f; Damping = 0.30f; LowDamping = 0.10f;
                     Diffusion = 0.90f; ModRate = 0.25f; ModDepth = 0.60f; Width = 1.60f;
-                    EarlyLevel = 0.0f; Mix = 0.60f;
-                    break;
-
+                    EarlyLevel = 0.0f; Mix = 0.60f; break;
                 case OwnReverbPreset.Subtle:
                     PreDelay = 12f; Decay = 1.1f;  Size = 0.60f; Damping = 0.60f; LowDamping = 0.35f;
                     Diffusion = 0.80f; ModRate = 0.9f;  ModDepth = 0.20f; Width = 0.90f;
-                    EarlyLevel = 0.30f; LateLevel = 0.90f; Mix = 0.08f;
-                    break;
-
+                    EarlyLevel = 0.30f; LateLevel = 0.90f; Mix = 0.08f; break;
                 default:
                     PreDelay = 20f; Decay = 2.5f;  Size = 1.00f; Damping = 0.50f; LowDamping = 0.15f;
                     Diffusion = 0.70f; ModRate = 0.8f;  ModDepth = 0.40f; Width = 1.20f;
-                    EarlyLevel = 0.35f; Mix = 0.30f;
-                    break;
+                    EarlyLevel = 0.35f; Mix = 0.30f; break;
             }
         }
 

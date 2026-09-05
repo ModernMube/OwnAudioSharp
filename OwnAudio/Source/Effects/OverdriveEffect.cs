@@ -168,37 +168,14 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case OverdrivePreset.CleanBoost:
-                    Gain = 1.3f; Tone = 0.6f; Mix = 1.0f; OutputLevel = 0.9f;
-                    break;
-
-                case OverdrivePreset.Blues:
-                    Gain = 2.2f; Tone = 0.35f; Mix = 1.0f; OutputLevel = 0.75f;
-                    break;
-
-                case OverdrivePreset.RockCrunch:
-                    Gain = 3.2f; Tone = 0.75f; Mix = 1.0f; OutputLevel = 0.7f;
-                    break;
-
-                case OverdrivePreset.Lead:
-                    Gain = 4.2f; Tone = 0.8f; Mix = 1.0f; OutputLevel = 0.65f;
-                    break;
-
-                case OverdrivePreset.VintugeTube:
-                    Gain = 2.8f; Tone = 0.4f; Mix = 0.9f; OutputLevel = 0.8f;
-                    break;
-
-                case OverdrivePreset.Bass:
-                    Gain = 1.8f; Tone = 0.25f; Mix = 0.8f; OutputLevel = 0.85f;
-                    break;
-
-                case OverdrivePreset.Screamer:
-                    Gain = 3.5f; Tone = 0.65f; Mix = 1.0f; OutputLevel = 0.7f;
-                    break;
-
-                default:
-                    Gain = 2.0f; Tone = 0.5f; Mix = 1.0f; OutputLevel = 0.7f;
-                    break;
+                case OverdrivePreset.CleanBoost:  Gain=1.3f; Tone=0.6f;  Mix=1.0f; OutputLevel=0.9f;  break;
+                case OverdrivePreset.Blues:      Gain=2.2f; Tone=0.35f; Mix=1.0f; OutputLevel=0.75f; break;
+                case OverdrivePreset.RockCrunch: Gain=3.2f; Tone=0.75f; Mix=1.0f; OutputLevel=0.7f;  break;
+                case OverdrivePreset.Lead:       Gain=4.2f; Tone=0.8f;  Mix=1.0f; OutputLevel=0.65f; break;
+                case OverdrivePreset.VintugeTube:Gain=2.8f; Tone=0.4f;  Mix=0.9f; OutputLevel=0.8f;  break;
+                case OverdrivePreset.Bass:       Gain=1.8f; Tone=0.25f; Mix=0.8f; OutputLevel=0.85f; break;
+                case OverdrivePreset.Screamer:   Gain=3.5f; Tone=0.65f; Mix=1.0f; OutputLevel=0.7f;  break;
+                default:                         Gain=2.0f; Tone=0.5f;  Mix=1.0f; OutputLevel=0.7f;  break;
             }
         }
 

@@ -195,26 +195,11 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case AutoGainPreset.Default:
-                    TargetLevel = 0.25f; AttackCoefficient = 0.990f; ReleaseCoefficient = 0.9990f;
-                    MaximumGain = 4.0f; MinimumGain = 0.20f; GateThreshold = 0.001f;
-                    break;
-                case AutoGainPreset.Music:
-                    TargetLevel = 0.20f; AttackCoefficient = 0.995f; ReleaseCoefficient = 0.9995f;
-                    MaximumGain = 2.5f; MinimumGain = 0.40f; GateThreshold = 0.002f;
-                    break;
-                case AutoGainPreset.Voice:
-                    TargetLevel = 0.28f; AttackCoefficient = 0.988f; ReleaseCoefficient = 0.9980f;
-                    MaximumGain = 3.5f; MinimumGain = 0.25f; GateThreshold = 0.0015f;
-                    break;
-                case AutoGainPreset.Broadcast:
-                    TargetLevel = 0.32f; AttackCoefficient = 0.985f; ReleaseCoefficient = 0.9950f;
-                    MaximumGain = 4.0f; MinimumGain = 0.18f; GateThreshold = 0.0005f;
-                    break;
-                case AutoGainPreset.Live:
-                    TargetLevel = 0.35f; AttackCoefficient = 0.975f; ReleaseCoefficient = 0.9920f;
-                    MaximumGain = 2.5f; MinimumGain = 0.12f; GateThreshold = 0.004f;
-                    break;
+                case AutoGainPreset.Default:   TargetLevel=0.25f; AttackCoefficient=0.990f; ReleaseCoefficient=0.9990f; MaximumGain=4.0f; MinimumGain=0.20f; GateThreshold=0.001f;  break;
+                case AutoGainPreset.Music:     TargetLevel=0.20f; AttackCoefficient=0.995f; ReleaseCoefficient=0.9995f; MaximumGain=2.5f; MinimumGain=0.40f; GateThreshold=0.002f;  break;
+                case AutoGainPreset.Voice:     TargetLevel=0.28f; AttackCoefficient=0.988f; ReleaseCoefficient=0.9980f; MaximumGain=3.5f; MinimumGain=0.25f; GateThreshold=0.0015f; break;
+                case AutoGainPreset.Broadcast: TargetLevel=0.32f; AttackCoefficient=0.985f; ReleaseCoefficient=0.9950f; MaximumGain=4.0f; MinimumGain=0.18f; GateThreshold=0.0005f; break;
+                case AutoGainPreset.Live:      TargetLevel=0.35f; AttackCoefficient=0.975f; ReleaseCoefficient=0.9920f; MaximumGain=2.5f; MinimumGain=0.12f; GateThreshold=0.004f;  break;
             }
         }
 

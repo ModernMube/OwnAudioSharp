@@ -281,74 +281,32 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case DynamicAmpPreset.Default:
-                    TargetRmsLevelDb = -12.0f;
-                    AttackTime = 0.30f;
-                    ReleaseTime = 1.50f;
-                    NoiseGateThresholdDb = -50.0f;
-                    MaxGain = 6.0f;
-                    MaxGainReductionDb = 12.0f;
-                    MaxGainChangePerSecondDb = 12.0f;
-                    break;
+                    TargetRmsLevelDb=-12.0f; AttackTime=0.30f; ReleaseTime=1.50f; NoiseGateThresholdDb=-50.0f;
+                    MaxGain=6.0f; MaxGainReductionDb=12.0f; MaxGainChangePerSecondDb=12.0f; break;
 
                 case DynamicAmpPreset.Speech:
-                    TargetRmsLevelDb = -15.0f;
-                    AttackTime = 0.18f;
-                    ReleaseTime = 0.80f;
-                    NoiseGateThresholdDb = -45.0f;
-                    MaxGain = 8.0f;
-                    MaxGainReductionDb = 15.0f;
-                    MaxGainChangePerSecondDb = 20.0f;
-                    break;
+                    TargetRmsLevelDb=-15.0f; AttackTime=0.18f; ReleaseTime=0.80f; NoiseGateThresholdDb=-45.0f;
+                    MaxGain=8.0f; MaxGainReductionDb=15.0f; MaxGainChangePerSecondDb=20.0f; break;
 
                 case DynamicAmpPreset.Music:
-                    TargetRmsLevelDb = -14.0f;
-                    AttackTime = 0.80f;
-                    ReleaseTime = 2.50f;
-                    NoiseGateThresholdDb = -55.0f;
-                    MaxGain = 4.0f;
-                    MaxGainReductionDb = 8.0f;
-                    MaxGainChangePerSecondDb = 5.0f;
-                    break;
+                    TargetRmsLevelDb=-14.0f; AttackTime=0.80f; ReleaseTime=2.50f; NoiseGateThresholdDb=-55.0f;
+                    MaxGain=4.0f; MaxGainReductionDb=8.0f; MaxGainChangePerSecondDb=5.0f; break;
 
                 case DynamicAmpPreset.Broadcast:
-                    TargetRmsLevelDb = -16.0f;
-                    AttackTime = 0.28f;
-                    ReleaseTime = 1.40f;
-                    NoiseGateThresholdDb = -48.0f;
-                    MaxGain = 6.0f;
-                    MaxGainReductionDb = 18.0f;
-                    MaxGainChangePerSecondDb = 14.0f;
-                    break;
+                    TargetRmsLevelDb=-16.0f; AttackTime=0.28f; ReleaseTime=1.40f; NoiseGateThresholdDb=-48.0f;
+                    MaxGain=6.0f; MaxGainReductionDb=18.0f; MaxGainChangePerSecondDb=14.0f; break;
 
                 case DynamicAmpPreset.Mastering:
-                    TargetRmsLevelDb = -10.0f;
-                    AttackTime = 2.00f;
-                    ReleaseTime = 5.00f;
-                    NoiseGateThresholdDb = -60.0f;
-                    MaxGain = 3.0f;
-                    MaxGainReductionDb = 6.0f;
-                    MaxGainChangePerSecondDb = 3.0f;
-                    break;
+                    TargetRmsLevelDb=-10.0f; AttackTime=2.00f; ReleaseTime=5.00f; NoiseGateThresholdDb=-60.0f;
+                    MaxGain=3.0f; MaxGainReductionDb=6.0f; MaxGainChangePerSecondDb=3.0f; break;
 
                 case DynamicAmpPreset.Live:
-                    TargetRmsLevelDb = -12.0f;
-                    AttackTime = 0.15f;
-                    ReleaseTime = 0.80f;
-                    NoiseGateThresholdDb = -42.0f;
-                    MaxGain = 5.0f;
-                    MaxGainReductionDb = 12.0f;
-                    MaxGainChangePerSecondDb = 18.0f;
-                    break;
+                    TargetRmsLevelDb=-12.0f; AttackTime=0.15f; ReleaseTime=0.80f; NoiseGateThresholdDb=-42.0f;
+                    MaxGain=5.0f; MaxGainReductionDb=12.0f; MaxGainChangePerSecondDb=18.0f; break;
 
                 case DynamicAmpPreset.Transparent:
-                    TargetRmsLevelDb = -16.0f;
-                    AttackTime = 3.00f;
-                    ReleaseTime = 8.00f;
-                    NoiseGateThresholdDb = -65.0f;
-                    MaxGain = 2.5f;
-                    MaxGainReductionDb = 5.0f;
-                    MaxGainChangePerSecondDb = 2.0f;
-                    break;
+                    TargetRmsLevelDb=-16.0f; AttackTime=3.00f; ReleaseTime=8.00f; NoiseGateThresholdDb=-65.0f;
+                    MaxGain=2.5f; MaxGainReductionDb=5.0f; MaxGainChangePerSecondDb=2.0f; break;
             }
         }
 
