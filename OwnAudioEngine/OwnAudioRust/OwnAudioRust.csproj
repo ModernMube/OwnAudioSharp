@@ -50,6 +50,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\Shared\NativeLibResolver.cs" Link="Interop\NativeLibResolver.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Ownaudio.Core\Ownaudio.Core.csproj" />
   </ItemGroup>
 

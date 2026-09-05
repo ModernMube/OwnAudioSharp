@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using OwnAudio.Shared;
 
 namespace Ownaudio.Native.RustAudio.Interop;
 
@@ -55,50 +56,6 @@ internal static class NativeLibraryLoader
         if (!string.Equals(libraryName, LogicalName, StringComparison.Ordinal))
             return IntPtr.Zero;
 
-        if (OperatingSystem.IsAndroid())
-            return NativeLibrary.TryLoad("libownaudio_ffi.so", assembly, searchPath, out IntPtr _droidHandle) ? _droidHandle : IntPtr.Zero;
-
-        string _fileName = _getPlatformFileName();
-        string _baseDir = AppContext.BaseDirectory;
-
-        string _ridPath = Path.Combine(_baseDir, "runtimes", _getCurrentRid(), "native", _fileName);
-        if (NativeLibrary.TryLoad(_ridPath, out IntPtr _handle)) return _handle;
-
-        if (NativeLibrary.TryLoad(Path.Combine(_baseDir, _fileName), out _handle)) return _handle;
-
-        return NativeLibrary.TryLoad(_fileName, assembly, searchPath, out _handle) ? _handle : IntPtr.Zero;
-    }
-
-    /// <summary>
-    /// The lib file name for the current os.
-    /// </summary>
-    /// <returns></returns>
-    private static string _getPlatformFileName()
-    {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return "ownaudio_ffi.dll";
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return "libownaudio_ffi.dylib";
-
-        return "libownaudio_ffi.so";
-    }
-
-    /// <summary>
-    /// Builds the rid string we look for under runtimes, like win-x64 or osx-arm64.
-    /// </summary>
-    private static string _getCurrentRid()
-    {
-        string _os = "linux";
-        if(RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) _os = "win";
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) _os = "osx";
-
-        string _arch = RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.X64 => "x64",
-            Architecture.X86 => "x86",
-            Architecture.Arm => "arm",
-            Architecture.Arm64 => "arm64",
-            _ => "x64"
-        };
-
-        return $"{_os}-{_arch}";
+        return NativeLibResolver.Resolve("ownaudio_ffi", assembly, searchPath);
     }
 }

@@ -28,6 +28,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\Shared\NativeLibResolver.cs" Link="Interop\NativeLibResolver.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\..\ownaudio.png" Pack="true" PackagePath="\" />
     <None Include="README.md" Pack="true" PackagePath="\README.md" />
     <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\" />
