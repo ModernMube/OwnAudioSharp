@@ -121,17 +121,21 @@ public sealed class TrackEffectChain
         if (index < 0 || index >= _effects.Count)
             throw new ArgumentOutOfRangeException(nameof(index));
 
+        _removeHandleAt(index);
         _effects.RemoveAt(index);
-        _handles.RemoveAt(index);
     }
 
     /// <summary>
-    /// Empties the chain.
+    /// Empties the chain, native side included.
     /// </summary>
     public void Clear()
     {
+        for (int i = _effects.Count - 1; i >= 0; i--)
+        {
+            _removeHandleAt(i);
+        }
+
         _effects.Clear();
-        _handles.Clear();
     }
 
     /// <summary>
@@ -193,6 +197,20 @@ public sealed class TrackEffectChain
         int index = _effects.IndexOf(effect);
         if (index < 0) { return; }
 
+        _removeHandleAt(index);
+        _effects.RemoveAt(index);
+    }
+
+    #endregion
+
+    #region Private helpers
+
+    /// <summary>
+    /// Native remove already freed the effect box, so we invalidate the SafeHandle
+    /// afterwards — otherwise it would destroy it a second time.
+    /// </summary>
+    private void _removeHandleAt(int index)
+    {
         EffectHandle handle = _handles[index];
         int code = OwnAudioNative.ownaudio_v1_effect_remove(
             _mixerHandle,
@@ -201,13 +219,8 @@ public sealed class TrackEffectChain
         ErrorCodeMapper.ThrowIfError(code, nameof(Remove));
 
         handle.SetHandleAsInvalid();
-        _effects.RemoveAt(index);
         _handles.RemoveAt(index);
     }
-
-    #endregion
-
-    #region Private helpers
 
     /// <summary>
     /// Wrapper type → native effect id, so the generic Add can resolve it.
