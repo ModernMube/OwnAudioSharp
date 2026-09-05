@@ -16,7 +16,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\..\artifacts\local-packages\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Mt3</PackageId>
-    <Version>4.0.8-preview.3</Version>
+    <Version>4.0.8-preview.6</Version>
     <Authors>ModernMube</Authors>
     <Description>MT3 multi-track music transcription backend for OwnAudioSharp. Adds an INoteTranscriber that separates instruments instead of collapsing them, which is what chord detection wants. The transformer runs natively in Rust on ONNX Runtime; the model weights are not included and are loaded from a path you provide. Desktop only.</Description>
     <PackageTags>audio;transcription;mt3;midi;chord-detection;onnx;desktop</PackageTags>
