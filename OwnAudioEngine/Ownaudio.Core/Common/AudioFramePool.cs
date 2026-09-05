@@ -9,6 +9,8 @@ namespace Ownaudio.Core.Common;
 /// Keeps a handful of frames + their byte buffers around so the decoder loop
 /// stops hammering the GC. Rent it, use it, hand it back.
 /// </summary>
+[Obsolete("Decoding happens on the rust side now, so nothing in OwnAudio rents from this any more. " +
+    "AudioBufferPool is the managed pool that is still in use. Removed in 5.0.")]
 public sealed class AudioFramePool
 {
     private readonly ConcurrentBag<PooledAudioFrame> _frames;
@@ -93,6 +95,7 @@ public sealed class AudioFramePool
 /// <summary>
 /// A frame that sits on a reused buffer — spans in, no copies, no garbage.
 /// </summary>
+[Obsolete("Only ever handed out by AudioFramePool, which nothing uses any more. Removed in 5.0.")]
 public sealed class PooledAudioFrame
 {
     private readonly byte[] _buffer;

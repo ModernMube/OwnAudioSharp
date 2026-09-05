@@ -15,7 +15,7 @@ internal static partial class OwnAudioNative
     /// </summary>
     /// <param name="mixer"></param>
     /// <param name="track"></param>
-    /// <param name="effectType">numeric id, see Enums.NativeEffectType</param>
+    /// <param name="effectType">numeric id, see Audio.Effects.EffectType</param>
     /// <param name="sampleRate">Hz, sizes the internal dsp buffers</param>
     /// <param name="outEffect"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]

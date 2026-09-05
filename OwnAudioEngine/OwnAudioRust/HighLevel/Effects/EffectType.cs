@@ -3,7 +3,7 @@ namespace Ownaudio.Audio.Effects;
 /// <summary>
 /// Which native effect variant we are talking about. The numbers are part of
 /// the C ABI, keep them in sync with ownaudio-core/src/effects/mod.rs and
-/// with NativeEffectType.
+/// with the effect ids in the rust effects/mod.rs.
 /// </summary>
 public enum EffectType : uint
 {
