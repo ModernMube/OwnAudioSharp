@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.InteropServices;
 using Ownaudio.Native.RustAudio.Interop;
 
 namespace Ownaudio.Safe.Handles;
@@ -9,20 +8,8 @@ namespace Ownaudio.Safe.Handles;
 /// block dies here — the serving source and its interleaved buffer stick around on the
 /// audio thread until the track drops it.
 /// </summary>
-public sealed class MemorySourceHandle : SafeHandle
+public sealed class MemorySourceHandle : NativePtrHandle
 {
-    /// <summary>
-    /// Invalid until P/Invoke fills it in.
-    /// </summary>
-    public MemorySourceHandle() : base(IntPtr.Zero, ownsHandle: true) { }
-
     /// <inheritdoc/>
-    public override bool IsInvalid => handle == IntPtr.Zero;
-
-    /// <inheritdoc/>
-    protected override bool ReleaseHandle()
-    {
-        OwnAudioNative.ownaudio_v1_memory_source_destroy(handle);
-        return true;
-    }
+    protected override void Destroy(IntPtr ptr) => OwnAudioNative.ownaudio_v1_memory_source_destroy(ptr);
 }

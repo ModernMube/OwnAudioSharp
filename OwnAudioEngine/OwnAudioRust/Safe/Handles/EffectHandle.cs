@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.InteropServices;
 using Ownaudio.Native.RustAudio.Interop;
 
 namespace Ownaudio.Safe.Handles;
@@ -9,20 +8,8 @@ namespace Ownaudio.Safe.Handles;
 /// wrapper — it does NOT unhook the effect from the chain, so call
 /// ownaudio_v1_effect_remove before you dispose.
 /// </summary>
-public sealed class EffectHandle : SafeHandle
+public sealed class EffectHandle : NativePtrHandle
 {
-    /// <summary>
-    /// Invalid until P/Invoke fills it in.
-    /// </summary>
-    public EffectHandle() : base(IntPtr.Zero, ownsHandle: true) { }
-
     /// <inheritdoc/>
-    public override bool IsInvalid => handle == IntPtr.Zero;
-
-    /// <inheritdoc/>
-    protected override bool ReleaseHandle()
-    {
-        OwnAudioNative.ownaudio_v1_effect_destroy(handle);
-        return true;
-    }
+    protected override void Destroy(IntPtr ptr) => OwnAudioNative.ownaudio_v1_effect_destroy(ptr);
 }

@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.InteropServices;
 using Ownaudio.Native.RustAudio.Interop;
 
 namespace Ownaudio.Safe.Handles;
@@ -9,20 +8,11 @@ namespace Ownaudio.Safe.Handles;
 /// several tracks. Killing it stops capture and drops the stream; attached tracks keep
 /// their ring readers and just underrun into silence.
 /// </summary>
-public sealed class CaptureHandle : SafeHandle
+public sealed class CaptureHandle : NativePtrHandle
 {
-    /// <summary>
-    /// Invalid until P/Invoke fills it in.
-    /// </summary>
-    public CaptureHandle() : base(IntPtr.Zero, ownsHandle: true) { }
-
     /// <inheritdoc/>
-    public override bool IsInvalid => handle == IntPtr.Zero;
-
-    /// <inheritdoc/>
-    protected override bool ReleaseHandle()
+    protected override void Destroy(IntPtr ptr)
     {
-        OwnAudioNative.ownaudio_v1_capture_close(handle);
-        return true;
+        OwnAudioNative.ownaudio_v1_capture_close(ptr);
     }
 }

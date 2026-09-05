@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.InteropServices;
 using Ownaudio.Native.RustAudio.Interop;
 
 namespace Ownaudio.Safe.Handles;
@@ -9,20 +8,8 @@ namespace Ownaudio.Safe.Handles;
 /// only kills the writer — the reader on the audio thread keeps going and underruns to
 /// silence once the buffered samples run out.
 /// </summary>
-public sealed class TrackSourceHandle : SafeHandle
+public sealed class TrackSourceHandle : NativePtrHandle
 {
-    /// <summary>
-    /// Invalid until P/Invoke fills it in.
-    /// </summary>
-    public TrackSourceHandle() : base(IntPtr.Zero, ownsHandle: true) { }
-
     /// <inheritdoc/>
-    public override bool IsInvalid => handle == IntPtr.Zero;
-
-    /// <inheritdoc/>
-    protected override bool ReleaseHandle()
-    {
-        OwnAudioNative.ownaudio_v1_track_source_destroy(handle);
-        return true;
-    }
+    protected override void Destroy(IntPtr ptr) => OwnAudioNative.ownaudio_v1_track_source_destroy(ptr);
 }
