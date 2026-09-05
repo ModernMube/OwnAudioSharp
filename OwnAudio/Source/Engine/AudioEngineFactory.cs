@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-using System.Threading;
 using Ownaudio.Core;
 using OwnaudioNET.Exceptions;
 using Logger;
@@ -35,7 +33,7 @@ public static class AudioEngineFactory
 
         try
         {
-            int _result = _initializeEngine(engine, config);
+            int _result = engine.Initialize(config);
 
             if (_result < 0)
             {
@@ -130,36 +128,6 @@ public static class AudioEngineFactory
     /// <returns></returns>
     public static string GetPlatformEngineName()
         => "RustAudioEngine (cpal)";
-
-    #endregion
-
-    #region Private Helpers
-
-    /// <summary>
-    /// Runs init. On Windows it goes to a dedicated MTA thread, WASAPI COM wants that regardless of the caller.
-    /// </summary>
-    /// <param name="engine"></param>
-    /// <param name="config"></param>
-    /// <returns></returns>
-    private static int _initializeEngine(IAudioEngine engine, AudioConfig config)
-    {
-        int _result = 0;
-
-#if WINDOWS
-        var _thread = new Thread(() => _result = engine.Initialize(config), 256 * 1024)
-        {
-            Name = "OwnAudio-WasapiInit",
-            IsBackground = true
-        };
-        _thread.SetApartmentState(ApartmentState.MTA);
-        _thread.Start();
-        _thread.Join();
-#else
-        _result = engine.Initialize(config);
-#endif
-
-        return _result;
-    }
 
     #endregion
 }

@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.InteropServices;
-using System.Threading;
 using Ownaudio.Core.Common;
 
 namespace Ownaudio.Core;
@@ -55,7 +54,7 @@ public static class AudioEngineFactory
                 new PlatformNotSupportedException($"Engine creation failed. Platform: {RuntimeInformation.OSDescription}", ex));
         }
 
-        int result = _initializeEngine(engine, config);
+        int result = engine.Initialize(config);
 
         if (result != 0)
         {
@@ -98,34 +97,6 @@ public static class AudioEngineFactory
                $"Implementation: RustAudioEngine (cpal)\n" +
                $"OS Description: {RuntimeInformation.OSDescription}\n" +
                $"Framework: {RuntimeInformation.FrameworkDescription}";
-    }
-
-    #endregion
-
-    #region Private Helpers
-
-    /// <summary>
-    /// On Windows WASAPI wants MTA, and we can't trust whoever called us to be in it,
-    /// so init runs on our own thread there.
-    /// </summary>
-    private static int _initializeEngine(IAudioEngine engine, AudioConfig config)
-    {
-        int result = 0;
-
-#if WINDOWS
-        var thread = new Thread(() => result = engine.Initialize(config), 256 * 1024)
-        {
-            Name = "OwnAudio-WasapiInit",
-            IsBackground = true
-        };
-        thread.SetApartmentState(ApartmentState.MTA);
-        thread.Start();
-        thread.Join();
-#else
-        result = engine.Initialize(config);
-#endif
-
-        return result;
     }
 
     #endregion
