@@ -245,15 +245,5 @@ namespace OwnaudioNET.Effects
         {
             return $"Distortion: Drive={_drive:F1}, Mix={_mix:F2}, OutputGain={_outputGain:F2}, Enabled={_enabled}";
         }
-
-        /// <summary>
-        /// Rounded clipping curve, leaves everything under unity alone.
-        /// </summary>
-        private static float SoftClip(float input)
-        {
-            if (Math.Abs(input) <= 1.0f) return input;
-
-            return Math.Sign(input) * (2.0f - 2.0f / (Math.Abs(input) + 1.0f));
-        }
     }
 }

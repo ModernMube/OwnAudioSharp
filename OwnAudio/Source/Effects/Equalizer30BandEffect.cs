@@ -67,34 +67,11 @@ namespace OwnaudioNET.Effects
     public sealed class Equalizer30BandEffect : IEffectProcessor
     {
         private const int BANDS = 30;
-        private const int FILTERS_PER_BAND = 1;
-        private const int TOTAL_FILTERS = BANDS * FILTERS_PER_BAND;
-
-        /// <summary>
-        /// Biquad coefficients per filter, a0 already normalized out.
-        /// </summary>
-        private readonly float[] _b0;
-        private readonly float[] _b1;
-        private readonly float[] _b2;
-        private readonly float[] _a1;
-        private readonly float[] _a2;
-
-        /// <summary>
-        /// Transposed DF2 state, one row per channel.
-        /// </summary>
-        private float[][] _z1;
-        private float[][] _z2;
 
         private readonly float[] _gains;
         private readonly float[] _frequencies;
         private readonly float[] _qFactors;
         private float _sampleRate;
-
-        /// <summary>
-        /// Indices of the bands that actually do something, plus how many of them there are.
-        /// </summary>
-        private readonly int[] _activeBands;
-        private int _activeCount;
 
         private Guid _id;
         private string _name;
@@ -143,24 +120,9 @@ namespace OwnaudioNET.Effects
             _enabled = true;
             _sampleRate = sampleRate;
 
-            _b0 = new float[TOTAL_FILTERS];
-            _b1 = new float[TOTAL_FILTERS];
-            _b2 = new float[TOTAL_FILTERS];
-            _a1 = new float[TOTAL_FILTERS];
-            _a2 = new float[TOTAL_FILTERS];
-
-            _z1 = new float[2][];
-            _z2 = new float[2][];
-            for (int i = 0; i < 2; i++)
-            {
-                _z1[i] = new float[TOTAL_FILTERS];
-                _z2[i] = new float[TOTAL_FILTERS];
-            }
-
             _gains = new float[BANDS];
             _frequencies = new float[BANDS];
             _qFactors = new float[BANDS];
-            _activeBands = new int[BANDS];
 
             _initFilters();
 
@@ -183,29 +145,13 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Takes the engine config, retunes on a rate change and resizes the per channel state.
+        /// Takes the engine config and follows its rate. The filtering itself is native.
         /// </summary>
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _sampleRate = config.SampleRate;
 
-            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
-            {
-                _sampleRate = config.SampleRate;
-                for(int i = 0; i < BANDS; i++) _updateFilter(i);
-            }
-
-            int ch = config.Channels;
-            if (_z1.Length != ch)
-            {
-                _z1 = new float[ch][];
-                _z2 = new float[ch][];
-                for(int i = 0; i < ch; i++)
-                {
-                    _z1[i] = new float[TOTAL_FILTERS];
-                    _z2[i] = new float[TOTAL_FILTERS];
-                }
-            }
             _native.Initialize(this, config);
         }
 
@@ -287,43 +233,6 @@ namespace OwnaudioNET.Effects
                 _frequencies[band] = StandardFrequencies[band];
                 _qFactors[band] = BandQ;
                 _gains[band] = 0.0f;
-                _updateFilter(band);
-            }
-        }
-
-        /// <summary>
-        /// RBJ peaking coefficients for one band.
-        /// </summary>
-        private void _updateFilter(int band)
-        {
-            float freq = _frequencies[band];
-            float q = _qFactors[band];
-
-            float omega = 2.0f * MathF.PI * freq / _sampleRate;
-            float sinOmega = MathF.Sin(omega);
-            float cosOmega = MathF.Cos(omega);
-            float alpha = sinOmega / (2.0f * q);
-            float A = MathF.Pow(10.0f, _gains[band] / 40.0f);
-
-            float invA0 = 1.0f / (1.0f + alpha / A);
-
-            int f = band * FILTERS_PER_BAND;
-            _b0[f] = (1.0f + alpha * A) * invA0;
-            _b1[f] = -2.0f * cosOmega * invA0;
-            _b2[f] = (1.0f - alpha * A) * invA0;
-            _a1[f] = _b1[f];
-            _a2[f] = (1.0f - alpha / A) * invA0;
-        }
-
-        /// <summary>
-        /// Collects the bands whose gain is not zero, so Process can skip the rest.
-        /// </summary>
-        private void _rebuildActive()
-        {
-            _activeCount = 0;
-            for (int i = 0; i < BANDS; i++)
-            {
-                if (Math.Abs(_gains[i]) > 0.01f) _activeBands[_activeCount++] = i;
             }
         }
 
@@ -345,8 +254,6 @@ namespace OwnaudioNET.Effects
             _frequencies[band] = frequency;
             _qFactors[band] = q;
             _gains[band] = gainDB;
-            _updateFilter(band);
-            _rebuildActive();
         }
 
         /// <summary>
@@ -424,11 +331,6 @@ namespace OwnaudioNET.Effects
         {
             ResetGeneration++;
             _native.Reset();
-            for (int i = 0; i < _z1.Length; i++)
-            {
-                Array.Clear(_z1[i], 0, _z1[i].Length);
-                Array.Clear(_z2[i], 0, _z2[i].Length);
-            }
         }
 
         /// <summary>

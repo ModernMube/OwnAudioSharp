@@ -69,12 +69,6 @@ namespace OwnaudioNET.Effects
         private float _outputLevel = 0.7f;
 
         /// <summary>
-        /// The two one-pole states behind the tone knob.
-        /// </summary>
-        private float _lowPassState = 0.0f;
-        private float _highPassState = 0.0f;
-
-        /// <summary>
         /// Instance id.
         /// </summary>
         public Guid Id => _id;
@@ -228,8 +222,6 @@ namespace OwnaudioNET.Effects
         {
             ResetGeneration++;
             _native.Reset();
-            _lowPassState = 0.0f;
-            _highPassState = 0.0f;
         }
 
         /// <summary>
@@ -249,31 +241,6 @@ namespace OwnaudioNET.Effects
         public override string ToString()
         {
             return $"{_name} (Enabled: {_enabled}, Mix: {_mix:F2}, Gain: {_gain:F2})";
-        }
-
-        /// <summary>
-        /// Asymmetric soft clip, the positive half gets a different curve than the negative one.
-        /// </summary>
-        private static float TubeSaturation(float input)
-        {
-            if (input >= 0) return MathF.Tanh(input * 0.7f) * 1.2f;
-
-            return MathF.Tanh(input * 0.9f) * 0.9f;
-        }
-
-        /// <summary>
-        /// Tone knob: an LP and an HP running in parallel, the knob decides how much
-        /// of the high part gets subtracted.
-        /// </summary>
-        private float _toneShape(float input)
-        {
-            float lpCut = 0.1f + _tone * 0.4f;
-            float hpCut = 0.05f + (1.0f - _tone) * 0.2f;
-
-            _lowPassState += lpCut * (input - _lowPassState);
-            _highPassState += hpCut * (input - _highPassState);
-
-            return _lowPassState - _highPassState * (1.0f - _tone);
         }
     }
 }
