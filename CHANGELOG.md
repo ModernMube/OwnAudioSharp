@@ -3,6 +3,18 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.8-preview.8 — 2026-09-05
+
+### Fixed
+
+- **A track entering the mix slid into its gain and pan instead of taking them.** A track the
+  mixer has just been handed starts at unity, so a source added at zero gain — a muted metronome,
+  a track muted before the transport rolls — spent its first ~5 ms fading down rather than being
+  silent, which is long enough for a whole click to get out. The per-track gain and pan smoothers
+  now snap on the first block a track renders and ramp only while it keeps rendering, so a live
+  fader move still glides. The mixer re-arms the snap on every block a track sits out, so pause,
+  mute and someone else's solo all come back on the value the track was given, not on a ramp.
+
 ## 4.0.8-preview.7 — 2026-09-05
 
 A cleanup pass over the managed side: the copy-paste the 4.0 native migration left behind, and

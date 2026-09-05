@@ -422,6 +422,8 @@ impl MultiTrackMixer {
         for track in &mut self.tracks {
             if track.is_active(any_soloed) {
                 track.process_additive(output, channels);
+            } else {
+                track.stand_down();
             }
         }
 

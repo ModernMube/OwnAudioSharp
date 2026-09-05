@@ -811,6 +811,9 @@ pub struct Track {
     /// snapshot that lands mid-rewrite can fall back to the previous block's tables instead
     /// of dropping the track's routing for a block.
     routing: RouteSnapshot,
+    /// Has the track rendered a block since it last went quiet? While false the gain and pan
+    /// smoothers snap instead of ramping — see [`Track::process_additive`].
+    entered: bool,
 }
 
 /// Output peak below which a block counts as effectively silent, so releasing the always-on
@@ -893,7 +896,15 @@ impl Track {
             unlatch_after_frames: (sample_rate as u64).max(1),
             fx_tap: None,
             routing: RouteSnapshot::new(),
+            entered: false,
         }
+    }
+
+    /// Marks the track as sitting this block out, so the next one it renders enters on the
+    /// gain and pan it was given in the meantime rather than ramping into them.
+    #[inline]
+    pub(crate) fn stand_down(&mut self) {
+        self.entered = false;
     }
 
     /// Sets this track's plugin delay compensation in frames (the mixer computes
@@ -1046,8 +1057,18 @@ impl Track {
         // common case) is a passthrough.
         self.pdc.process(buf, src_channels);
 
-        self.gain_smoother.set_target(self.shared.gain());
-        self.pan_smoother.set_target(self.shared.pan());
+        // A track entering the mix takes its gain and pan as they stand instead of sliding into
+        // them from wherever the smoother was left. That slide is a ~5 ms fade down from unity
+        // on a track the mixer has just been handed, and a metronome muted before playback
+        // spends it playing its downbeat.
+        if self.entered {
+            self.gain_smoother.set_target(self.shared.gain());
+            self.pan_smoother.set_target(self.shared.pan());
+        } else {
+            self.gain_smoother.snap(self.shared.gain());
+            self.pan_smoother.snap(self.shared.pan());
+            self.entered = true;
+        }
         // Peak of this track's own (post-gain, post-pan) contribution, per channel,
         // for per-track metering. Measured on the scaled sample, not the raw source,
         // so a muted-down track reads a low level as a user would expect.
@@ -1897,6 +1918,60 @@ mod tests {
             "peak_l {}",
             track.shared.peak_l()
         );
+    }
+
+    #[test]
+    fn a_silenced_track_enters_silent() {
+        // What this guards: a track the mixer is handed at zero gain used to slide into it from
+        // unity over the first few milliseconds, and a muted metronome spent them clicking.
+        let mut track = Track::new(60, 48_000.0, 1, 64);
+        track.set_source(Some(Box::new(ConstSource(1.0))));
+        track.shared.set_gain(0.0);
+        track.shared.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 32];
+        track.process_additive(&mut out, 1);
+
+        assert!(
+            out.iter().all(|s| s.abs() < 1e-9),
+            "the first block leaked: {:?}",
+            &out[..4]
+        );
+    }
+
+    #[test]
+    fn a_gain_move_mid_playback_still_glides() {
+        let mut track = Track::new(61, 48_000.0, 1, 64);
+        track.set_source(Some(Box::new(ConstSource(1.0))));
+        track.shared.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 32];
+        track.process_additive(&mut out, 1);
+
+        track.shared.set_gain(0.0);
+        out.iter_mut().for_each(|s| *s = 0.0);
+        track.process_additive(&mut out, 1);
+
+        assert!(out[0] > 0.5, "a live move must not jump: {}", out[0]);
+    }
+
+    #[test]
+    fn standing_down_re_arms_the_snap() {
+        // The mixer stands a track down on every block it does not render, so whatever gain it
+        // was given while it sat out is where it comes back — not somewhere along a ramp.
+        let mut track = Track::new(62, 48_000.0, 1, 64);
+        track.set_source(Some(Box::new(ConstSource(1.0))));
+        track.shared.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 32];
+        track.process_additive(&mut out, 1);
+
+        track.stand_down();
+        track.shared.set_gain(0.25);
+        out.iter_mut().for_each(|s| *s = 0.0);
+        track.process_additive(&mut out, 1);
+
+        assert!((out[0] - 0.25).abs() < 1e-6, "came back at {}", out[0]);
     }
 
     #[test]
