@@ -1715,6 +1715,31 @@ int32_t ownaudio_v1_standalone_effect_create(uint32_t effect_type,
                                              struct OwnAudioStandaloneEffectHandle **out_effect);
 
 /**
+ * Builds a standalone VST bridge around an already-loaded plugin.
+ *
+ * The type-tag `create` cannot reach VST: the plugin instance is owned by the
+ * caller, not by an `EffectType`. Same bridge the mixer chain uses, so a direct
+ * `Process` and a mixer twin behave identically — soft bypass on param 0, dry/wet
+ * on param 1, both aligned to `latency_samples`.
+ *
+ * - `plugin_handle` — opaque instance handle; must outlive the effect.
+ * - `process_fn` — the host's `VST3Plugin_ProcessAudio` pointer, not null.
+ * - `channels` / `max_block_size` — the planar scratch is sized for these and a
+ *   larger block is skipped rather than reallocated on the caller's thread.
+ * - `latency_samples` — the plugin's own latency, which the dry path is delayed by.
+ *
+ * # Safety
+ * - `out_effect` must point to a writable pointer slot.
+ * - `plugin_handle` is opaque to the engine and only handed back to the callback.
+ */
+int32_t ownaudio_v1_standalone_effect_create_vst(void *plugin_handle,
+                                                 VstProcessFn process_fn,
+                                                 uint16_t channels,
+                                                 uint32_t max_block_size,
+                                                 uint32_t latency_samples,
+                                                 struct OwnAudioStandaloneEffectHandle **out_effect);
+
+/**
  * Applies `param_id` immediately. Unknown ids are `InvalidHandle`; out of range
  * values clamp the same way the mixer twin does.
  *

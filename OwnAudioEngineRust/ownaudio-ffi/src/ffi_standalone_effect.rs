@@ -6,11 +6,14 @@
 //! [`ownaudio_core::effects::Effect`] and runs it immediately. A mixer twin and a
 //! standalone instance are never the same handle.
 
+use std::ffi::c_void;
+
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::ffi_effects::create_effect;
 use crate::handles::{
     standalone_effect_from_ptr, OwnAudioStandaloneEffectHandle, StandaloneEffectWrapper,
 };
+use ownaudio_core::effects::{VstEffect, VstProcessFn};
 
 /// Builds a standalone effect of `effect_type`, sized for `sample_rate`.
 ///
@@ -49,6 +52,67 @@ pub unsafe extern "C" fn ownaudio_v1_standalone_effect_create(
             effect,
             channels: channels.max(1),
         });
+
+        unsafe {
+            *out_effect = Box::into_raw(wrapper) as *mut OwnAudioStandaloneEffectHandle;
+        }
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Builds a standalone VST bridge around an already-loaded plugin.
+///
+/// The type-tag `create` cannot reach VST: the plugin instance is owned by the
+/// caller, not by an `EffectType`. Same bridge the mixer chain uses, so a direct
+/// `Process` and a mixer twin behave identically — soft bypass on param 0, dry/wet
+/// on param 1, both aligned to `latency_samples`.
+///
+/// - `plugin_handle` — opaque instance handle; must outlive the effect.
+/// - `process_fn` — the host's `VST3Plugin_ProcessAudio` pointer, not null.
+/// - `channels` / `max_block_size` — the planar scratch is sized for these and a
+///   larger block is skipped rather than reallocated on the caller's thread.
+/// - `latency_samples` — the plugin's own latency, which the dry path is delayed by.
+///
+/// # Safety
+/// - `out_effect` must point to a writable pointer slot.
+/// - `plugin_handle` is opaque to the engine and only handed back to the callback.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_standalone_effect_create_vst(
+    plugin_handle: *mut c_void,
+    process_fn: VstProcessFn,
+    channels: u16,
+    max_block_size: u32,
+    latency_samples: u32,
+    out_effect: *mut *mut OwnAudioStandaloneEffectHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_effect.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let Some(process) = process_fn else {
+            set_last_error("standalone vst effect needs a non-null process_fn");
+            return OwnAudioErrorCode::NullPointer as i32;
+        };
+
+        if max_block_size == 0 {
+            set_last_error("standalone vst effect needs a positive max_block_size");
+            return OwnAudioErrorCode::UnsupportedConfig as i32;
+        }
+
+        let channels = channels.max(1);
+        let effect = Box::new(VstEffect::new(
+            plugin_handle,
+            process,
+            channels,
+            max_block_size as usize,
+            latency_samples,
+        ));
+
+        let wrapper = Box::new(StandaloneEffectWrapper { effect, channels });
 
         unsafe {
             *out_effect = Box::into_raw(wrapper) as *mut OwnAudioStandaloneEffectHandle;
