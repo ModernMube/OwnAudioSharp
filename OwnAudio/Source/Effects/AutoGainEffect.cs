@@ -40,15 +40,8 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// RMS based automatic gain control. Rides the level instead of squashing it.
     /// </summary>
-    public sealed class AutoGainEffect : IEffectProcessor
+    public sealed class AutoGainEffect : NativeBackedEffect, IEffectProcessor
     {
-        private readonly Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig? _config;
-
         private float _targetLevel = 0.25f;
         private float _attackCoeff = 0.99f;
         private float _releaseCoeff = 0.999f;
@@ -66,19 +59,9 @@ namespace OwnaudioNET.Effects
         private int _lookaheadLength;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name, falls back to "AutoGain" on null.
         /// </summary>
         public string Name { get => _name; set => _name = value ?? "AutoGain"; }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled { get => _enabled; set => _enabled = value; }
 
         /// <summary>
         /// AutoGain has no wet/dry, so this is stuck at 1.0.
@@ -139,10 +122,8 @@ namespace OwnaudioNET.Effects
         /// <param name="releaseCoeff">Level smoothing when it drops.</param>
         public AutoGainEffect(float targetLevel = 0.25f, float attackCoeff = 0.99f, float releaseCoeff = 0.999f,
                        float gateThreshold = 0.001f, float maxGain = 4.0f, float minGain = 0.25f)
+            : base("AutoGain")
         {
-            _id = Guid.NewGuid();
-            _name = "AutoGain";
-            _enabled = true;
             TargetLevel = targetLevel;
             AttackCoefficient = attackCoeff;
             ReleaseCoefficient = releaseCoeff;
@@ -162,29 +143,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Picks up the engine sample rate and resizes the lookahead ring.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new AudioException("AutoGainEffect ERROR: ", new ArgumentNullException(nameof(config)));
-            _initLookahead(config.SampleRate);
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
         /// 5ms of lookahead in frames for the given rate.
         /// </summary>
         private void _initLookahead(int sampleRate)
         {
             _lookaheadLength = (int)(0.005f * sampleRate);
-        }
-
-        /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -204,35 +167,25 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// Short state dump for logs.
         /// </summary>
-        public int ResetGeneration { get; private set; }
+        public override string ToString() => $"AutoGain: Target={_targetLevel:F2}, CurrentGain={_currentGain:F2}, Enabled={Enabled}";
 
         /// <summary>
-        /// Back to unity gain, empty ring.
+        /// Follows the engine rate.
         /// </summary>
-        public void Reset()
+        private protected override void OnInitialize(AudioConfig config)
         {
-            ResetGeneration++;
-            _native.Reset();
+            _initLookahead(config.SampleRate);
+        }
+
+        /// <summary>
+        /// The rider state the native side does not hold for us.
+        /// </summary>
+        private protected override void ResetState()
+        {
             _currentGain = 1.0f;
             _rmsLevel = 0.0f;
         }
-
-        /// <summary>
-        /// Nothing unmanaged here, we just clear the state.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-            Reset();
-            _native.Dispose();
-            _disposed = true;
-        }
-
-        /// <summary>
-        /// Short state dump for logs.
-        /// </summary>
-        public override string ToString() => $"AutoGain: Target={_targetLevel:F2}, CurrentGain={_currentGain:F2}, Enabled={_enabled}";
     }
 }

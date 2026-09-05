@@ -49,14 +49,8 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// Block based adaptive level control. RMS detector, gated, with a dB/sec limit on how fast the gain may move.
     /// </summary>
-    public sealed class DynamicAmpEffect : IEffectProcessor
+    public sealed class DynamicAmpEffect : NativeBackedEffect, IEffectProcessor
     {
-        private readonly Guid _id;
-        private readonly string _name;
-        private bool _enabled;
-        private AudioConfig? _config;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-
         private float _targetRmsLevelDb;
         private float _attackTime;
         private float _releaseTime;
@@ -84,23 +78,9 @@ namespace OwnaudioNET.Effects
         private float _initialGain = 1.0f;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name => _name;
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
-        }
 
         /// <summary>
         /// No dry path here, this stays at 1.0.
@@ -200,11 +180,8 @@ namespace OwnaudioNET.Effects
                          float maxGainValue = 6.0f, float sampleRateHz = 44100.0f,
                          float rmsWindowSeconds = 0.5f, float initialGain = 1.0f,
                          float maxGainChangePerSecondDb = 12.0f, float maxGainReductionDb = 12.0f)
+            : base("DynamicAmp")
         {
-            _id = Guid.NewGuid();
-            _name = "DynamicAmp";
-            _enabled = true;
-
             TargetRmsLevelDb = targetLevel;
             AttackTime = attackTimeSeconds;
             ReleaseTime = releaseTimeSeconds;
@@ -234,11 +211,8 @@ namespace OwnaudioNET.Effects
         /// <param name="sampleRateHz"></param>
         /// <param name="rmsWindowSeconds"></param>
         public DynamicAmpEffect(DynamicAmpPreset preset, float sampleRateHz = 44100.0f, float rmsWindowSeconds = 0.5f)
+            : base("DynamicAmp")
         {
-            _id = Guid.NewGuid();
-            _name = "DynamicAmp";
-            _enabled = true;
-
             _sampleRate = Math.Max(8000.0f, sampleRateHz);
             RmsWindowSeconds = rmsWindowSeconds;
             _maxGainChangePerSecondDb = 12.0f;
@@ -251,25 +225,6 @@ namespace OwnaudioNET.Effects
             _rmsState = startRms * startRms;
             _initialGain = 1.0f;
             _initialRmsState = _rmsState;
-        }
-
-        /// <summary>
-        /// Takes the engine config and the sample rate with it.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
-                _sampleRate = config.SampleRate;
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -325,33 +280,27 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// Short state dump for logs.
         /// </summary>
-        public int ResetGeneration { get; private set; }
+        public override string ToString() => $"{_name} (ID: {Id}, Enabled: {Enabled})";
 
         /// <summary>
-        /// Back to unity gain with a closed gate.
+        /// Follows the engine rate.
         /// </summary>
-        public void Reset()
+        private protected override void OnInitialize(AudioConfig config)
         {
-            ResetGeneration++;
-            _native.Reset();
+            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
+                _sampleRate = config.SampleRate;
+        }
+
+        /// <summary>
+        /// The rider state the native side does not hold for us.
+        /// </summary>
+        private protected override void ResetState()
+        {
             _currentGain = _initialGain;
             _rmsState = _initialRmsState;
             _lastGainDb = LinearToDb(_initialGain);
         }
-
-        /// <summary>
-        /// Nothing to release.
-        /// </summary>
-        public void Dispose()
-        {
-            _native.Dispose();
-        }
-
-        /// <summary>
-        /// Short state dump for logs.
-        /// </summary>
-        public override string ToString() => $"{_name} (ID: {_id}, Enabled: {_enabled})";
     }
 }

@@ -54,32 +54,16 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// 10 band peaking EQ. Two cascaded biquads per band, only the boosted/cut bands get processed.
     /// </summary>
-    public sealed class EqualizerEffect : IEffectProcessor
+    public sealed class EqualizerEffect : NativeBackedEffect, IEffectProcessor
     {
-        private readonly Guid _id;
-        private string _name;
-        private bool _enabled;
-        private AudioConfig? _config;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-
         private const int Bands = 10;
 
         private readonly float[] _gains;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name { get => _name; set => _name = value ?? "Equalizer"; }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled { get => _enabled; set => _enabled = value; }
 
         /// <summary>
         /// Dry/wet. The native engine honours it; 0 is fully dry.
@@ -92,11 +76,8 @@ namespace OwnaudioNET.Effects
         public EqualizerEffect(float sampleRate = 44100,
                         float band0Gain = 0.0f, float band1Gain = 0.0f, float band2Gain = 0.0f, float band3Gain = 0.0f, float band4Gain = 0.0f,
                         float band5Gain = 0.0f, float band6Gain = 0.0f, float band7Gain = 0.0f, float band8Gain = 0.0f, float band9Gain = 0.0f)
+            : base("Equalizer")
         {
-            _id = Guid.NewGuid();
-            _name = "Equalizer";
-            _enabled = true;
-
             _gains = new float[Bands];
 
             _gains[0] = band0Gain; _gains[1] = band1Gain; _gains[2] = band2Gain; _gains[3] = band3Gain; _gains[4] = band4Gain;
@@ -111,15 +92,6 @@ namespace OwnaudioNET.Effects
         public EqualizerEffect(EqualizerPreset preset, float sampleRate = 44100) : this(sampleRate)
         {
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Hands the engine config over to the native twin, which is what actually filters.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _native.Initialize(this, config);
         }
 
         #region Band Propertyes
@@ -200,14 +172,6 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
         /// Loads one of the canned curves. Bands run 31Hz to 16kHz.
         /// </summary>
         /// <param name="preset"></param>
@@ -236,30 +200,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Clears the filter memory of every channel.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing to release.
-        /// </summary>
-        public void Dispose()
-        {
-            _native.Dispose();
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
-        public override string ToString() => $"Equalizer: Enabled={_enabled}";
+        public override string ToString() => $"Equalizer: Enabled={Enabled}";
     }
 }

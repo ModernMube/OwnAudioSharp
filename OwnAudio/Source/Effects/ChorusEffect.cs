@@ -59,14 +59,8 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// Multi voice chorus. LFO modulated delay taps with fractional read, mixed back over the dry.
     /// </summary>
-    public sealed class ChorusEffect : IEffectProcessor
+    public sealed class ChorusEffect : NativeBackedEffect, IEffectProcessor
     {
-        private readonly Guid _id;
-        private string _name;
-        private bool _enabled;
-        private AudioConfig? _config;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-
         private float _sampleRate;
 
         private float _rate = 0.5f;
@@ -75,19 +69,9 @@ namespace OwnaudioNET.Effects
         private int _voices = 3;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name { get => _name; set => _name = value ?? "Chorus"; }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled { get => _enabled; set => _enabled = value; }
 
         /// <summary>
         /// Dry to wet balance, 0 - 1. Around a third is where a chorus still widens without
@@ -134,17 +118,14 @@ namespace OwnaudioNET.Effects
         /// the delay line, Initialize can override it.
         /// </summary>
         public ChorusEffect(float rate = 0.5f, float depth = 0.35f, float mix = 0.35f, int voices = 3, int sampleRate = 44100)
+            : base("Chorus")
         {
-            _id = Guid.NewGuid();
-            _name = "Chorus";
-            _enabled = true;
             _sampleRate = sampleRate;
 
             _rate = rate;
             _depth = depth;
             _mix = mix;
             _voices = voices;
-
         }
 
         /// <summary>
@@ -155,27 +136,6 @@ namespace OwnaudioNET.Effects
         public ChorusEffect(ChorusPreset preset, int sampleRate = 44100) : this(0.5f, 0.35f, 0.35f, 3, sampleRate)
         {
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Takes the engine config and builds the native voice bank on it.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
-            {
-                _sampleRate = config.SampleRate;
-            }
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -208,30 +168,17 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Empties the delay line and parks the LFO.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing to release.
-        /// </summary>
-        public void Dispose()
-        {
-            _native.Dispose();
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
-        public override string ToString() => $"Chorus: Rate={_rate:F2}, Depth={_depth:F2}, Enabled={_enabled}";
+        public override string ToString() => $"Chorus: Rate={_rate:F2}, Depth={_depth:F2}, Enabled={Enabled}";
+
+        /// <summary>
+        /// Follows the engine rate.
+        /// </summary>
+        private protected override void OnInitialize(AudioConfig config)
+        {
+            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
+                _sampleRate = config.SampleRate;
+        }
     }
 }

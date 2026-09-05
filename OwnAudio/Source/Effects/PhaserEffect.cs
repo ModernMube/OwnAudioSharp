@@ -54,7 +54,7 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// Phaser: a chain of all-pass stages swept by an LFO, mixed back with the dry signal.
     /// </summary>
-    public sealed class PhaserEffect : IEffectProcessor
+    public sealed class PhaserEffect : NativeBackedEffect, IEffectProcessor
     {
         private readonly int _sampleRate;
 
@@ -64,31 +64,10 @@ namespace OwnaudioNET.Effects
         private float _mix = 0.45f;
         private int _stages = 4;
 
-        private readonly Guid _id;
-        private readonly string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig? _config;
-
-        /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
         /// <summary>
         /// Effect name.
         /// </summary>
         public string Name => _name;
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
-        }
 
         /// <summary>
         /// LFO speed in Hz, 0.1 - 10.
@@ -146,11 +125,8 @@ namespace OwnaudioNET.Effects
         /// Default preset.
         /// </summary>
         public PhaserEffect(float rate = 0.45f, float depth = 0.65f, float feedback = 0.40f, float mix = 0.45f, int stages = 4, int sampleRate = 44100)
+            : base("Phaser")
         {
-            _id = Guid.NewGuid();
-            _name = "Phaser";
-            _enabled = true;
-
             if (sampleRate <= 0)
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
 
@@ -168,25 +144,13 @@ namespace OwnaudioNET.Effects
         /// <param name="preset"></param>
         /// <param name="sampleRate"></param>
         public PhaserEffect(PhaserPreset preset, int sampleRate = 44100)
+            : base("Phaser")
         {
-            _id = Guid.NewGuid();
-            _name = "Phaser";
-            _enabled = true;
-
             if (sampleRate <= 0)
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
 
             _sampleRate = sampleRate;
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Stores the engine config.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config;
-            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -209,45 +173,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Clears every stage and parks the LFO.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            Reset();
-            _native.Dispose();
-            _disposed = true;
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
-            return $"Phaser [ID: {_id}, Enabled: {_enabled}, Rate: {_rate:F2}Hz, Depth: {_depth:F2}, Stages: {_stages}]";
+            return $"Phaser [ID: {Id}, Enabled: {Enabled}, Rate: {_rate:F2}Hz, Depth: {_depth:F2}, Stages: {_stages}]";
         }
 
         /// <summary>

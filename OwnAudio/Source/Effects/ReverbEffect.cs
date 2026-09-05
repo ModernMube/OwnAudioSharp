@@ -70,15 +70,8 @@ namespace OwnaudioNET.Effects
     /// Freeverb style reverb: 8 damped comb filters into 4 all-passes per side,
     /// with pre-delay and stereo spread. Nothing allocates while it runs.
     /// </summary>
-    public sealed class ReverbEffect : IEffectProcessor
+    public sealed class ReverbEffect : NativeBackedEffect, IEffectProcessor
     {
-        private readonly Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig? _config;
-
         private float _roomSize = 0.55f;
         private float _damping = 0.5f;
         private float _wet = 0.33f;
@@ -88,19 +81,9 @@ namespace OwnaudioNET.Effects
         private float _mix = 0.25f;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name { get => _name; set => _name = value ?? "Reverb"; }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled { get => _enabled; set => _enabled = value; }
 
         /// <summary>
         /// Room size, bigger means a longer tail.
@@ -185,11 +168,8 @@ namespace OwnaudioNET.Effects
         /// which is where you'd park an insert reverb before touching anything.
         /// </summary>
         public ReverbEffect(float size = 0.55f, float damp = 0.5f, float wet = 0.33f, float dry = 1.0f, float stereoWidth = 1.0f, float mix = 0.25f, float gainLevel = 1.0f)
+            : base("Reverb")
         {
-            _id = Guid.NewGuid();
-            _name = "Reverb";
-            _enabled = true;
-
             _roomSize = size;
             _damping = damp;
             _wet = wet;
@@ -206,23 +186,6 @@ namespace OwnaudioNET.Effects
         public ReverbEffect(ReverbPreset preset) : this()
         {
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Hands the rate and channel layout to the native tank.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -251,31 +214,6 @@ namespace OwnaudioNET.Effects
                 case ReverbPreset.Subtle:     RoomSize=0.28f; Damping=0.72f; Width=0.75f; Mix=0.08f; break;
                 default:                      RoomSize=0.55f; Damping=0.50f; Width=1.0f;  Mix=0.25f; break;
             }
-        }
-
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Empties the whole tank.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-            Reset();
-            _native.Dispose();
-            _disposed = true;
         }
 
         /// <summary>

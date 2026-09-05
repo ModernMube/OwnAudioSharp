@@ -49,7 +49,7 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// Soft knee peak compressor with makeup gain.
     /// </summary>
-    public sealed class CompressorEffect : IEffectProcessor
+    public sealed class CompressorEffect : NativeBackedEffect, IEffectProcessor
     {
         /// <summary>
         /// Threshold window, mirrors the native compressor's clamp.
@@ -57,13 +57,6 @@ namespace OwnaudioNET.Effects
         private const float MinThresholdDb = -60.0f;
         private const float MaxThresholdDb = 0.0f;
         private const float MinThresholdLinear = 0.001f;
-
-        private readonly Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig? _config;
 
         private float _threshold = 0.5f;
         private float _ratio = 4.0f;
@@ -85,26 +78,12 @@ namespace OwnaudioNET.Effects
         private float _kneeDb = 6.0f;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name
         {
             get => _name;
             set => _name = value ?? "Compressor";
-        }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
         }
 
         /// <summary>
@@ -123,11 +102,8 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public CompressorEffect(float threshold = 0.5f, float ratio = 4.0f, float attackTime = 20f,
                          float releaseTime = 200f, float makeupGain = 1.2f, float sampleRate = 44100f)
+            : base("Compressor")
         {
-            _id = Guid.NewGuid();
-            _name = "Compressor";
-            _enabled = true;
-
             //Linear floor is the -60 dB the Threshold property and the native side agree on
             _threshold = FastClamp(threshold, MinThresholdLinear, 1.0f);
             _ratio = FastClamp(ratio, 1.0f, 100.0f);
@@ -145,28 +121,11 @@ namespace OwnaudioNET.Effects
         /// <param name="preset"></param>
         /// <param name="sampleRate"></param>
         public CompressorEffect(CompressorPreset preset, float sampleRate = 44100f)
+            : base("Compressor")
         {
-            _id = Guid.NewGuid();
-            _name = "Compressor";
-            _enabled = true;
             _sampleRate = FastClamp(sampleRate, 8000f, 192000f);
 
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Takes the engine config and retunes the coefficients on a rate change.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-
-            if (Math.Abs(_sampleRate - config.SampleRate) > 0.1f)
-            {
-                _sampleRate = config.SampleRate;
-                _recalcCoeffs();
-            }
-            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -177,7 +136,6 @@ namespace OwnaudioNET.Effects
         {
             _thresholdDb = 20.0f * MathF.Log10(Math.Max(_threshold, 1e-6f));
             _slope = 1.0f / _ratio - 1.0f;
-
 
             if (isMakeUoGain) _autoMakeupGain();
         }
@@ -201,14 +159,6 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
         /// Loads one of the canned setups.
         /// </summary>
         /// <param name="preset"></param>
@@ -226,32 +176,6 @@ namespace OwnaudioNET.Effects
                 case CompressorPreset.Vintage:          _threshold=0.52f; _ratio=3.5f;  _attackTime=0.025f;  _releaseTime=0.350f; _makeupGain=1.7f; break;
             }
             _recalcCoeffs(false);
-        }
-
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Drops the envelope, keeps the parameters.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here, we just clear the state.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            Reset();
-            _native.Dispose();
-            _disposed = true;
         }
 
         /// <summary>
@@ -381,13 +305,25 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public override string ToString()
         {
-            return $"Compressor: Threshold={_threshold:F2}, Ratio={_ratio:F1}:1, Attack={AttackTime:F1}ms, Release={ReleaseTime:F1}ms, Enabled={_enabled}";
+            return $"Compressor: Threshold={_threshold:F2}, Ratio={_ratio:F1}:1, Attack={AttackTime:F1}ms, Release={ReleaseTime:F1}ms, Enabled={Enabled}";
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float FastClamp(float value, float min, float max)
         {
             return value < min ? min : (value > max ? max : value);
+        }
+
+        /// <summary>
+        /// Follows the engine rate.
+        /// </summary>
+        private protected override void OnInitialize(AudioConfig config)
+        {
+            if (Math.Abs(_sampleRate - config.SampleRate) > 0.1f)
+            {
+                _sampleRate = config.SampleRate;
+                _recalcCoeffs();
+            }
         }
     }
 }

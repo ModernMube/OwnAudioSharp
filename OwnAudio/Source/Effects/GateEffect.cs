@@ -46,14 +46,8 @@ namespace OwnaudioNET.Effects
     /// thresholds sit a few dB apart, which is what stops it chattering on a signal
     /// hovering right at the line.
     /// </summary>
-    public sealed class GateEffect : IEffectProcessor
+    public sealed class GateEffect : NativeBackedEffect, IEffectProcessor
     {
-        private Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig _config = null!;
         private readonly int _sampleRate;
 
         private float _threshold = -40.0f;
@@ -63,23 +57,9 @@ namespace OwnaudioNET.Effects
         private float _mix = 1.0f;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name => _name;
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
-        }
 
         /// <summary>
         /// Open threshold in dB, -80 - 0. Anything quieter than this gets shut once the
@@ -140,13 +120,11 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public GateEffect(float threshold = -40.0f, float attack = 1.0f, float release = 100.0f,
             float hold = 50.0f, float mix = 1.0f, int sampleRate = 44100)
+            : base("Gate")
         {
             if (sampleRate <= 0)
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
 
-            _id = Guid.NewGuid();
-            _name = "Gate";
-            _enabled = true;
             _sampleRate = sampleRate;
 
             Threshold = threshold;
@@ -168,15 +146,6 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Stores the engine config.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config;
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
         /// Loads one of the canned setups.
         /// </summary>
         /// <param name="preset"></param>
@@ -194,44 +163,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Slams the gate shut and clears the detector, parameters stay.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            _native.Dispose();
-            _disposed = true;
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
-            return $"{_name} (Enabled: {_enabled}, Threshold: {_threshold:F1}dB, Hold: {_hold:F0}ms, Mix: {_mix:F2})";
+            return $"{_name} (Enabled: {Enabled}, Threshold: {_threshold:F1}dB, Hold: {_hold:F0}ms, Mix: {_mix:F2})";
         }
     }
 }

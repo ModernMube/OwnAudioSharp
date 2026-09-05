@@ -60,15 +60,8 @@ namespace OwnaudioNET.Effects
     /// Lookahead peak limiter. The DSP runs in the native engine; this type carries the
     /// parameters and reads the gain meter back off it.
     /// </summary>
-    public sealed class LimiterEffect : IEffectProcessor
+    public sealed class LimiterEffect : NativeBackedEffect, IEffectProcessor
     {
-        private Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig _config = null!;
-
         private readonly float _sampleRate;
 
         /// <summary>
@@ -101,23 +94,9 @@ namespace OwnaudioNET.Effects
         private const float MAX_LOOKAHEAD = 20.0f;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name => _name;
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
-        }
 
         /// <summary>
         /// A limiter is always fully wet, so this stays at 1.0.
@@ -141,11 +120,8 @@ namespace OwnaudioNET.Effects
         public LimiterEffect(float sampleRate, float threshold = DEFAULT_THRESHOLD,
             float ceiling = DEFAULT_CEILING, float release = DEFAULT_RELEASE,
             float lookAheadMs = DEFAULT_LOOKAHEAD)
+            : base("Limiter")
         {
-            _id = Guid.NewGuid();
-            _name = "Limiter";
-            _enabled = true;
-
             _sampleRate = sampleRate;
 
             Threshold = threshold;
@@ -167,15 +143,6 @@ namespace OwnaudioNET.Effects
             : this(sampleRate)
         {
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Stores the engine config and builds the native limiter on its rate and width.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config;
-            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -230,45 +197,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Empties the ring and opens the gain back up.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-            _currentGain = 1.0f;
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            _native.Dispose();
-            _disposed = true;
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
-            return $"{_name} (Enabled: {_enabled}, Threshold: {Threshold:F1}dB, Ceiling: {Ceiling:F1}dB)";
+            return $"{_name} (Enabled: {Enabled}, Threshold: {Threshold:F1}dB, Ceiling: {Ceiling:F1}dB)";
         }
 
         /// <summary>
@@ -349,5 +282,13 @@ namespace OwnaudioNET.Effects
         /// The native gain while there is an instance, the managed field before Initialize.
         /// </summary>
         private float _meteredGain => _native.GetParam(NativeEffectEngine.MeterCurrentGain) ?? _currentGain;
+
+        /// <summary>
+        /// The rider state the native side does not hold for us.
+        /// </summary>
+        private protected override void ResetState()
+        {
+            _currentGain = 1.0f;
+        }
     }
 }

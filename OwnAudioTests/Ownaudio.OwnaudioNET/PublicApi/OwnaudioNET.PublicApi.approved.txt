@@ -67,15 +67,13 @@ namespace OwnaudioNET.Dsp
 }
 namespace OwnaudioNET.Effects
 {
-    public sealed class AutoGainEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class AutoGainEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public AutoGainEffect(OwnaudioNET.Effects.AutoGainPreset preset) { }
         public AutoGainEffect(float targetLevel = 0.25, float attackCoeff = 0.99, float releaseCoeff = 0.999, float gateThreshold = 0.001, float maxGain = 4, float minGain = 0.25) { }
         public float AttackCoefficient { get; set; }
         public float CurrentGain { get; }
-        public bool Enabled { get; set; }
         public float GateThreshold { get; set; }
-        public System.Guid Id { get; }
         public float InputLevel { get; }
         public int LatencySamples { get; }
         public float MaximumGain { get; set; }
@@ -83,12 +81,7 @@ namespace OwnaudioNET.Effects
         public float Mix { get; set; }
         public string Name { get; set; }
         public float ReleaseCoefficient { get; set; }
-        public int ResetGeneration { get; }
         public float TargetLevel { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.AutoGainPreset preset) { }
         public override string ToString() { }
     }
@@ -100,22 +93,15 @@ namespace OwnaudioNET.Effects
         Broadcast = 3,
         Live = 4,
     }
-    public sealed class ChorusEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class ChorusEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public ChorusEffect(OwnaudioNET.Effects.ChorusPreset preset, int sampleRate = 44100) { }
         public ChorusEffect(float rate = 0.5, float depth = 0.35, float mix = 0.35, int voices = 3, int sampleRate = 44100) { }
         public float Depth { get; set; }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
         public float Rate { get; set; }
-        public int ResetGeneration { get; }
         public int Voices { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.ChorusPreset preset) { }
         public override string ToString() { }
     }
@@ -131,26 +117,19 @@ namespace OwnaudioNET.Effects
         VintageAnalog = 7,
         Extreme = 8,
     }
-    public sealed class CompressorEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class CompressorEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public CompressorEffect(OwnaudioNET.Effects.CompressorPreset preset, float sampleRate = 44100) { }
         public CompressorEffect(float threshold = 0.5, float ratio = 4, float attackTime = 20, float releaseTime = 200, float makeupGain = 1.2, float sampleRate = 44100) { }
         public float AttackTime { get; set; }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public float KneeWidth { get; set; }
         public float MakeupGain { get; set; }
         public float Mix { get; set; }
         public string Name { get; set; }
         public float Ratio { get; set; }
         public float ReleaseTime { get; set; }
-        public int ResetGeneration { get; }
         public float SampleRate { get; set; }
         public float Threshold { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.CompressorPreset preset) { }
         public override string ToString() { }
         public static float DbToLinear(float dB) { }
@@ -166,24 +145,17 @@ namespace OwnaudioNET.Effects
         MasteringLimiter = 5,
         Vintage = 6,
     }
-    public sealed class DelayEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class DelayEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public DelayEffect(OwnaudioNET.Effects.DelayPreset preset) { }
         public DelayEffect(int time = 375, float repeat = 0.32, float mix = 0.25, float damping = 0.22, int sampleRate = 44100, bool pingPong = false) { }
         public float Damping { get; set; }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
         public bool PingPong { get; set; }
         public float Repeat { get; set; }
-        public int ResetGeneration { get; }
         public int SampleRate { get; set; }
         public int Time { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.DelayPreset preset) { }
         public override string ToString() { }
     }
@@ -199,21 +171,14 @@ namespace OwnaudioNET.Effects
         Dub = 7,
         Thickening = 8,
     }
-    public sealed class DistortionEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class DistortionEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public DistortionEffect(OwnaudioNET.Effects.DistortionPreset preset) { }
         public DistortionEffect(float drive = 2, float mix = 0.85, float outputGain = 0.55) { }
         public float Drive { get; set; }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
         public float OutputGain { get; set; }
-        public int ResetGeneration { get; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.DistortionPreset preset) { }
         public override string ToString() { }
     }
@@ -229,14 +194,12 @@ namespace OwnaudioNET.Effects
         VocalSaturation = 7,
         DigitalCrush = 8,
     }
-    public sealed class DynamicAmpEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class DynamicAmpEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public DynamicAmpEffect(OwnaudioNET.Effects.DynamicAmpPreset preset, float sampleRateHz = 44100, float rmsWindowSeconds = 0.5) { }
         public DynamicAmpEffect(float targetLevel = -12, float attackTimeSeconds = 0.5, float releaseTimeSeconds = 2, float noiseThresholdDbOrLinear = -50, float maxGainValue = 6, float sampleRateHz = 44100, float rmsWindowSeconds = 0.5, float initialGain = 1, float maxGainChangePerSecondDb = 12, float maxGainReductionDb = 12) { }
         public float AttackTime { get; set; }
         public float CurrentGain { get; }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public float MaxGain { get; set; }
         public float MaxGainChangePerSecondDb { get; set; }
         public float MaxGainReductionDb { get; set; }
@@ -244,13 +207,8 @@ namespace OwnaudioNET.Effects
         public string Name { get; }
         public float NoiseGateThresholdDb { get; set; }
         public float ReleaseTime { get; set; }
-        public int ResetGeneration { get; }
         public float RmsWindowSeconds { get; set; }
         public float TargetRmsLevelDb { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.DynamicAmpPreset preset) { }
         public override string ToString() { }
     }
@@ -264,22 +222,15 @@ namespace OwnaudioNET.Effects
         Live = 5,
         Transparent = 6,
     }
-    public sealed class EnhancerEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class EnhancerEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public EnhancerEffect(OwnaudioNET.Effects.EnhancerPreset preset, float sampleRate = 44100) { }
         public EnhancerEffect(float mix = 0.15, float cutFreq = 3500, float gain = 1.8, float sampleRate = 44100) { }
         public float CutoffFrequency { get; set; }
-        public bool Enabled { get; set; }
         public float Gain { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
-        public int ResetGeneration { get; }
         public float SampleRate { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.EnhancerPreset preset) { }
         public override string ToString() { }
     }
@@ -292,24 +243,17 @@ namespace OwnaudioNET.Effects
         MixCutter = 4,
         Broadcast = 5,
     }
-    public sealed class Equalizer30BandEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class Equalizer30BandEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public Equalizer30BandEffect(OwnaudioNET.Effects.Equalizer30Preset preset, float sampleRate = 44100) { }
         public Equalizer30BandEffect(float sampleRate = 44100, float[]? gains = null) { }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public float this[int band] { get; set; }
         public float Mix { get; set; }
         public string Name { get; }
-        public int ResetGeneration { get; }
         public float SampleRate { get; }
-        public void Dispose() { }
         public float[] GetAllGains() { }
         public float GetBandFrequency(int band) { }
         public float GetBandGain(int band) { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> samples, int frameCount) { }
-        public void Reset() { }
         public void SetAllGains(float[] gains) { }
         public void SetBandGain(int band, float frequency, float q, float gainDB) { }
         public void SetPreset(OwnaudioNET.Effects.Equalizer30Preset preset) { }
@@ -328,7 +272,7 @@ namespace OwnaudioNET.Effects
         Electronic = 8,
         Acoustic = 9,
     }
-    public sealed class EqualizerEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class EqualizerEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public EqualizerEffect(OwnaudioNET.Effects.EqualizerPreset preset, float sampleRate = 44100) { }
         public EqualizerEffect(float sampleRate = 44100, float band0Gain = 0, float band1Gain = 0, float band2Gain = 0, float band3Gain = 0, float band4Gain = 0, float band5Gain = 0, float band6Gain = 0, float band7Gain = 0, float band8Gain = 0, float band9Gain = 0) { }
@@ -342,15 +286,8 @@ namespace OwnaudioNET.Effects
         public float Band7Gain { get; set; }
         public float Band8Gain { get; set; }
         public float Band9Gain { get; set; }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
-        public int ResetGeneration { get; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetBandGain(int band, float frequency, float q, float gainDB) { }
         public void SetPreset(OwnaudioNET.Effects.EqualizerPreset preset) { }
         public override string ToString() { }
@@ -366,23 +303,16 @@ namespace OwnaudioNET.Effects
         Jazz = 6,
         Voice = 7,
     }
-    public sealed class FlangerEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class FlangerEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public FlangerEffect(OwnaudioNET.Effects.FlangerPreset preset, int sampleRate = 44100) { }
         public FlangerEffect(float rate = 0.35, float depth = 0.6, float feedback = 0.45, float mix = 0.4, int sampleRate = 44100) { }
         public float Depth { get; set; }
-        public bool Enabled { get; set; }
         public float Feedback { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; }
         public float Rate { get; set; }
-        public int ResetGeneration { get; }
         public int SampleRate { get; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.FlangerPreset preset) { }
         public override string ToString() { }
     }
@@ -397,24 +327,17 @@ namespace OwnaudioNET.Effects
         AmbientWash = 6,
         Percussive = 7,
     }
-    public sealed class GateEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class GateEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public GateEffect(OwnaudioNET.Effects.GatePreset preset, int sampleRate = 44100) { }
         public GateEffect(float threshold = -40, float attack = 1, float release = 100, float hold = 50, float mix = 1, int sampleRate = 44100) { }
         public float Attack { get; set; }
-        public bool Enabled { get; set; }
         public float Hold { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; }
         public float Release { get; set; }
-        public int ResetGeneration { get; }
         public int SampleRate { get; }
         public float Threshold { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.GatePreset preset) { }
         public override string ToString() { }
     }
@@ -427,27 +350,20 @@ namespace OwnaudioNET.Effects
         Broadcast = 4,
         Subtle = 5,
     }
-    public sealed class LimiterEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class LimiterEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public LimiterEffect(float sampleRate, OwnaudioNET.Effects.LimiterPreset preset) { }
         public LimiterEffect(float sampleRate, float threshold = -3, float ceiling = -0.1, float release = 50, float lookAheadMs = 5) { }
         public float Ceiling { get; set; }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public bool IsLimiting { get; }
         public int LatencySamples { get; }
         public float LookAheadMs { get; set; }
         public float Mix { get; set; }
         public string Name { get; }
         public float Release { get; set; }
-        public int ResetGeneration { get; }
         public float SampleRate { get; }
         public float Threshold { get; set; }
-        public void Dispose() { }
         public float GetGainReductionDb() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.LimiterPreset preset) { }
         public override string ToString() { }
     }
@@ -463,22 +379,25 @@ namespace OwnaudioNET.Effects
         Podcast = 7,
         Aggressive = 8,
     }
-    public sealed class OverdriveEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public abstract class NativeBackedEffect
     {
-        public OverdriveEffect(OwnaudioNET.Effects.OverdrivePreset preset) { }
-        public OverdriveEffect(float gain = 2, float tone = 0.5, float mix = 1, float outputLevel = 0.7) { }
         public bool Enabled { get; set; }
-        public float Gain { get; set; }
         public System.Guid Id { get; }
-        public float Mix { get; set; }
-        public string Name { get; }
-        public float OutputLevel { get; set; }
         public int ResetGeneration { get; }
-        public float Tone { get; set; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
         public void Process(System.Span<float> buffer, int frameCount) { }
         public void Reset() { }
+    }
+    public sealed class OverdriveEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public OverdriveEffect(OwnaudioNET.Effects.OverdrivePreset preset) { }
+        public OverdriveEffect(float gain = 2, float tone = 0.5, float mix = 1, float outputLevel = 0.7) { }
+        public float Gain { get; set; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float OutputLevel { get; set; }
+        public float Tone { get; set; }
         public void SetPreset(OwnaudioNET.Effects.OverdrivePreset preset) { }
         public override string ToString() { }
     }
@@ -493,7 +412,7 @@ namespace OwnaudioNET.Effects
         Bass = 6,
         Screamer = 7,
     }
-    public sealed class OwnReverbEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class OwnReverbEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public OwnReverbEffect() { }
         public OwnReverbEffect(OwnaudioNET.Effects.OwnReverbPreset preset) { }
@@ -504,9 +423,7 @@ namespace OwnaudioNET.Effects
         public float DuckDepth { get; set; }
         public float DuckRelease { get; set; }
         public float EarlyLevel { get; set; }
-        public bool Enabled { get; set; }
         public bool Freeze { get; set; }
-        public System.Guid Id { get; }
         public float LateLevel { get; set; }
         public float LowDamping { get; set; }
         public float Mix { get; set; }
@@ -514,13 +431,8 @@ namespace OwnaudioNET.Effects
         public float ModRate { get; set; }
         public string Name { get; set; }
         public float PreDelay { get; set; }
-        public int ResetGeneration { get; }
         public float Size { get; set; }
         public float Width { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.OwnReverbPreset preset) { }
         public override string ToString() { }
     }
@@ -541,24 +453,17 @@ namespace OwnaudioNET.Effects
         InfiniteHold = 12,
         Subtle = 13,
     }
-    public sealed class PhaserEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class PhaserEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public PhaserEffect(OwnaudioNET.Effects.PhaserPreset preset, int sampleRate = 44100) { }
         public PhaserEffect(float rate = 0.45, float depth = 0.65, float feedback = 0.4, float mix = 0.45, int stages = 4, int sampleRate = 44100) { }
         public float Depth { get; set; }
-        public bool Enabled { get; set; }
         public float Feedback { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; }
         public float Rate { get; set; }
-        public int ResetGeneration { get; }
         public int SampleRate { get; }
         public int Stages { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.PhaserPreset preset) { }
         public override string ToString() { }
     }
@@ -573,45 +478,31 @@ namespace OwnaudioNET.Effects
         Vocal = 6,
         SynthPad = 7,
     }
-    public sealed class PitchShiftEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class PitchShiftEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public PitchShiftEffect(float semitones = 0, float mix = 1, int sampleRate = 44100) { }
-        public bool Enabled { get; set; }
-        public System.Guid Id { get; }
         public int LatencySamples { get; }
         public float Mix { get; set; }
         public string Name { get; }
-        public int ResetGeneration { get; }
         public int SampleRate { get; }
         public float Semitones { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public override string ToString() { }
     }
-    public sealed class ReverbEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class ReverbEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public ReverbEffect(OwnaudioNET.Effects.ReverbPreset preset) { }
         public ReverbEffect(float size = 0.55, float damp = 0.5, float wet = 0.33, float dry = 1, float stereoWidth = 1, float mix = 0.25, float gainLevel = 1) { }
         public float Damping { get; set; }
         public float DryLevel { get; set; }
-        public bool Enabled { get; set; }
         [System.Obsolete("The native reverb has no input-gain param and the whole audio path is native now," +
             " so this reaches nothing. Drive the send with Mix instead.")]
         public float Gain { get; set; }
-        public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
-        public int ResetGeneration { get; }
         public float RoomSize { get; set; }
         public float StereoWidth { get; set; }
         public float WetLevel { get; set; }
         public float Width { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.ReverbPreset preset) { }
         public override string ToString() { }
     }
@@ -629,23 +520,16 @@ namespace OwnaudioNET.Effects
         Gated = 9,
         Subtle = 10,
     }
-    public sealed class RotaryEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    public sealed class RotaryEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public RotaryEffect(OwnaudioNET.Effects.RotaryPreset preset, int sampleRate = 44100) { }
         public RotaryEffect(float hornSpeed = 0.8, float rotorSpeed = 0.7, float intensity = 0.7, float mix = 1, bool isFast = false, int sampleRate = 44100) { }
-        public bool Enabled { get; set; }
         public float HornSpeed { get; set; }
-        public System.Guid Id { get; }
         public float Intensity { get; set; }
         public bool IsFast { get; set; }
         public float Mix { get; set; }
         public string Name { get; }
-        public int ResetGeneration { get; }
         public float RotorSpeed { get; set; }
-        public void Dispose() { }
-        public void Initialize(Ownaudio.Core.AudioConfig config) { }
-        public void Process(System.Span<float> buffer, int frameCount) { }
-        public void Reset() { }
         public void SetPreset(OwnaudioNET.Effects.RotaryPreset preset) { }
         public override string ToString() { }
     }

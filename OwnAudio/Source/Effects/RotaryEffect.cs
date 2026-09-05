@@ -60,15 +60,8 @@ namespace OwnaudioNET.Effects
     /// Rotary speaker sim. The signal is split at 800Hz, the horn takes the top and the
     /// rotor the bottom, each with its own doppler delay and tremolo.
     /// </summary>
-    public sealed class RotaryEffect : IEffectProcessor
+    public sealed class RotaryEffect : NativeBackedEffect, IEffectProcessor
     {
-        private Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig _config = null!;
-
         /// <summary>
         /// Chorale to tremolo ratio of a Leslie 122: the horn goes from about 40rpm to 400,
         /// the bass drum is geared a bit lower.
@@ -83,23 +76,9 @@ namespace OwnaudioNET.Effects
         private bool _isFast = false;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name => _name;
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
-        }
 
         /// <summary>
         /// Horn chorale speed in Hz, 0.4 - 8. A real 122 idles around 0.8Hz here and the fast
@@ -153,13 +132,10 @@ namespace OwnaudioNET.Effects
         /// Builds the cabinet with hand picked values, a 122 sitting in chorale.
         /// </summary>
         public RotaryEffect(float hornSpeed = 0.8f, float rotorSpeed = 0.7f, float intensity = 0.7f, float mix = 1.0f, bool isFast = false, int sampleRate = 44100)
+            : base("Rotary")
         {
             if (sampleRate <= 0)
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
-
-            _id = Guid.NewGuid();
-            _name = "Rotary";
-            _enabled = true;
 
             HornSpeed = hornSpeed;
             RotorSpeed = rotorSpeed;
@@ -177,15 +153,6 @@ namespace OwnaudioNET.Effects
             : this(0.8f, 0.7f, 0.7f, 1.0f, false, sampleRate)
         {
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Stores the engine config.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config;
-            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -209,44 +176,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Empties both lines and the crossover, parameters stay.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            _native.Dispose();
-            _disposed = true;
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
-            return $"{_name} (Enabled: {_enabled}, Mix: {_mix:F2}, Speed: {(_isFast ? "Fast" : "Slow")})";
+            return $"{_name} (Enabled: {Enabled}, Mix: {_mix:F2}, Speed: {(_isFast ? "Fast" : "Slow")})";
         }
     }
 }

@@ -59,23 +59,11 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// Drive plus soft clipping, blended back over the dry signal.
     /// </summary>
-    public sealed class DistortionEffect : IEffectProcessor
+    public sealed class DistortionEffect : NativeBackedEffect, IEffectProcessor
     {
-        private Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private AudioConfig? _config;
-
         private float _drive = 2.0f;
         private float _mix = 0.85f;
         private float _outputGain = 0.55f;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-
-        /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
 
         /// <summary>
         /// Effect name.
@@ -84,15 +72,6 @@ namespace OwnaudioNET.Effects
         {
             get => _name;
             set => _name = value ?? "Distortion";
-        }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
         }
 
         /// <summary>
@@ -126,11 +105,8 @@ namespace OwnaudioNET.Effects
         /// Builds the effect with hand picked values.
         /// </summary>
         public DistortionEffect(float drive = 2.0f, float mix = 0.85f, float outputGain = 0.55f)
+            : base("Distortion")
         {
-            _id = Guid.NewGuid();
-            _name = "Distortion";
-            _enabled = true;
-
             Drive = drive;
             Mix = mix;
             OutputGain = outputGain;
@@ -141,21 +117,9 @@ namespace OwnaudioNET.Effects
         /// </summary>
         /// <param name="preset"></param>
         public DistortionEffect(DistortionPreset preset)
+            : base("Distortion")
         {
-            _id = Guid.NewGuid();
-            _name = "Distortion";
-            _enabled = true;
-
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Stores the engine config and spins up the standalone native instance.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _native.Initialize(this, config);
         }
 
         /// <summary>
@@ -179,45 +143,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// No state to clear, this one is memoryless.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            Reset();
-            _native.Dispose();
-            _disposed = true;
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
-            return $"Distortion: Drive={_drive:F1}, Mix={_mix:F2}, OutputGain={_outputGain:F2}, Enabled={_enabled}";
+            return $"Distortion: Drive={_drive:F1}, Mix={_mix:F2}, OutputGain={_outputGain:F2}, Enabled={Enabled}";
         }
     }
 }

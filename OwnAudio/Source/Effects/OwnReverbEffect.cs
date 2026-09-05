@@ -87,14 +87,8 @@ namespace OwnaudioNET.Effects
     /// sidechain ducker. The DSP lives in the Rust engine - this class is the parameter
     /// model the mixer mirrors onto its native twin, so Process does nothing here.
     /// </summary>
-    public sealed class OwnReverbEffect : IEffectProcessor
+    public sealed class OwnReverbEffect : NativeBackedEffect, IEffectProcessor
     {
-        private readonly Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-
         private float _mix = 0.30f;
         private float _preDelay = 20.0f;
         private float _decay = 2.5f;
@@ -117,10 +111,8 @@ namespace OwnaudioNET.Effects
         /// start from one of the presets instead.
         /// </summary>
         public OwnReverbEffect()
+            : base("OwnReverb")
         {
-            _id = Guid.NewGuid();
-            _name = "OwnReverb";
-            _enabled = true;
         }
 
         /// <summary>
@@ -135,19 +127,9 @@ namespace OwnaudioNET.Effects
         #region Propertyes
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name { get => _name; set => _name = value ?? "OwnReverb"; }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled { get => _enabled; set => _enabled = value; }
 
         /// <summary>
         /// Send amount, 0.0 - 1.0. The dry never dips, so this behaves like an insert send:
@@ -275,11 +257,6 @@ namespace OwnaudioNET.Effects
             set => _freeze = value;
         }
 
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
         #endregion
 
         /// <summary>
@@ -359,42 +336,6 @@ namespace OwnaudioNET.Effects
                     Diffusion = 0.70f; ModRate = 0.8f;  ModDepth = 0.40f; Width = 1.20f;
                     EarlyLevel = 0.35f; Mix = 0.30f; break;
             }
-        }
-
-        /// <summary>
-        /// Nothing to set up on this side, the native twin is sized by the mixer.
-        /// </summary>
-        /// <param name="config"></param>
-        public void Initialize(AudioConfig config)
-        {
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
-        /// Bumps the generation so the mixer flushes the native tail.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _native.Dispose();
-            _disposed = true;
         }
 
         private static float FastClamp(float value, float min, float max)

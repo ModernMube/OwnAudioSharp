@@ -59,14 +59,8 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// Stereo delay with damped feedback and optional ping-pong. Stereo only.
     /// </summary>
-    public sealed class DelayEffect : IEffectProcessor
+    public sealed class DelayEffect : NativeBackedEffect, IEffectProcessor
     {
-        private readonly Guid _id;
-        private string _name;
-        private bool _enabled;
-        private AudioConfig? _config;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-
         private float _sampleRate;
 
         private int _timeMs;
@@ -76,19 +70,9 @@ namespace OwnaudioNET.Effects
         private bool _pingPong;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name { get => _name; set => _name = value ?? "Delay"; }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled { get => _enabled; set => _enabled = value; }
 
         /// <summary>
         /// Delay time in ms, 1 - 5000.
@@ -155,11 +139,8 @@ namespace OwnaudioNET.Effects
         /// <param name="repeat">Feedback amount.</param>
         /// <param name="damping">Feedback low-pass tracking coefficient, higher = brighter.</param>
         public DelayEffect(int time = 375, float repeat = 0.32f, float mix = 0.25f, float damping = 0.22f, int sampleRate = 44100, bool pingPong = false)
+            : base("Delay")
         {
-            _id = Guid.NewGuid();
-            _name = "Delay";
-            _enabled = true;
-
             _sampleRate = sampleRate;
             _timeMs = time;
             _repeat = repeat;
@@ -175,25 +156,6 @@ namespace OwnaudioNET.Effects
         public DelayEffect(DelayPreset preset) : this()
         {
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Takes the engine config and builds the native line on it.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
-                SampleRate = config.SampleRate;
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -217,33 +179,20 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Empties the native lines and the filter state.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing to release.
-        /// </summary>
-        public void Dispose()
-        {
-            _native.Dispose();
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
-            return $"Delay: Time={_timeMs}ms, Repeats={_repeat:F2}, PingPong={_pingPong}, Enabled={_enabled}";
+            return $"Delay: Time={_timeMs}ms, Repeats={_repeat:F2}, PingPong={_pingPong}, Enabled={Enabled}";
+        }
+
+        /// <summary>
+        /// Follows the engine rate.
+        /// </summary>
+        private protected override void OnInitialize(AudioConfig config)
+        {
+            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
+                SampleRate = config.SampleRate;
         }
     }
 }

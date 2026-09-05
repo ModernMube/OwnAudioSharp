@@ -44,25 +44,12 @@ namespace OwnaudioNET.Effects
     /// <summary>
     /// Exciter: takes the high band out with a one pole HP, saturates it and adds it back on top.
     /// </summary>
-    public sealed class EnhancerEffect : IEffectProcessor
+    public sealed class EnhancerEffect : NativeBackedEffect, IEffectProcessor
     {
-        private Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig? _config;
-
         private float _mix;
         private float _gain;
         private float _cutFreq;
         private float _sampleRate;
-
-
-        /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
 
         /// <summary>
         /// Effect name.
@@ -71,15 +58,6 @@ namespace OwnaudioNET.Effects
         {
             get => _name;
             set => _name = value ?? "Enhancer";
-        }
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
         }
 
         /// <summary>
@@ -123,11 +101,8 @@ namespace OwnaudioNET.Effects
         /// 20% — an exciter is meant to be felt, not heard.
         /// </summary>
         public EnhancerEffect(float mix = 0.15f, float cutFreq = 3500f, float gain = 1.8f, float sampleRate = 44100f)
+            : base("Enhancer")
         {
-            _id = Guid.NewGuid();
-            _name = "Enhancer";
-            _enabled = true;
-
             Mix = mix;
             CutoffFrequency = cutFreq;
             Gain = gain;
@@ -141,31 +116,11 @@ namespace OwnaudioNET.Effects
         /// <param name="preset"></param>
         /// <param name="sampleRate"></param>
         public EnhancerEffect(EnhancerPreset preset, float sampleRate = 44100f)
+            : base("Enhancer")
         {
-            _id = Guid.NewGuid();
-            _name = "Enhancer";
-            _enabled = true;
-
             SampleRate = sampleRate;
             SetPreset(preset);
             Reset();
-        }
-
-        /// <summary>
-        /// Stores the engine config.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
         }
 
         /// <summary>
@@ -186,37 +141,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Clears the filter memory, leaves the settings alone.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            Reset();
-            _native.Dispose();
-            _disposed = true;
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
-            return $"Enhancer: Mix={_mix:F2}, Gain={_gain:F1}, Cutoff={_cutFreq:F0}Hz, Enabled={_enabled}";
+            return $"Enhancer: Mix={_mix:F2}, Gain={_gain:F1}, Cutoff={_cutFreq:F0}Hz, Enabled={Enabled}";
         }
     }
 }

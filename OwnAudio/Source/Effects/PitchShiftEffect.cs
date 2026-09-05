@@ -14,37 +14,17 @@ namespace OwnaudioNET.Effects
     /// there even at 0 semitones — the reported latency has to stay constant while the
     /// effect sits in a chain.
     /// </remarks>
-    public sealed class PitchShiftEffect : IEffectProcessor
+    public sealed class PitchShiftEffect : NativeBackedEffect, IEffectProcessor
     {
-        private Guid _id;
-        private string _name;
-        private bool _enabled;
-        private bool _disposed;
-        private readonly NativeEffectEngine _native = new NativeEffectEngine();
-        private AudioConfig _config = null!;
         private readonly int _sampleRate;
 
         private float _semitones;
         private float _mix = 1.0f;
 
         /// <summary>
-        /// Instance id.
-        /// </summary>
-        public Guid Id => _id;
-
-        /// <summary>
         /// Effect name.
         /// </summary>
         public string Name => _name;
-
-        /// <summary>
-        /// On/off switch.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
-        }
 
         /// <summary>
         /// Shift in semitones, -12 - 12. Fractional values are fine, 0.5 is a quarter tone
@@ -81,13 +61,11 @@ namespace OwnaudioNET.Effects
         /// Builds the shifter. Defaults to unity, which still costs the pipeline delay.
         /// </summary>
         public PitchShiftEffect(float semitones = 0.0f, float mix = 1.0f, int sampleRate = 44100)
+            : base("PitchShift")
         {
             if (sampleRate <= 0)
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
 
-            _id = Guid.NewGuid();
-            _name = "PitchShift";
-            _enabled = true;
             _sampleRate = sampleRate;
 
             Semitones = semitones;
@@ -95,53 +73,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Stores the engine config.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config;
-            _native.Initialize(this, config);
-        }
-
-        /// <summary>
-        /// Same DSP the mixer twin runs, on this instance's native handle.
-        /// </summary>
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            _native.Process(this, buffer, frameCount);
-        }
-
-        /// <summary>
-        /// Ticks up on every Reset, that is how the native twin hears about it.
-        /// </summary>
-        public int ResetGeneration { get; private set; }
-
-        /// <summary>
-        /// Flushes the WSOLA buffers and the dry line, parameters stay.
-        /// </summary>
-        public void Reset()
-        {
-            ResetGeneration++;
-            _native.Reset();
-        }
-
-        /// <summary>
-        /// Nothing unmanaged here.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            _native.Dispose();
-            _disposed = true;
-        }
-
-        /// <summary>
         /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
-            return $"{_name} (Enabled: {_enabled}, Semitones: {_semitones:F2}, Mix: {_mix:F2})";
+            return $"{_name} (Enabled: {Enabled}, Semitones: {_semitones:F2}, Mix: {_mix:F2})";
         }
     }
 }
