@@ -724,6 +724,49 @@ namespace OwnaudioNET.Effects.SmartMaster
 }
 namespace OwnaudioNET.Effects.VST
 {
+    public static class AudioPluginBrowser
+    {
+        public static bool AudioUnitSupported { get; }
+        public static bool IsScanning { get; }
+        public static bool IsSupported { get; }
+        public static void Cancel() { }
+        public static string GetCacheXml() { }
+        public static System.Collections.Generic.IReadOnlyList<OwnaudioNET.Effects.VST.AudioPluginInfo> GetResults() { }
+        public static System.Threading.Tasks.Task<OwnaudioNET.Effects.VST.AudioPluginInfo?> ResolveAsync(OwnaudioNET.Effects.VST.AudioPluginInfo plugin, System.Threading.CancellationToken cancellationToken = default) { }
+        public static bool RestoreCache(string xml) { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<OwnaudioNET.Effects.VST.AudioPluginInfo>> ScanAsync(OwnaudioNET.Effects.VST.AudioPluginFormat formats = 3, bool deepScan = false, System.IProgress<OwnaudioNET.Effects.VST.AudioPluginScanProgress>? progress = null, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    [System.Flags]
+    public enum AudioPluginFormat
+    {
+        None = 0,
+        Vst3 = 1,
+        AudioUnit = 2,
+        All = 3,
+    }
+    public sealed class AudioPluginInfo
+    {
+        public AudioPluginInfo() { }
+        public string Category { get; init; }
+        public string FilePath { get; init; }
+        public OwnaudioNET.Effects.VST.AudioPluginFormat Format { get; init; }
+        public string Identifier { get; init; }
+        public int InputChannels { get; init; }
+        public bool IsInstrument { get; init; }
+        public bool IsResolved { get; }
+        public string Name { get; init; }
+        public int OutputChannels { get; init; }
+        public string Vendor { get; init; }
+        public string Version { get; init; }
+        public override string ToString() { }
+    }
+    public readonly struct AudioPluginScanProgress
+    {
+        public AudioPluginScanProgress(float fraction, string currentItem, int foundSoFar) { }
+        public string CurrentItem { get; }
+        public int FoundSoFar { get; }
+        public float Fraction { get; }
+    }
     public sealed class VST3EffectProcessor : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public bool Enabled { get; set; }
@@ -765,7 +808,10 @@ namespace OwnaudioNET.Effects.VST
     public sealed class VST3PluginHost : System.IAsyncDisposable, System.IDisposable
     {
         public VST3PluginHost(string pluginPath) { }
+        public OwnaudioNET.Effects.VST.AudioPluginFormat Format { get; }
         public bool HasEditor { get; }
+        public string Identifier { get; }
+        public bool IsAudioUnit { get; }
         public bool IsEditorOpen { get; }
         public bool IsEffect { get; }
         public bool IsInstrument { get; }
@@ -794,7 +840,9 @@ namespace OwnaudioNET.Effects.VST
         public System.Threading.Tasks.Task SetParametersAsync(System.Collections.Generic.IReadOnlyDictionary<int, double> parameters) { }
         public System.Threading.Tasks.Task<bool> SetStateAsync(byte[] stateData) { }
         public override string ToString() { }
+        public static System.Threading.Tasks.Task<OwnaudioNET.Effects.VST.VST3PluginHost> CreateAsync(OwnaudioNET.Effects.VST.AudioPluginInfo plugin) { }
         public static System.Threading.Tasks.Task<OwnaudioNET.Effects.VST.VST3PluginHost> CreateAsync(string pluginPath) { }
+        public static System.Threading.Tasks.Task<OwnaudioNET.Effects.VST.VST3PluginHost> CreateAsync(string pluginPath, int subIndex) { }
         public static System.Collections.Generic.List<string> FindPlugins(bool includeSubdirectories = true) { }
         public static System.Collections.Generic.List<string> FindPlugins(string[] searchDirectories, bool includeSubdirectories = true) { }
         public static System.Collections.Generic.List<OwnaudioNET.Effects.VST.VST3PluginInfo> ScanPlugins(bool includeSubdirectories = true) { }

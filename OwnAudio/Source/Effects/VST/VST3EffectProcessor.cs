@@ -29,6 +29,14 @@ namespace OwnaudioNET.Effects.VST
         private bool _buffersAllocated;
 
         /// <summary>
+        /// Block size the plugin was last prepared for. Anything wider has to go through
+        /// _growTo, never through the audio thread.
+        /// </summary>
+        private volatile int _initBlock;
+
+        private int _growing;
+
+        /// <summary>
         /// Channel count the engine bridge was built for: the wider of the mixer's and the
         /// plugin's, so a plugin asking for more than the mixer runs still gets its planes.
         /// </summary>
@@ -157,6 +165,7 @@ namespace OwnaudioNET.Effects.VST
             int _channels = Math.Max(config.Channels, _pluginChannels);
 
             _bridgeChannels = _channels;
+            _initBlock = config.BufferSize;
             _buffersAllocated = true;
 
             _native.InitializeVst(this, config.SampleRate, _bridgeChannels, config.BufferSize);
@@ -181,8 +190,42 @@ namespace OwnaudioNET.Effects.VST
             if (_disposed || !_buffersAllocated || !_threaded.IsReady)
                 return;
 
-            _native.EnsureVstBlock(this, _config!.SampleRate, _bridgeChannels, frameCount);
+            // A wider block than the plugin was prepared for cannot be grown here — that is a
+            // prepareToPlay plus two native reallocations. Leave the dry in place and grow off
+            // the audio thread; the next blocks go through the plugin again.
+            if (frameCount > _initBlock)
+            {
+                _growTo(frameCount);
+                return;
+            }
+
             _native.Process(this, buffer, frameCount);
+        }
+
+        private void _growTo(int frameCount)
+        {
+            if (Interlocked.Exchange(ref _growing, 1) == 1) return;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (await _threaded.InitializeAsync(_config!.SampleRate, frameCount).ConfigureAwait(false))
+                    {
+                        _native.InitializeVst(this, _config.SampleRate, _bridgeChannels, frameCount);
+                        _initBlock = frameCount;
+                        Log.Warning($"[VST3] '{_name}' re-prepared for a {frameCount} frame block");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"[VST3] '{_name}' could not grow to {frameCount} frames: {ex.Message}");
+                }
+                finally
+                {
+                    Volatile.Write(ref _growing, 0);
+                }
+            });
         }
 
         #endregion

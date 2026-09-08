@@ -219,21 +219,6 @@ internal sealed class NativeEffectEngine : IDisposable
     }
 
     /// <summary>
-    /// Grows the VST bridge for a block wider than it was built for. The engine skips an
-    /// oversized block instead of allocating on the caller's thread, so this has to happen
-    /// before Process sees it.
-    /// </summary>
-    internal void EnsureVstBlock(VST3EffectProcessor vst, int sampleRate, int channels, int frameCount)
-    {
-        lock (_gate)
-        {
-            if (_fx == null || frameCount <= _maxBlock) return;
-        }
-
-        InitializeVst(vst, sampleRate, channels, frameCount);
-    }
-
-    /// <summary>
     /// Call under _gate.
     /// </summary>
     private void _mirror(IEffectProcessor effect)

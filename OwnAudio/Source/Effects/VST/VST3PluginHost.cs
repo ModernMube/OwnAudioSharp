@@ -8,9 +8,10 @@ using OwnVST3Host.NativeWindow;
 namespace OwnaudioNET.Effects.VST
 {
     /// <summary>
-    /// Owns a VST3 plugin: loading, audio init, editor window, teardown.
-    /// Everything native runs on the dedicated plugin thread, the UI thread never blocks.
+    /// Owns one plugin — VST3 anywhere, AudioUnit on macOS: loading, audio init, editor window,
+    /// teardown. Everything native runs on the dedicated plugin thread, the UI thread never blocks.
     /// Usual order: CreateAsync -> InitializeAudioAsync -> GetProcessor -> add to mixer -> Dispose last.
+    /// The name is historical; AUs go through the same host, found by AudioPluginBrowser.
     /// </summary>
     public sealed class VST3PluginHost : IDisposable, IAsyncDisposable
     {
@@ -25,6 +26,8 @@ namespace OwnaudioNET.Effects.VST
         private readonly bool _isEffect;
         private readonly bool _isInstrument;
         private readonly bool _hasEditor;
+        private readonly string _identifier;
+        private readonly AudioPluginFormat _format;
 
         /// <summary>
         /// Plugin name.
@@ -52,7 +55,8 @@ namespace OwnaudioNET.Effects.VST
         public bool IsInstrument => _isInstrument;
 
         /// <summary>
-        /// Whether the plugin brings its own GUI.
+        /// Whether the plugin brings its own GUI. Asked of the plugin at load time, so it is
+        /// safe to gate an open-editor button on it — plenty of AUs have no view at all.
         /// </summary>
         public bool HasEditor => _hasEditor;
 
@@ -62,9 +66,25 @@ namespace OwnaudioNET.Effects.VST
         public bool IsEditorOpen => _editorController?.IsEditorOpen ?? false;
 
         /// <summary>
-        /// Path we loaded the plugin from.
+        /// Path we loaded the plugin from. For an AudioUnit this is the registry token,
+        /// not a file — see Identifier, which is the same thing under a truthful name.
         /// </summary>
         public string PluginPath => _pluginPath;
+
+        /// <summary>
+        /// What the plugin actually turned out to be. Round-trips back through CreateAsync.
+        /// </summary>
+        public string Identifier => _identifier;
+
+        /// <summary>
+        /// Which format the loaded plugin came from.
+        /// </summary>
+        public AudioPluginFormat Format => _format;
+
+        /// <summary>
+        /// True when this host is driving an AudioUnit rather than a VST3.
+        /// </summary>
+        public bool IsAudioUnit => _format == AudioPluginFormat.AudioUnit;
 
         /// <summary>
         /// Audio init done and not disposed — must be true before GetProcessor().
@@ -85,7 +105,9 @@ namespace OwnaudioNET.Effects.VST
             string? version,
             bool isEffect,
             bool isInstrument,
-            bool hasEditor)
+            bool hasEditor,
+            string identifier,
+            AudioPluginFormat format)
         {
             _pluginPath = pluginPath;
             _threaded = threaded;
@@ -95,6 +117,8 @@ namespace OwnaudioNET.Effects.VST
             _isEffect = isEffect;
             _isInstrument = isInstrument;
             _hasEditor = hasEditor;
+            _identifier = identifier;
+            _format = format;
         }
 
         /// <summary>
@@ -122,40 +146,67 @@ namespace OwnaudioNET.Effects.VST
             _version = _threaded.GetVersionAsync().GetAwaiter().GetResult();
             _isEffect = _threaded.GetIsEffectAsync().GetAwaiter().GetResult();
             _isInstrument = _threaded.GetIsInstrumentAsync().GetAwaiter().GetResult();
+            _identifier = _threaded.GetIdentifierAsync().GetAwaiter().GetResult() ?? pluginPath;
+            _format = _readFormat(_threaded.GetFormatAsync().GetAwaiter().GetResult());
+            _hasEditor = _threaded.HasEditorAsync().GetAwaiter().GetResult();
 
-            _hasEditor = true;
-
-            Log.Info($"[VST3] Loaded '{_name}' {_version} by {_vendor} (effect: {_isEffect}, instrument: {_isInstrument})");
+            Log.Info($"[{_format}] Loaded '{_name}' {_version} by {_vendor} (effect: {_isEffect}, instrument: {_isInstrument}, editor: {_hasEditor})");
         }
 
         /// <summary>
-        /// Same thing on the plugin thread, the caller stays responsive.
+        /// Same thing on the plugin thread, the caller stays responsive. pluginPath takes both
+        /// a .vst3 / .component bundle path and an "AudioUnit:..." token from AudioPluginBrowser.
         /// </summary>
-        public static async Task<VST3PluginHost> CreateAsync(string pluginPath)
+        public static Task<VST3PluginHost> CreateAsync(string pluginPath) => CreateAsync(pluginPath, 0);
+
+        /// <summary>
+        /// Loads the plugin AudioPluginBrowser found, whatever format it turned out to be.
+        /// </summary>
+        public static Task<VST3PluginHost> CreateAsync(AudioPluginInfo plugin)
+        {
+            if (plugin == null) throw new ArgumentNullException(nameof(plugin));
+            return CreateAsync(plugin.Identifier, 0);
+        }
+
+        /// <summary>
+        /// Picks one plugin out of a bundle that holds several — AU .component bundles routinely
+        /// do. subIndex 0 is the plain CreateAsync.
+        /// </summary>
+        public static async Task<VST3PluginHost> CreateAsync(string pluginPath, int subIndex)
         {
             if (string.IsNullOrEmpty(pluginPath))
                 throw new ArgumentNullException(nameof(pluginPath));
 
             var threaded = new ThreadedVst3Wrapper();
 
-            bool loaded = await threaded.LoadPluginAsync(pluginPath).ConfigureAwait(false);
+            bool loaded = subIndex > 0
+                ? await threaded.LoadPluginAtAsync(pluginPath, subIndex).ConfigureAwait(false)
+                : await threaded.LoadPluginAsync(pluginPath).ConfigureAwait(false);
+
             if (!loaded)
             {
-                Log.Error($"[VST3] Load refused: {pluginPath}");
+                Log.Error($"[VST] Load refused: {pluginPath}");
                 threaded.Dispose();
-                throw new InvalidOperationException($"Failed to load VST3 plugin: {pluginPath}");
+                throw new InvalidOperationException($"Failed to load plugin: {pluginPath}");
             }
 
-            string name = await threaded.GetNameAsync().ConfigureAwait(false) ?? "VST3 Plugin";
+            string name = await threaded.GetNameAsync().ConfigureAwait(false) ?? "Audio Plugin";
             string vendor = await threaded.GetVendorAsync().ConfigureAwait(false) ?? string.Empty;
             string? version = await threaded.GetVersionAsync().ConfigureAwait(false);
             bool isEffect = await threaded.GetIsEffectAsync().ConfigureAwait(false);
             bool isInstrument = await threaded.GetIsInstrumentAsync().ConfigureAwait(false);
+            string identifier = await threaded.GetIdentifierAsync().ConfigureAwait(false) ?? pluginPath;
+            AudioPluginFormat format = _readFormat(await threaded.GetFormatAsync().ConfigureAwait(false));
+            bool hasEditor = await threaded.HasEditorAsync().ConfigureAwait(false);
 
-            Log.Info($"[VST3] Loaded '{name}' {version} by {vendor} (effect: {isEffect}, instrument: {isInstrument})");
+            Log.Info($"[{format}] Loaded '{name}' {version} by {vendor} (effect: {isEffect}, instrument: {isInstrument}, editor: {hasEditor})");
 
-            return new VST3PluginHost(pluginPath, threaded, name, vendor, version, isEffect, isInstrument, true);
+            return new VST3PluginHost(pluginPath, threaded, name, vendor, version,
+                                      isEffect, isInstrument, hasEditor, identifier, format);
         }
+
+        private static AudioPluginFormat _readFormat(PluginFormat? native) =>
+            native == PluginFormat.AudioUnit ? AudioPluginFormat.AudioUnit : AudioPluginFormat.Vst3;
 
         /// <summary>
         /// Preps the plugin for audio and flips State to Ready. Await this before GetProcessor().
