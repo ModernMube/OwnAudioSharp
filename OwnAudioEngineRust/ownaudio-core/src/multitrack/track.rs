@@ -889,7 +889,7 @@ impl Track {
             scratch: vec![0.0f32; max_buffer_size],
             gain_smoother,
             pan_smoother,
-            stretch: super::stretch::TrackStretch::new(sample_rate, channels, max_buffer_size),
+            stretch: super::stretch::TrackStretch::new(sample_rate, channels, max_buffer_size, id),
             pdc: PdcDelay::new(),
             start_silence_remaining: 0,
             unity_run_frames: 0,

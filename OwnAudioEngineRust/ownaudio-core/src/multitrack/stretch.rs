@@ -23,6 +23,14 @@
 //! continuously primed means a mid-playback tempo or pitch change lands on a warm processor,
 //! so it does not click/crackle from the latency refill a cold start would incur. On a seek the
 //! owning track clears the FIFO (via [`TrackStretch::clear`]) so no pre-seek audio leaks out.
+//!
+//! ## Phase scatter
+//!
+//! The WSOLA work is bursty — nothing for a whole sequence, then the entire seek search at
+//! once — and identical tracks burst *together*, which is what turns a comfortable average
+//! load into a dropout on a busy project. Each stage therefore keeps a different amount of
+//! processed output in hand (see `scatter_slot`), which moves its search into a different
+//! render block without changing a sample of what it emits.
 
 use ownaudio_soundtouch::{SettingId, SoundTouchProcessor};
 
@@ -33,6 +41,9 @@ use super::track::TrackSource;
 /// steady state the loop needs a handful of iterations even at the maximum tempo; the cap is
 /// far above that and only bounds the worst case.
 const MAX_PULL_ITERS: usize = 128;
+
+/// Number of phase slots the per-track scatter reserve is quantised to. See `scatter_slot`.
+const SCATTER_SLOTS: usize = 16;
 
 /// Per-track time-stretch / pitch-shift stage backed by a SoundTouch processor built and warmed
 /// up on the control thread at track construction (see [`TrackStretch::new`]).
@@ -53,6 +64,17 @@ pub(crate) struct TrackStretch {
     /// re-issued every block (which would emit an endless zero-padded tail). Cleared as soon
     /// as the source yields samples again (e.g. after a seek or loop restart).
     eof_flushed: bool,
+    /// Which of the [`SCATTER_SLOTS`] phase slots this track holds, taken from its id.
+    ///
+    /// SoundTouch does not spread its work evenly: it sits idle until a whole WSOLA sequence
+    /// has accumulated, then spends the entire seek search in one go. Tracks that started
+    /// together, at one block size and one tempo, fill their FIFOs in lockstep and so run that
+    /// search in the *same* render block — 22 of them cost ~15 ms against a 10.7 ms deadline,
+    /// which is a dropout every sequence for as long as the tempo is off unity. The slot gives
+    /// each track a different steady-state output reserve, so the searches land in different
+    /// blocks. Costs FIFO depth only: the output stream is sample-for-sample the same, so the
+    /// tracks stay in sync with each other.
+    scatter_slot: usize,
 }
 
 impl TrackStretch {
@@ -66,7 +88,15 @@ impl TrackStretch {
     /// with this same `channels`, so [`TrackStretch::ensure_configured`] hits its fast path on the
     /// audio thread and never rebuilds. A `channels` of 0 leaves the stage idle (the processor is
     /// built lazily on first `fill`, as before), which only the degenerate zero-channel path hits.
-    pub(crate) fn new(sample_rate: f32, channels: u16, max_buffer_size: usize) -> Self {
+    ///
+    /// `track_id` only picks the phase slot the stage settles into (see `scatter_slot`); the
+    /// mixer hands out consecutive ids, which spreads neighbouring tracks across every slot.
+    pub(crate) fn new(
+        sample_rate: f32,
+        channels: u16,
+        max_buffer_size: usize,
+        track_id: u64,
+    ) -> Self {
         let block = max_buffer_size.max(1);
         let mut stage = Self {
             sample_rate: sample_rate as u32,
@@ -76,6 +106,7 @@ impl TrackStretch {
             last_tempo: 1.0,
             last_pitch: 0.0,
             eof_flushed: false,
+            scatter_slot: (track_id % SCATTER_SLOTS as u64) as usize,
         };
         if channels >= 1 && stage.ensure_configured(channels) {
             stage.prime(channels, block);
@@ -201,47 +232,24 @@ impl TrackStretch {
             self.input.resize(out.len(), 0.0);
         }
 
+        let target = want_frames + self.reserve_frames();
         let mut iters = 0usize;
-        while self
-            .processor
-            .as_ref()
-            .map(|p| p.available_samples())
-            .unwrap_or(0)
-            < want_frames
-        {
-            let read = match source.as_mut() {
-                Some(src) => src.read(&mut self.input[..out.len()]),
-                None => 0,
-            };
-
-            if read == 0 {
-                // A zero read is ambiguous: it happens at a real end-of-stream, but also on a
-                // transient prefetch underrun and while a seek is in flight. Only a *true* EOF
-                // should flush the FIFO tail — flushing on a momentary dry spell pumps blank
-                // frames into the middle of the stream (audible garbage/silence tail) and, worse,
-                // does heavy WSOLA work on the audio thread exactly when it is already starved.
-                // On a transient zero we simply stop pulling and let the caller silence-pad; the
-                // FIFO stays primed for when audio resumes.
-                let at_eof = source.as_ref().map(|s| s.is_eof()).unwrap_or(false);
-                if at_eof && !self.eof_flushed {
-                    // Flush the FIFO tail out exactly once. Re-flushing every block would pad an
-                    // endless zero tail, so guard it and just drain thereafter.
-                    if let Some(proc) = self.processor.as_mut() {
-                        proc.flush();
-                    }
-                    self.eof_flushed = true;
-                }
+        let mut sequenced = false;
+        while self.buffered_frames() < target {
+            // Below `want_frames` the pull is mandatory — this block has to be served, whatever
+            // it costs. Above it we are only climbing to the phase reserve, and one sequence
+            // per block is plenty: taking a second would rebuild the very pile-up the reserve
+            // exists to break up. So a stage reaches its slot over a few blocks rather than in
+            // the one it started (or seeked) on.
+            if sequenced && self.buffered_frames() >= want_frames {
                 break;
             }
 
-            self.eof_flushed = false;
-            let in_frames = read / ch;
-            if in_frames == 0 {
+            let before = self.buffered_frames();
+            if !self.pump(source, out.len(), ch) {
                 break;
             }
-            if let Some(proc) = self.processor.as_mut() {
-                let _ = proc.put_samples(&self.input[..in_frames * ch], in_frames);
-            }
+            sequenced |= self.buffered_frames() > before;
 
             iters += 1;
             if iters >= MAX_PULL_ITERS {
@@ -254,6 +262,61 @@ impl TrackStretch {
             None => 0,
         };
         got * ch
+    }
+
+    /// Processed frames sitting in the FIFO, ready to be handed out.
+    #[inline]
+    fn buffered_frames(&self) -> usize {
+        self.processor.as_ref().map_or(0, |p| p.available_samples())
+    }
+
+    /// Output frames this stage aims to keep in hand beyond the block it owes, as its slot's
+    /// share of one WSOLA sequence — the quantity that decides *which* block its seek search
+    /// lands in. Slot 0 keeps nothing and behaves exactly as the stage did before.
+    fn reserve_frames(&self) -> usize {
+        let sequence = self.processor.as_ref().map_or(0, |p| {
+            p.get_setting(SettingId::NominalOutputSequence).max(0) as usize
+        });
+
+        sequence * self.scatter_slot / SCATTER_SLOTS
+    }
+
+    /// Pulls one block off the source and pushes it into the processor. `false` means the
+    /// source gave nothing, so the caller must stop pulling this block.
+    ///
+    /// A zero read is ambiguous: it happens at a real end-of-stream, but also on a transient
+    /// prefetch underrun and while a seek is in flight. Only a *true* EOF flushes the FIFO tail
+    /// — flushing on a momentary dry spell pumps blank frames into the middle of the stream
+    /// (audible garbage/silence tail) and, worse, does heavy WSOLA work on the audio thread
+    /// exactly when it is already starved. On a transient zero the FIFO stays primed and the
+    /// caller silence-pads.
+    fn pump(&mut self, source: &mut Option<Box<dyn TrackSource>>, len: usize, ch: usize) -> bool {
+        let read = match source.as_mut() {
+            Some(src) => src.read(&mut self.input[..len]),
+            None => 0,
+        };
+
+        if read == 0 {
+            // Flush the tail exactly once; re-flushing every block would pad an endless zero
+            // tail, so guard it and just drain thereafter.
+            if source.as_ref().is_some_and(|s| s.is_eof()) && !self.eof_flushed {
+                if let Some(proc) = self.processor.as_mut() {
+                    proc.flush();
+                }
+                self.eof_flushed = true;
+            }
+            return false;
+        }
+
+        self.eof_flushed = false;
+        let in_frames = read / ch;
+        if in_frames == 0 {
+            return false;
+        }
+        if let Some(proc) = self.processor.as_mut() {
+            let _ = proc.put_samples(&self.input[..in_frames * ch], in_frames);
+        }
+        true
     }
 }
 
@@ -329,10 +392,94 @@ mod tests {
         // is_eof() stays the default `false`: an underrun is not end-of-stream.
     }
 
+    /// The scatter buys nothing if it costs sync: two stages on identical sources, differing
+    /// only in phase slot, have to emit the same samples in the same blocks. All the reserve
+    /// may do is hold more of them in the FIFO.
+    #[test]
+    fn phase_slot_does_not_move_the_audio() {
+        let sine = || -> Option<Box<dyn TrackSource>> {
+            Some(Box::new(SineSource {
+                phase: 0.0,
+                channels: 2,
+            }))
+        };
+        let (mut plain, mut shifted) = (
+            TrackStretch::new(48000.0, 2, 4096, 0),
+            TrackStretch::new(48000.0, 2, 4096, SCATTER_SLOTS as u64 / 2),
+        );
+        let (mut src_a, mut src_b) = (sine(), sine());
+        let (mut a, mut b) = (vec![0.0f32; 1024], vec![0.0f32; 1024]);
+
+        // The FIFO sawtooths between sequences, so the reserve shows up as a floor under a
+        // whole cycle, not as a bigger reading at some arbitrary block.
+        let (mut plain_floor, mut shifted_floor) = (usize::MAX, usize::MAX);
+        for block in 0..256 {
+            let na = plain.fill(&mut src_a, &mut a, 2, 0.93, 0.0);
+            let nb = shifted.fill(&mut src_b, &mut b, 2, 0.93, 0.0);
+            assert_eq!(na, nb, "block {block} produced different lengths");
+            assert_eq!(a, b, "block {block} differs between phase slots");
+
+            if block >= 128 {
+                plain_floor = plain_floor.min(plain.buffered_frames());
+                shifted_floor = shifted_floor.min(shifted.buffered_frames());
+            }
+        }
+        assert!(
+            shifted_floor > plain_floor,
+            "half-slot stage should sit on a deeper reserve: {shifted_floor} vs {plain_floor}"
+        );
+    }
+
+    /// Identical tracks used to run their seek search in the same block, and that pile-up —
+    /// not the average load — is what blew the render deadline on a 22-track project. Give
+    /// every stage its own slot and the searches have to land in different blocks.
+    #[test]
+    fn scattered_stages_do_not_all_seek_in_one_block() {
+        let mut stages: Vec<_> = (0..SCATTER_SLOTS as u64)
+            .map(|id| {
+                let stage = TrackStretch::new(48000.0, 2, 4096, id);
+                let src: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
+                    phase: 0.0,
+                    channels: 2,
+                }));
+                (stage, src)
+            })
+            .collect();
+        let mut out = vec![0.0f32; 1024];
+        let want = out.len() / 2;
+
+        // Let the reserves ease in first — during the climb the stages are still in step.
+        for _ in 0..200 {
+            for (stage, src) in stages.iter_mut() {
+                stage.fill(src, &mut out, 2, 0.93, 0.0);
+            }
+        }
+
+        // A sequence is the only thing that grows the FIFO, so a block where it grew is a
+        // block where this stage ran the search.
+        let mut worst = 0usize;
+        for _ in 0..64 {
+            let mut seeking = 0usize;
+            for (stage, src) in stages.iter_mut() {
+                let before = stage.buffered_frames();
+                stage.fill(src, &mut out, 2, 0.93, 0.0);
+                if stage.buffered_frames() + want > before {
+                    seeking += 1;
+                }
+            }
+            worst = worst.max(seeking);
+        }
+
+        assert!(
+            worst <= SCATTER_SLOTS / 3,
+            "{worst} of {SCATTER_SLOTS} stages still seek in the same block"
+        );
+    }
+
     #[test]
     fn unity_still_produces_full_block() {
         // The stage runs even at unity tempo/pitch; after warm-up it returns a full block.
-        let mut s = TrackStretch::new(48000.0, 2, 4096);
+        let mut s = TrackStretch::new(48000.0, 2, 4096, 0);
         let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
             phase: 0.0,
             channels: 2,
@@ -353,7 +500,7 @@ mod tests {
 
     #[test]
     fn faster_tempo_fills_full_block_and_is_finite() {
-        let mut s = TrackStretch::new(48000.0, 2, 4096);
+        let mut s = TrackStretch::new(48000.0, 2, 4096, 0);
         let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
             phase: 0.0,
             channels: 2,
@@ -393,7 +540,7 @@ mod tests {
             (energy / counted.max(1) as f64).sqrt()
         }
 
-        let mut s = TrackStretch::new(48000.0, 2, 4096);
+        let mut s = TrackStretch::new(48000.0, 2, 4096, 0);
         let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
             phase: 0.0,
             channels: 2,
@@ -417,7 +564,7 @@ mod tests {
 
     #[test]
     fn pitch_only_produces_output() {
-        let mut s = TrackStretch::new(44100.0, 2, 4096);
+        let mut s = TrackStretch::new(44100.0, 2, 4096, 0);
         let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
             phase: 0.0,
             channels: 2,
@@ -437,7 +584,7 @@ mod tests {
 
     #[test]
     fn eof_drains_without_spinning() {
-        let mut s = TrackStretch::new(48000.0, 2, 4096);
+        let mut s = TrackStretch::new(48000.0, 2, 4096, 0);
         let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(FiniteSource {
             remaining_frames: 500,
             channels: 2,
@@ -464,7 +611,7 @@ mod tests {
     fn transient_underrun_does_not_flush_and_resumes() {
         // A source that underruns (zero read, not EOF) for several blocks then resumes must
         // keep producing finite audio afterwards, with the FIFO left primed (no flush, no spin).
-        let mut s = TrackStretch::new(48000.0, 2, 4096);
+        let mut s = TrackStretch::new(48000.0, 2, 4096, 0);
         let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(UnderrunSource {
             channels: 2,
             underruns_left: 4,
@@ -491,7 +638,7 @@ mod tests {
 
     #[test]
     fn clear_is_safe_before_and_after_use() {
-        let mut s = TrackStretch::new(48000.0, 2, 2048);
+        let mut s = TrackStretch::new(48000.0, 2, 2048, 0);
         // Clearing before the processor is built must not panic.
         s.clear();
 

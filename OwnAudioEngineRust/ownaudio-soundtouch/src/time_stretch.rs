@@ -5,10 +5,10 @@
 //! Similarity Overlap-Add).
 //!
 //! The C# original hand-vectorises the cross-correlation with AVX/SSE
-//! intrinsics; this port keeps the scalar reference form with `f64`
-//! accumulation, which the auto-vectorizer turns into SIMD while remaining the
-//! exact numeric match for the RMS reference comparison.  All working buffers
-//! are sized at configuration time; `put_samples` / `process` never allocate.
+//! intrinsics; this port stays in safe Rust and leans on the auto-vectorizer,
+//! accumulating in `f64` over four independent chains (see [`dot_f64`]) so the
+//! seek loop is not stalled on its own add latency.  All working buffers are
+//! sized at configuration time; `put_samples` / `process` never allocate.
 
 use crate::defaults;
 use crate::fifo_buffer::FifoSampleBuffer;
@@ -41,6 +41,37 @@ pub struct TimeStretch {
 
     /// Overlap tail of the previous sequence (`channels * overlap_length`).
     mid_buffer: Vec<f32>,
+}
+
+/// Dot product of two equal-length slices, accumulated in `f64` over four independent
+/// chains.
+///
+/// This loop *is* the WSOLA seek: it runs `seek_length` times per processed sequence
+/// (~900 times at 48 kHz), over `channels * overlap_length` samples each. Written with a
+/// single accumulator it is latency-bound rather than throughput-bound — every add waits
+/// on the previous one's result — and four chains let the FPU pipeline stay full. The
+/// summation order differs from strict left-to-right, which moves the last bits of a
+/// correlation score that only ever feeds an argmax.
+#[inline]
+fn dot_f64(a: &[f32], b: &[f32]) -> f64 {
+    let mut acc = [0.0f64; 4];
+    let mut lhs = a.chunks_exact(4);
+    let mut rhs = b.chunks_exact(4);
+
+    for (x, y) in lhs.by_ref().zip(rhs.by_ref()) {
+        for k in 0..4 {
+            acc[k] += x[k] as f64 * y[k] as f64;
+        }
+    }
+
+    let tail: f64 = lhs
+        .remainder()
+        .iter()
+        .zip(rhs.remainder())
+        .map(|(&x, &y)| x as f64 * y as f64)
+        .sum();
+
+    (acc[0] + acc[1]) + (acc[2] + acc[3]) + tail
 }
 
 impl TimeStretch {
@@ -261,15 +292,10 @@ impl TimeStretch {
     /// of `mixing`; `norm` receives that energy for the accumulate variant.
     fn calc_cross_corr(&self, mixing: &[f32], compare: &[f32], norm: &mut f64) -> f64 {
         let length = self.channels * self.overlap_length;
-        let mut corr = 0.0_f64;
-        let mut nrm = 0.0_f64;
-        for i in 0..length {
-            let m = mixing[i] as f64;
-            corr += m * compare[i] as f64;
-            nrm += m * m;
-        }
+        let (win, mid) = (&mixing[..length], &compare[..length]);
+        let nrm = dot_f64(win, win);
         *norm = nrm;
-        corr / (if nrm < 1e-9 { 1.0 } else { nrm }).sqrt()
+        dot_f64(win, mid) / (if nrm < 1e-9 { 1.0 } else { nrm }).sqrt()
     }
 
     /// Incremental cross-correlation that reuses the running `norm` from the
@@ -290,10 +316,7 @@ impl TimeStretch {
             *norm -= v * v;
         }
 
-        let mut corr = 0.0_f64;
-        for i in 0..length {
-            corr += ref_slice[offset + i] as f64 * compare[i] as f64;
-        }
+        let corr = dot_f64(&ref_slice[offset..offset + length], &compare[..length]);
 
         // Add the energy of the last `channels` samples of this window.
         for j in 0..self.channels {
