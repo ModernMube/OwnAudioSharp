@@ -45,11 +45,17 @@ impl RateTransposer {
     #[inline]
     pub fn latency(&self) -> usize {
         self.transposer.latency()
-            + if self.use_aa_filter {
+            + if self.use_aa_filter && !self.at_unity() {
                 self.aa_filter.length() / 2
             } else {
                 0
             }
+    }
+
+    /// Rate of exactly one, where the transposer is a copy and the filter is skipped.
+    #[inline]
+    fn at_unity(&self) -> bool {
+        (self.transposer.rate() - 1.0).abs() < 1e-6
     }
 
     /// Whether the anti-alias filter is currently enabled.
@@ -131,7 +137,13 @@ impl RateTransposer {
         }
         self.input_buffer.put_samples_from(src, num);
 
-        if !self.use_aa_filter {
+        // Unity rate resamples nothing, so there is no fold-over to guard against — and
+        // `set_rate` hands the filter a cut-off of 0.5, Nyquist, which is the same statement in
+        // coefficients. Running it anyway is 64 taps per sample for a band limit nobody asked
+        // for: a third of the mix load on a tempo-only project, and after a seek, where the
+        // stage pushes a whole sequence of latency through in one block, it is what puts the
+        // render block past its deadline.
+        if !self.use_aa_filter || self.at_unity() {
             self.transposer
                 .transpose(&mut self.output_buffer, &mut self.input_buffer);
             return;

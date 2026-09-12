@@ -43,15 +43,11 @@ pub struct TimeStretch {
     mid_buffer: Vec<f32>,
 }
 
-/// Dot product of two equal-length slices, accumulated in `f64` over four independent
-/// chains.
+/// Dot product of two equal-length slices over four independent `f64` chains.
 ///
-/// This loop *is* the WSOLA seek: it runs `seek_length` times per processed sequence
-/// (~900 times at 48 kHz), over `channels * overlap_length` samples each. Written with a
-/// single accumulator it is latency-bound rather than throughput-bound — every add waits
-/// on the previous one's result — and four chains let the FPU pipeline stay full. The
-/// summation order differs from strict left-to-right, which moves the last bits of a
-/// correlation score that only ever feeds an argmax.
+/// This loop *is* the WSOLA seek, run ~900 times per sequence at 48 kHz. On one accumulator it
+/// is latency-bound — every add waits on the previous one — and four chains keep the FPU busy.
+/// Summation order shifts, which only moves the last bits of a score feeding an argmax.
 #[inline]
 fn dot_f64(a: &[f32], b: &[f32]) -> f64 {
     let mut acc = [0.0f64; 4];

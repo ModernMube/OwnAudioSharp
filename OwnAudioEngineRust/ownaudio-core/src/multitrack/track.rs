@@ -1738,16 +1738,20 @@ mod tests {
             "generic unity track must stay bit-exact passthrough"
         );
 
-        // always-on at unity: routes through the (warming) SoundTouch FIFO, so the first block
-        // is not the flat passthrough a bypass would produce.
+        // always-on at unity: the stage is transparent, so the samples look the same either way.
+        // What gives it away is the source: filling a cold FIFO pulls several blocks where a
+        // bypass pulls exactly one.
+        let counted = Arc::new(AtomicU64::new(0));
         let mut always = Track::new(31, 48_000.0, 2, block);
-        always.set_source(Some(Box::new(ConstSource(0.5))));
+        always.set_source(Some(Box::new(CountingSource {
+            read_samples: Arc::clone(&counted),
+        })));
         always.shared.set_state(TrackState::Playing);
         always.shared.set_stretch_always_on(true);
         let mut out2 = vec![0.0f32; block];
         always.process_additive(&mut out2, 2);
         assert!(
-            !out2.iter().all(|&v| (v - 0.5).abs() < 1e-6),
+            counted.load(Ordering::Relaxed) > block as u64,
             "always-on unity track must route through the stretch, not passthrough"
         );
     }
