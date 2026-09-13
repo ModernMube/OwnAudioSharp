@@ -1,11 +1,7 @@
 //! FIR filter — port of `FIRFilter.cs`.
 //!
-//! Generic sinc-window FIR convolution.  The C# version hand-rolls AVX/SSE
-//! intrinsics; this port keeps the scalar reference form with `f64`
-//! accumulation (matching the C# `double` accumulators bit-for-bit in intent),
-//! relying on the Rust auto-vectorizer for throughput.  That makes the result
-//! the most faithful possible match to the C# scalar fallback, which is what the
-//! RMS reference test compares against.
+//! Sinc-window FIR convolution. Mono and stereo sum in [`lanes`] so the loop
+//! vectorises; multichannel stays scalar.
 
 use crate::error::{ErrorCode, StResult};
 use crate::MAX_CHANNELS;
@@ -85,35 +81,22 @@ impl FirFilter {
         let ilength = self.length & !7;
         let end = num_samples - ilength;
         let coeffs = &self.coeffs[..ilength];
-        for j in 0..end {
-            let mut sum = 0.0_f64;
-            let p = &src[j..];
-            for i in 0..ilength {
-                sum += (p[i] * coeffs[i]) as f64;
-            }
-            dest[j] = sum as f32;
+        for (j, d) in dest[..end].iter_mut().enumerate() {
+            *d = lanes::<8>(&src[j..j + ilength], coeffs).iter().sum();
         }
         end
     }
 
     fn evaluate_stereo(&self, dest: &mut [f32], src: &[f32], num_samples: usize) -> usize {
         let ilength = self.length & !7;
-        let end = 2 * (num_samples - ilength);
+        let frames = num_samples - ilength;
         let coeffs = &self.coeffs_stereo[..ilength * 2];
-        let mut j = 0;
-        while j < end {
-            let mut sum_l = 0.0_f64;
-            let mut sum_r = 0.0_f64;
-            let p = &src[j..];
-            for k in 0..ilength {
-                sum_l += (p[2 * k] * coeffs[2 * k]) as f64;
-                sum_r += (p[2 * k + 1] * coeffs[2 * k + 1]) as f64;
-            }
-            dest[j] = sum_l as f32;
-            dest[j + 1] = sum_r as f32;
-            j += 2;
+        for (j, d) in dest[..frames * 2].chunks_exact_mut(2).enumerate() {
+            let acc = lanes::<16>(&src[2 * j..2 * (j + ilength)], coeffs);
+            d[0] = acc.iter().step_by(2).sum();
+            d[1] = acc.iter().skip(1).step_by(2).sum();
         }
-        num_samples - ilength
+        frames
     }
 
     fn evaluate_multi(
@@ -149,8 +132,70 @@ impl FirFilter {
     }
 }
 
+/// Dot product split into `N` independent sums — a single float sum can't be reordered, so
+/// it never vectorises. For interleaved stereo (`N = 16`) even lanes are left, odd ones right.
+#[inline(always)]
+fn lanes<const N: usize>(src: &[f32], coeffs: &[f32]) -> [f32; N] {
+    let mut acc = [0.0f32; N];
+    for (s, c) in src.chunks_exact(N).zip(coeffs.chunks_exact(N)) {
+        for k in 0..N {
+            acc[k] += s[k] * c[k];
+        }
+    }
+    acc
+}
+
 impl Default for FirFilter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The old per-tap `f64` loop, as reference.
+    fn scalar(coeffs: &[f32], src: &[f32], frames: usize, ch: usize) -> Vec<f32> {
+        let taps = coeffs.len();
+        (0..(frames - taps) * ch)
+            .map(|j| {
+                let (frame, c) = (j / ch, j % ch);
+                (0..taps)
+                    .map(|i| (src[(frame + i) * ch + c] * coeffs[i]) as f64)
+                    .sum::<f64>() as f32
+            })
+            .collect()
+    }
+
+    #[test]
+    fn lanes_match_the_scalar_loop() {
+        let aa = crate::filter::AntiAliasFilter::new(64);
+        let mut fir = FirFilter::new();
+        let coeffs: Vec<f32> = (0..64)
+            .map(|i| ((i as f32 - 31.5) * 0.19).sin() / (i as f32 - 31.5) * 0.3)
+            .collect();
+        fir.set_coefficients(&coeffs, 0).unwrap();
+
+        for ch in [1usize, 2] {
+            let frames = 700;
+            let src: Vec<f32> = (0..frames * ch)
+                .map(|n| (n as f32 * 0.37).sin() * 0.8 + (n as f32 * 2.9).cos() * 0.2)
+                .collect();
+            let want = scalar(&fir.coeffs, &src, frames, ch);
+
+            let mut got = vec![0.0f32; frames * ch];
+            assert_eq!(fir.evaluate(&mut got, &src, frames, ch), frames - 64);
+            let worst = want
+                .iter()
+                .zip(&got)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            assert!(worst < 1e-5, "{ch}ch drifted {worst} from the scalar loop");
+
+            let mut dest = vec![0.0f32; frames * ch];
+            assert_eq!(aa.evaluate(&mut dest, &src, frames, ch), frames - 64);
+            assert!(dest.iter().all(|v| v.is_finite()));
+        }
     }
 }
