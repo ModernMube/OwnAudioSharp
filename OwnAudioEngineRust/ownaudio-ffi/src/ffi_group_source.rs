@@ -334,7 +334,8 @@ pub unsafe extern "C" fn ownaudio_v1_group_source_seek(
 }
 
 /// Writes `1` to `*out_finished` once the group's cursor has run past the end of
-/// its last clip, `0` otherwise.  Cleared by a seek.
+/// its last clip, `0` otherwise.  Cleared by a seek, and by a clip added or moved
+/// ahead of the cursor.
 ///
 /// # Safety
 /// - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.

@@ -170,6 +170,16 @@ struct GroupController {
     next_id: u64,
 }
 
+impl GroupController {
+    fn end_frame(&self) -> u64 {
+        self.clips
+            .iter()
+            .map(|c| c.1.start_frame.load(Ordering::Acquire) + c.2)
+            .max()
+            .unwrap_or(0)
+    }
+}
+
 /// Shared between the control thread (FFI / C#) and a [`GroupTrackSource`] on the audio thread.
 ///
 /// Seeking and the finished latch are atomics, clip edits go through a mutex that only the
@@ -238,6 +248,7 @@ impl GroupSourceControl {
 
         ctl.next_id += 1;
         ctl.clips.push((id, placement, data.length_frames));
+        self.rearm(ctl.end_frame());
         Ok(id)
     }
 
@@ -261,23 +272,18 @@ impl GroupSourceControl {
     /// Moves a clip. Lands on the next block, playing or not. `false` for an unknown id.
     pub fn set_clip_start(&self, id: u64, start_frame: u64) -> bool {
         let ctl = self.lock();
-        match ctl.clips.iter().find(|c| c.0 == id) {
-            Some(c) => {
-                c.1.start_frame.store(start_frame, Ordering::Release);
-                true
-            }
-            None => false,
-        }
+        let Some(c) = ctl.clips.iter().find(|c| c.0 == id) else {
+            return false;
+        };
+
+        c.1.start_frame.store(start_frame, Ordering::Release);
+        self.rearm(ctl.end_frame());
+        true
     }
 
     /// Frame just past the last clip end, zero for an empty group.
     pub fn end_frame(&self) -> u64 {
-        let ctl = self.lock();
-        ctl.clips
-            .iter()
-            .map(|c| c.1.start_frame.load(Ordering::Acquire) + c.2)
-            .max()
-            .unwrap_or(0)
+        self.lock().end_frame()
     }
 
     /// Clips currently on the timeline.
@@ -289,9 +295,11 @@ impl GroupSourceControl {
     pub fn seek_frames(&self, frame: u64) {
         self.seek_frame.store(frame, Ordering::Relaxed);
         self.seek_pending.store(true, Ordering::Release);
+        self.finished.store(false, Ordering::Relaxed);
     }
 
-    /// `true` once the cursor ran past the last clip end. Cleared by a seek.
+    /// `true` while the cursor stands at or past the last clip end. A seek clears it, and so
+    /// does a clip added or moved ahead of the cursor — the next block sets it straight again.
     pub fn is_finished(&self) -> bool {
         self.finished.load(Ordering::Relaxed)
     }
@@ -303,6 +311,14 @@ impl GroupSourceControl {
 
     fn lock(&self) -> std::sync::MutexGuard<'_, GroupController> {
         self.controller.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// An edit left something ahead of the cursor, so the group is not finished any more — even
+    /// on a paused track, where no block comes along to say so.
+    fn rearm(&self, end: u64) {
+        if self.position.load(Ordering::Relaxed) < end {
+            self.finished.store(false, Ordering::Relaxed);
+        }
     }
 
     /// Drops whatever the audio thread handed back, here on the control thread.
@@ -446,18 +462,15 @@ impl TrackSource for GroupTrackSource {
 
         if self.control.seek_pending.swap(false, Ordering::Acquire) {
             self.cursor = self.control.seek_frame.load(Ordering::Relaxed);
-            self.control.finished.store(false, Ordering::Relaxed);
         }
 
         let ch = self.channels;
         let frames = out.len() / ch;
         let end = self.end_frame();
 
-        if self.cursor >= end {
-            self.control.finished.store(true, Ordering::Relaxed);
-            return 0;
-        }
-        if frames == 0 {
+        let finished = self.cursor >= end;
+        self.control.finished.store(finished, Ordering::Relaxed);
+        if finished || frames == 0 {
             return 0;
         }
 
@@ -657,6 +670,39 @@ mod tests {
         let (mut src, ctl) = GroupTrackSource::new(RATE, 2);
         assert_eq!(src.read(&mut [0.0f32; 16]), 0);
         assert!(ctl.is_finished());
+    }
+
+    #[test]
+    fn a_clip_added_ahead_of_the_cursor_unfinishes_the_group() {
+        let a = memory_clip(&level_wav(100, 1_000));
+        let (mut src, ctl) = GroupTrackSource::new(RATE, 2);
+        assert_eq!(src.read(&mut [0.0f32; 16]), 0);
+        assert!(ctl.is_finished());
+
+        ctl.add_clip(&a, 0).unwrap();
+        assert!(!ctl.is_finished(), "no block needed");
+
+        assert_eq!(read_frames(&mut src, 50).len(), 50 * 2);
+        assert!(!ctl.is_finished());
+        assert!(!src.is_eof());
+    }
+
+    #[test]
+    fn moving_a_clip_past_the_cursor_unfinishes_the_group() {
+        let a = memory_clip(&level_wav(100, 1_000));
+        let (mut src, ctl) = GroupTrackSource::new(RATE, 2);
+        let id = ctl.add_clip(&a, 0).unwrap();
+
+        read_frames(&mut src, 200);
+        src.read(&mut [0.0f32; 8]);
+        assert!(ctl.is_finished());
+
+        ctl.set_clip_start(id, 0);
+        assert!(ctl.is_finished(), "still behind the cursor");
+
+        ctl.set_clip_start(id, 500);
+        assert!(!ctl.is_finished());
+        assert_eq!(read_frames(&mut src, 64).len(), 64 * 2);
     }
 
     #[test]

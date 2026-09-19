@@ -188,9 +188,12 @@ impl StreamingTrack {
     }
 
     /// Returns `true` once the source has been fully decoded and the ring
-    /// buffer has been drained.
+    /// buffer has been drained. Never while a seek is in flight — the latch from
+    /// before the seek is stale until the prefetch thread takes it on.
     pub fn is_eof(&self) -> bool {
-        self.eof_reached.load(Ordering::Acquire) && self.reader.available() == 0
+        !self.seek.is_pending()
+            && self.eof_reached.load(Ordering::Acquire)
+            && self.reader.available() == 0
     }
 }
 

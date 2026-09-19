@@ -26,6 +26,8 @@ public sealed partial class AudioMixer
                 $"Maximum track limit ({AudioConstants.MaxAudioSources}) reached. " +
                 $"Cannot add more sources. This limit ensures acceptable CPU performance with SoundTouch processing.");
 
+        _throwIfGroupRateMismatch(source);
+
         bool _added = _sources.TryAdd(source.Id, source);
 
         if (_added)
@@ -78,6 +80,8 @@ public sealed partial class AudioMixer
             throw new InvalidOperationException(
                 $"Maximum track limit ({AudioConstants.MaxAudioSources}) reached. " +
                 $"Cannot add more sources.");
+
+        _throwIfGroupRateMismatch(source);
 
         bool _added = _sources.TryAdd(source.Id, source);
         if (_added)

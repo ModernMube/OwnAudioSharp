@@ -153,6 +153,20 @@ public sealed class GroupSourceRustNativeTests : IDisposable
     }
 
     [Fact]
+    public void Mixer_RefusesAGroup_AtAnotherRate()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        using var group = new GroupSource(44100, Channels);
+        using var wrapped = new SourceWithEffects(group);
+
+        mixer.Invoking(m => m.AddSource(group)).Should().Throw<ArgumentException>();
+        mixer.Invoking(m => m.AddSourcePrepared(wrapped)).Should().Throw<ArgumentException>();
+
+        mixer.SourceCount.Should().Be(0);
+        group.RustGroupTrack.Should().BeNull();
+    }
+
+    [Fact]
     public void Mixer_TempoAndPitch_ReachTheTrack_ThroughAnEffectWrapper()
     {
         using var mixer = new AudioMixer(_engine, MixerBufferFrames);

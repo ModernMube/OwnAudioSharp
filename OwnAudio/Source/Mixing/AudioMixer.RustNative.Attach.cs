@@ -195,6 +195,21 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// A group's clips were decoded at its own rate when they got added, and the native group
+    /// only takes them at the session rate. A mismatch would just play nothing, so we refuse it.
+    /// </summary>
+    private void _throwIfGroupRateMismatch(IAudioSource source)
+    {
+        if (!_rustNative) return;
+
+        GroupSource? _gs = _resolve<GroupSource>(source);
+        if (_gs is not null && _gs.Config.SampleRate != _config.SampleRate)
+            throw new ArgumentException(
+                $"GroupSource runs at {_gs.Config.SampleRate} Hz but the mixer at {_config.SampleRate} Hz, create it with the mixer's rate.",
+                nameof(source));
+    }
+
+    /// <summary>
     /// Attaches a sample source, backed by a native memory track serving its buffer.
     /// </summary>
     /// <param name="source"></param>
