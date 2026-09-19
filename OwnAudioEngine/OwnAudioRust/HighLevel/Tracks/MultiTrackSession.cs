@@ -26,6 +26,7 @@ public sealed partial class MultiTrackSession : IDisposable
     private readonly IReadOnlyList<AudioTrack> _tracksView;
     private readonly List<FileTrack> _fileTracks = new();
     private readonly List<MemoryTrack> _memoryTracks = new();
+    private readonly List<GroupTrack> _groupTracks = new();
     private readonly List<InputTrack> _inputTracks = new();
     private readonly List<CaptureBridge> _captureBridges = new();
     private readonly MasterEffectChain _masterEffects;
@@ -179,6 +180,9 @@ public sealed partial class MultiTrackSession : IDisposable
 
         foreach (MemoryTrack memoryTrack in _memoryTracks) memoryTrack.Dispose();
         _memoryTracks.Clear();
+
+        foreach (GroupTrack groupTrack in _groupTracks) groupTrack.Dispose();
+        _groupTracks.Clear();
 
         foreach (InputTrack inputTrack in _inputTracks) inputTrack.Dispose();
         _inputTracks.Clear();

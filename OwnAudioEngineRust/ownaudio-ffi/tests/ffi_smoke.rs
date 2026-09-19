@@ -987,12 +987,12 @@ mod file_source {
 
     /// Writes a short stereo 16-bit PCM WAV to a unique temp path and returns it.
     /// Removed on drop.
-    struct TempWav {
+    pub(super) struct TempWav {
         path: PathBuf,
     }
 
     impl TempWav {
-        fn new(frames: usize) -> Self {
+        pub(super) fn new(frames: usize) -> Self {
             use std::sync::atomic::{AtomicU64, Ordering};
             static COUNTER: AtomicU64 = AtomicU64::new(0);
             let id = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -1034,7 +1034,7 @@ mod file_source {
             TempWav { path }
         }
 
-        fn c_path(&self) -> CString {
+        pub(super) fn c_path(&self) -> CString {
             CString::new(self.path.to_str().unwrap()).unwrap()
         }
     }
@@ -1158,6 +1158,179 @@ mod file_source {
                 OwnAudioErrorCode::Success as i32
             );
             ownaudio_v1_file_source_destroy(source);
+            ownaudio_v1_track_destroy(track);
+            ownaudio_v1_mixer_destroy(mixer);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Group track source tests
+// ---------------------------------------------------------------------------
+
+mod group_source {
+    use super::file_source::TempWav;
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_group_source::{
+        ownaudio_v1_group_clip_destroy, ownaudio_v1_group_clip_open,
+        ownaudio_v1_group_source_add_clip, ownaudio_v1_group_source_destroy,
+        ownaudio_v1_group_source_get_end_frame, ownaudio_v1_group_source_is_finished,
+        ownaudio_v1_group_source_remove_clip, ownaudio_v1_group_source_seek,
+        ownaudio_v1_group_source_set_clip_start, ownaudio_v1_track_open_group,
+    };
+    use ownaudio_ffi::ffi_source::ownaudio_v1_track_clear_source;
+    use ownaudio_ffi::ffi_track::{
+        ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_track_create,
+        ownaudio_v1_track_destroy,
+    };
+    use ownaudio_ffi::handles::{
+        OwnAudioGroupClipHandle, OwnAudioGroupSourceHandle, OwnAudioMixerHandle,
+        OwnAudioTrackHandle,
+    };
+
+    const OK: i32 = OwnAudioErrorCode::Success as i32;
+
+    /// Loads a temp wav for groups at 44.1 kHz stereo, memory up to 30 seconds.
+    unsafe fn open_clip(wav: &TempWav) -> (*mut OwnAudioGroupClipHandle, u64, u8) {
+        let mut clip: *mut OwnAudioGroupClipHandle = std::ptr::null_mut();
+        let (mut length, mut in_memory) = (0u64, 0u8);
+        assert_eq!(
+            ownaudio_v1_group_clip_open(
+                wav.c_path().as_ptr(),
+                44_100,
+                2,
+                44_100 * 30,
+                &mut clip,
+                &mut length,
+                &mut in_memory
+            ),
+            OK
+        );
+        (clip, length, in_memory)
+    }
+
+    #[test]
+    fn null_handles_are_rejected() {
+        unsafe {
+            let mut byte = 0u8;
+            let mut frames = 0u64;
+            assert_eq!(
+                ownaudio_v1_group_source_seek(std::ptr::null_mut(), 0),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_group_source_is_finished(std::ptr::null_mut(), &mut byte),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_group_source_get_end_frame(std::ptr::null_mut(), &mut frames),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_group_source_remove_clip(std::ptr::null_mut(), 1, std::ptr::null_mut()),
+                OwnAudioErrorCode::NullPointer as i32
+            );
+            ownaudio_v1_group_source_destroy(std::ptr::null_mut());
+            ownaudio_v1_group_clip_destroy(std::ptr::null_mut());
+        }
+    }
+
+    #[test]
+    fn clips_add_move_remove_and_teardown() {
+        unsafe {
+            let first = TempWav::new(4_000);
+            let second = TempWav::new(2_000);
+
+            let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+            assert_eq!(ownaudio_v1_mixer_create(44_100.0, 2, &mut mixer), OK);
+            let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+            assert_eq!(ownaudio_v1_track_create(mixer, &mut track), OK);
+
+            let mut source: *mut OwnAudioGroupSourceHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_track_open_group(mixer, track, 44_100, 2, &mut source),
+                OK
+            );
+            assert!(!source.is_null());
+
+            let (clip_a, len_a, mem_a) = open_clip(&first);
+            assert_eq!(len_a, 4_000);
+            assert_eq!(mem_a, 1, "a short clip lives in memory");
+            let (clip_b, _, _) = open_clip(&second);
+
+            let (mut id_a, mut id_b) = (0u64, 0u64);
+            assert_eq!(
+                ownaudio_v1_group_source_add_clip(source, clip_a, 0, &mut id_a),
+                OK
+            );
+            assert_eq!(
+                ownaudio_v1_group_source_add_clip(source, clip_b, 10_000, &mut id_b),
+                OK
+            );
+            assert_ne!(id_a, id_b);
+
+            //The group keeps its share of the audio, the handle may go before it
+            ownaudio_v1_group_clip_destroy(clip_a);
+
+            let mut end = 0u64;
+            assert_eq!(ownaudio_v1_group_source_get_end_frame(source, &mut end), OK);
+            assert_eq!(end, 12_000);
+
+            let mut found = 0u8;
+            assert_eq!(
+                ownaudio_v1_group_source_set_clip_start(source, id_b, 20_000, &mut found),
+                OK
+            );
+            assert_eq!(found, 1);
+            assert_eq!(ownaudio_v1_group_source_get_end_frame(source, &mut end), OK);
+            assert_eq!(end, 22_000);
+
+            let mut removed = 0u8;
+            assert_eq!(
+                ownaudio_v1_group_source_remove_clip(source, id_b, &mut removed),
+                OK
+            );
+            assert_eq!(removed, 1);
+            assert_eq!(
+                ownaudio_v1_group_source_remove_clip(source, id_b, &mut removed),
+                OK
+            );
+            assert_eq!(removed, 0, "already gone");
+
+            let missing = std::ffi::CString::new("no_such_file_anywhere.wav").unwrap();
+            let mut clip_x: *mut OwnAudioGroupClipHandle = std::ptr::null_mut();
+            let (mut len_x, mut mem_x) = (0u64, 0u8);
+            assert_ne!(
+                ownaudio_v1_group_clip_open(
+                    missing.as_ptr(),
+                    44_100,
+                    2,
+                    0,
+                    &mut clip_x,
+                    &mut len_x,
+                    &mut mem_x
+                ),
+                OK
+            );
+            assert!(clip_x.is_null());
+
+            let mut id_x = 0u64;
+            assert_eq!(
+                ownaudio_v1_group_source_add_clip(source, std::ptr::null_mut(), 0, &mut id_x),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+
+            let mut finished = 9u8;
+            assert_eq!(ownaudio_v1_group_source_seek(source, 100), OK);
+            assert_eq!(
+                ownaudio_v1_group_source_is_finished(source, &mut finished),
+                OK
+            );
+            assert_eq!(finished, 0);
+
+            assert_eq!(ownaudio_v1_track_clear_source(mixer, track), OK);
+            ownaudio_v1_group_source_destroy(source);
+            ownaudio_v1_group_clip_destroy(clip_b);
             ownaudio_v1_track_destroy(track);
             ownaudio_v1_mixer_destroy(mixer);
         }

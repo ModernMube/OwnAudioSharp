@@ -11,13 +11,22 @@ namespace OwnaudioNET.Sources;
 /// Rust-native backend for FileSource. A standalone source owns a private single
 /// track session, a mixer-added source is attached to the mixer's shared session.
 /// </summary>
-public partial class FileSource : IRustNativeChainSource
+public partial class FileSource : IRustNativeChainSource, IRustClockedSource
 {
     /// <inheritdoc/>
     AudioTrack? IRustNativeChainSource.RustTrack => RustTrack;
 
     /// <inheritdoc/>
     void IRustNativeChainSource.DetachRustTrack() => DetachRustTrack();
+
+    /// <inheritdoc/>
+    AudioTrack? IRustClockedSource.RustTrack => RustTrack;
+
+    /// <inheritdoc/>
+    double IRustClockedSource.RustNativeRealPosition => RustNativeRealPosition;
+
+    /// <inheritdoc/>
+    void IRustClockedSource.ApplyRustNativeSync() => ApplyRustNativeSync();
 
     /// <summary>
     /// Rust-native mode flag, fixed at construction.

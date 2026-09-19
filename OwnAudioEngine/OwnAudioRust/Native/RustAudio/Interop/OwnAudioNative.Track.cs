@@ -641,6 +641,107 @@ internal static partial class OwnAudioNative
     internal static partial void ownaudio_v1_memory_source_destroy(IntPtr source);
 
     /// <summary>
+    /// Loads a file for groups, independent of any track. Short files decode into memory inside
+    /// this call, longer ones are only probed and stream once placed.
+    /// </summary>
+    /// <param name="path">utf8 path</param>
+    /// <param name="sampleRate">decode rate, has to match the groups it goes on</param>
+    /// <param name="channels">decode width, has to match the groups it goes on</param>
+    /// <param name="memoryMaxFrames">memory up to this length, stream above it</param>
+    /// <param name="outClip"></param>
+    /// <param name="outLengthFrames"></param>
+    /// <param name="outInMemory">1 memory, 0 streamed</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ownaudio_v1_group_clip_open(
+        string path,
+        uint sampleRate,
+        uint channels,
+        ulong memoryMaxFrames,
+        out IntPtr outClip,
+        out ulong outLengthFrames,
+        out byte outInMemory);
+
+    /// <summary>Kills a clip handle, groups it sits on keep playing it. Zero handle is fine.</summary>
+    /// <param name="clip"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial void ownaudio_v1_group_clip_destroy(IntPtr clip);
+
+    /// <summary>
+    /// Puts an empty group on the track: clips laid out on one content timeline, summed into this
+    /// single track so they share its stretch, effects, gain, pan and route.
+    /// </summary>
+    /// <param name="mixer"></param>
+    /// <param name="track"></param>
+    /// <param name="sampleRate">every placed clip decodes to this, pass the session rate</param>
+    /// <param name="channels">every placed clip decodes to this width</param>
+    /// <param name="outSource"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_open_group(
+        IntPtr mixer,
+        IntPtr track,
+        uint sampleRate,
+        uint channels,
+        out IntPtr outSource);
+
+    /// <summary>
+    /// Places a loaded clip on the group timeline. A memory clip only shares its buffer.
+    /// </summary>
+    /// <param name="source"></param>
+    /// <param name="clip"></param>
+    /// <param name="startFrame">clip start on the content timeline</param>
+    /// <param name="outId">placement id to move and remove it by</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_add_clip(
+        IntPtr source,
+        IntPtr clip,
+        ulong startFrame,
+        out ulong outId);
+
+    /// <summary>Takes a clip off the timeline, outRemoved 0 for an unknown id.</summary>
+    /// <param name="source"></param>
+    /// <param name="clipId"></param>
+    /// <param name="outRemoved"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_remove_clip(IntPtr source, ulong clipId, out byte outRemoved);
+
+    /// <summary>Moves a clip, outFound 0 for an unknown id.</summary>
+    /// <param name="source"></param>
+    /// <param name="clipId"></param>
+    /// <param name="startFrame"></param>
+    /// <param name="outFound"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_set_clip_start(
+        IntPtr source,
+        ulong clipId,
+        ulong startFrame,
+        out byte outFound);
+
+    /// <summary>Jumps the group's content cursor, frames.</summary>
+    /// <param name="source"></param>
+    /// <param name="framePosition"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_seek(IntPtr source, ulong framePosition);
+
+    /// <summary>
+    /// 1 once the cursor ran past the last clip end.
+    /// </summary>
+    /// <param name="source"></param>
+    /// <param name="outFinished"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_is_finished(IntPtr source, out byte outFinished);
+
+    /// <summary>Frame just past the last clip end, 0 when empty.</summary>
+    /// <param name="source"></param>
+    /// <param name="outFrames"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_get_end_frame(IntPtr source, out ulong outFrames);
+
+    /// <summary>Kills the group source handle. Zero handle is fine.</summary>
+    /// <param name="source"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial void ownaudio_v1_group_source_destroy(IntPtr source);
+
+    /// <summary>
     /// Wires device capture straight into the track's ring, no managed callback in the way, so audio
     /// data never crosses into managed code. Starts paused.
     /// </summary>

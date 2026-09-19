@@ -1936,6 +1936,32 @@ namespace OwnaudioNET.Sources
         public void SetTempoSynced(float tempo) { }
         public override void Stop() { }
     }
+    public sealed class GroupSource : OwnaudioNET.Sources.BaseAudioSource, OwnaudioNET.Interfaces.IAudioSource, OwnaudioNET.Interfaces.IMasterClockSource, System.IDisposable
+    {
+        public GroupSource(int sampleRate = 48000, int channels = 2, double memoryMaxSeconds = 30) { }
+        public int Channels { get; }
+        public System.Collections.Generic.IReadOnlyList<OwnaudioNET.Sources.SourceClip> Clips { get; }
+        public override Ownaudio.Core.AudioConfig Config { get; }
+        public override double Duration { get; }
+        public bool IsAttachedToClock { get; }
+        public override bool IsEndOfStream { get; }
+        public override float PitchShift { get; set; }
+        public override double Position { get; }
+        public double StartOffset { get; set; }
+        public override Ownaudio.AudioStreamInfo StreamInfo { get; }
+        public override float Tempo { get; set; }
+        public OwnaudioNET.Sources.SourceClip AddClip(string filePath, double startSeconds) { }
+        public void AttachToClock(OwnaudioNET.Synchronization.MasterClock clock) { }
+        public void DetachFromClock() { }
+        protected override void Dispose(bool disposing) { }
+        public override void Pause() { }
+        public override void Play() { }
+        public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
+        public bool ReadSamplesAtTime(double masterTimestamp, System.Span<float> buffer, int frameCount, out OwnaudioNET.Interfaces.ReadResult result) { }
+        public bool RemoveClip(OwnaudioNET.Sources.SourceClip clip) { }
+        public override bool Seek(double positionInSeconds) { }
+        public override void Stop() { }
+    }
     public sealed class InputSource : OwnaudioNET.Sources.BaseAudioSource
     {
         public InputSource(OwnaudioNET.Engine.AudioEngineWrapper engine, int bufferSizeInFrames = 8192) { }
@@ -1987,6 +2013,16 @@ namespace OwnaudioNET.Sources
         public override bool Seek(double positionInSeconds) { }
         public override void Stop() { }
         public void SubmitSamples(System.ReadOnlySpan<float> samples) { }
+    }
+    public sealed class SourceClip
+    {
+        public double Duration { get; }
+        public double EndSeconds { get; }
+        public string FilePath { get; }
+        public bool IsInMemory { get; }
+        public bool IsOnGroup { get; }
+        public double StartSeconds { get; set; }
+        public override string ToString() { }
     }
     public sealed class SourceWithEffects : OwnaudioNET.Interfaces.IAudioSource, OwnaudioNET.Interfaces.IMasterClockSource, OwnaudioNET.Interfaces.ISynchronizable, System.IDisposable
     {

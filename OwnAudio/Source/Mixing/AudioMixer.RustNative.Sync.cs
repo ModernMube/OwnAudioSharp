@@ -80,7 +80,7 @@ public sealed partial class AudioMixer
     /// </summary>
     /// <param name="fs"></param>
     /// <param name="projectPosition">project timeline position in seconds</param>
-    private void _applyRustStartOffset(FileSource fs, double projectPosition)
+    private void _applyRustStartOffset(IRustClockedSource fs, double projectPosition)
     {
         AudioTrack? _track = fs.RustTrack;
         if (_track is null)
@@ -115,7 +115,7 @@ public sealed partial class AudioMixer
     {
         if (!_rustNative) return;
 
-        FileSource? _fs = _resolve<FileSource>(source);
+        IRustClockedSource? _fs = _resolve<IRustClockedSource>(source);
         if (_fs?.RustTrack is null) return;
 
         lock (_rustSessionLock)
@@ -138,7 +138,7 @@ public sealed partial class AudioMixer
         {
             foreach (IAudioSource source in _sources)
             {
-                FileSource? _fs = _resolve<FileSource>(source);
+                IRustClockedSource? _fs = _resolve<IRustClockedSource>(source);
                 if (_fs?.RustTrack is null)
                     continue;
 

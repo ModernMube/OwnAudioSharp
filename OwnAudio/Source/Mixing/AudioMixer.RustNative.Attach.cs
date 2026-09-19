@@ -19,12 +19,19 @@ namespace OwnaudioNET.Mixing;
 public sealed partial class AudioMixer
 {
     /// <summary>
-    /// Hooks a source onto the shared session: file to a native file track, samples to a
-    /// memory track, input to a capture track. Anything else is ignored.
+    /// Hooks a source onto the shared session: file to a native file track, a group to a native
+    /// group track, samples to a memory track, input to a capture track. Anything else is ignored.
     /// </summary>
     /// <param name="source"></param>
     private void _attachSourceToRustSession(IAudioSource source)
     {
+        GroupSource? _gs = _resolve<GroupSource>(source);
+        if (_gs is not null)
+        {
+            _attachGroupSource(source, _gs);
+            return;
+        }
+
         FileSource? _fs = _resolve<FileSource>(source);
         if (_fs?.FilePath is not null)
         {
@@ -162,6 +169,28 @@ public sealed partial class AudioMixer
             _applyRoutingAtAttach(source, fs.Id, fs.RustTrack);
             _rememberRustTrack(fs.Id, fs.RustTrack);
             _routeTrackEffects(source, fs);
+        }
+    }
+
+    /// <summary>
+    /// Attaches a group source: an empty native group at the source's width, which the source
+    /// then fills with its clips. The audio was loaded when the clips were added, so this only
+    /// shares buffers and opens streams.
+    /// </summary>
+    /// <param name="source"></param>
+    /// <param name="gs"></param>
+    private void _attachGroupSource(IAudioSource source, GroupSource gs)
+    {
+        lock (_rustSessionLock)
+        {
+            _ensureRustSession();
+
+            GroupTrack _track = _rustSession.AddGroupTrack((ushort)gs.Channels);
+            gs.AttachRustTrack(_track);
+
+            _applyRoutingAtAttach(source, gs.Id, gs.RustTrack);
+            _rememberRustTrack(gs.Id, gs.RustTrack);
+            _routeTrackEffects(source, gs);
         }
     }
 

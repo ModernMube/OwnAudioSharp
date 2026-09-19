@@ -58,6 +58,14 @@ pub(crate) trait AudioDecoderBackend: Send {
     /// Returns metadata describing the decoded output format.
     fn stream_info(&self) -> AudioStreamInfo;
 
+    /// Exact length in output frames when the container states it, `None` otherwise.
+    ///
+    /// Finer than [`AudioStreamInfo::total_frames`], which goes through a
+    /// millisecond duration and can come up a few dozen frames short.
+    fn total_output_frames(&self) -> Option<u64> {
+        None
+    }
+
     /// Decodes audio into `buffer` (interleaved `f32`, output format).
     ///
     /// Fills as much of `buffer` as possible, decoding additional packets as

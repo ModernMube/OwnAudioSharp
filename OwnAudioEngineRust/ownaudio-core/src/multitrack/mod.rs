@@ -5,6 +5,7 @@ pub mod clock;
 pub mod command;
 pub mod file_source;
 pub mod fx_tap;
+pub mod group_source;
 pub mod memory_source;
 pub mod stretch;
 pub mod track;
@@ -14,6 +15,7 @@ pub use clock::SampleClock;
 pub use command::{command_channel, CommandReceiver, MixerCommand, MixerController, Retired};
 pub use file_source::{FileSourceControl, FileTrackSource};
 pub use fx_tap::{FxTap, FxTapReader};
+pub use group_source::{GroupClipData, GroupSourceControl, GroupTrackSource, MAX_GROUP_CLIPS};
 pub use memory_source::{MemorySourceControl, MemoryTrackSource};
 pub use track::{
     RouteSnapshot, Track, TrackShared, TrackSource, TrackState, MAX_ROUTE_CHANNELS, ROUTE_UNBOUND,

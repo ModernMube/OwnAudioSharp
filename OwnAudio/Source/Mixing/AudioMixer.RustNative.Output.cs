@@ -27,7 +27,7 @@ public sealed partial class AudioMixer
         IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in _sources)
         {
-            _resolve<FileSource>(source)?.ApplyRustNativeSync();
+            _resolve<IRustClockedSource>(source)?.ApplyRustNativeSync();
         }
     }
 
@@ -150,7 +150,7 @@ public sealed partial class AudioMixer
         IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in _sources)
         {
-            FileSource? _fs = _resolve<FileSource>(source);
+            IRustClockedSource? _fs = _resolve<IRustClockedSource>(source);
             if (_fs is not null && _fs.State == AudioState.Playing)
             {
                 //A track still sitting in its start-offset silence would drag the clock to its offset
@@ -239,7 +239,7 @@ public sealed partial class AudioMixer
         {
             foreach (IAudioSource source in _sources.Values)
             {
-                FileSource? _fs = _resolve<FileSource>(source);
+                IRustClockedSource? _fs = _resolve<IRustClockedSource>(source);
                 if (_fs is null)
                     continue;
 
@@ -313,7 +313,7 @@ public sealed partial class AudioMixer
             double _project = _masterClock.CurrentTimestamp;
             foreach (IAudioSource source in _sources.Values)
             {
-                FileSource? _fs = _resolve<FileSource>(source);
+                IRustClockedSource? _fs = _resolve<IRustClockedSource>(source);
                 if (_fs?.RustTrack is null)
                     continue;
 
