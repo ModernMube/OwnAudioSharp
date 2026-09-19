@@ -349,6 +349,30 @@ typedef struct OwnAudioFileSourceHandle {
 } OwnAudioFileSourceHandle;
 
 /**
+ * Opaque handle to a clip loaded for group sources.
+ *
+ * Create with `ownaudio_v1_group_clip_open`; release with
+ * `ownaudio_v1_group_clip_destroy`.  Independent of any track: the same clip can
+ * be placed on any number of groups, one after the other or at once, without
+ * being decoded again.
+ */
+typedef struct OwnAudioGroupClipHandle {
+    uint8_t _private[0];
+} OwnAudioGroupClipHandle;
+
+/**
+ * Opaque handle to the control side of a group track source.
+ *
+ * Create with `ownaudio_v1_track_open_group`; release with
+ * `ownaudio_v1_group_source_destroy`.  The clips play on the audio thread; the
+ * control thread adds, moves and removes them, seeks the group's timeline and
+ * polls the end-of-stream latch through this handle.
+ */
+typedef struct OwnAudioGroupSourceHandle {
+    uint8_t _private[0];
+} OwnAudioGroupSourceHandle;
+
+/**
  * Opaque handle to the control side of an input-capture track source.
  *
  * Create with `ownaudio_v1_track_open_input`; release with
@@ -1391,6 +1415,180 @@ int32_t ownaudio_v1_mixer_master_fx_tap_read(struct OwnAudioMixerHandle *mixer,
  * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_master_fx_tap_stop(struct OwnAudioMixerHandle *mixer);
+
+/**
+ * Loads `path` for use on groups and writes the clip handle to `*out_clip`.
+ *
+ * Files no longer than `memory_max_frames` (and files that cannot tell their own
+ * length) are decoded into memory inside this call, so call it off the UI
+ * thread; longer files are only probed and stream from disk once placed.
+ *
+ * - `path` — null-terminated UTF-8 file path.
+ * - `sample_rate` / `channels` — what the clip decodes to; must match the groups
+ *   it is placed on.
+ * - `memory_max_frames` — the memory / stream threshold, in frames.
+ * - `out_clip` — receives the clip handle on success.
+ * - `out_length_frames` — receives the clip length in frames.
+ * - `out_in_memory` — receives `1` for a memory clip, `0` for a streamed one.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success, a decoder error code when
+ * the file cannot be opened.  Destroy the handle with
+ * `ownaudio_v1_group_clip_destroy`; groups it was placed on keep playing it.
+ *
+ * # Safety
+ * - `path` must be a NUL-terminated UTF-8 string.
+ * - The three out pointers must each point to writable storage of their type.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_group_clip_open(const char *path,
+                                    uint32_t sample_rate,
+                                    uint32_t channels,
+                                    uint64_t memory_max_frames,
+                                    struct OwnAudioGroupClipHandle **out_clip,
+                                    uint64_t *out_length_frames,
+                                    uint8_t *out_in_memory);
+
+/**
+ * Destroys a clip handle.  Passing `null` is safe and has no effect.  Groups the
+ * clip was placed on keep what they need to go on playing it.
+ *
+ * # Safety
+ * - `clip` must be a live handle from `ownaudio_v1_group_clip_open` that has not been destroyed.
+ */
+void ownaudio_v1_group_clip_destroy(struct OwnAudioGroupClipHandle *clip);
+
+/**
+ * Installs an empty group source on `track` and writes its control handle to
+ * `*out_source`.
+ *
+ * - `mixer` — valid mixer handle that owns the track.
+ * - `track` — valid track handle whose source is to be installed.
+ * - `sample_rate` — rate every placed clip decodes to; pass the mixer's rate.
+ * - `channels` — interleaved width every placed clip decodes to.
+ * - `out_source` — receives the control handle on success.
+ *
+ * The source is installed through the mixer's lock-free command queue, so it
+ * becomes the track's source on the next render block; any previous source is
+ * retired off the audio thread.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
+ * handle with `ownaudio_v1_group_source_destroy` after the track's source has
+ * been cleared or the track removed.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `out_source` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_open_group(struct OwnAudioMixerHandle *mixer,
+                                     struct OwnAudioTrackHandle *track,
+                                     uint32_t sample_rate,
+                                     uint32_t channels,
+                                     struct OwnAudioGroupSourceHandle **out_source);
+
+/**
+ * Places a loaded clip on the group's timeline at `start_frame`, heard from the
+ * next render block on.  A memory clip only shares its buffer; a streamed one
+ * opens its file (and prefetch thread) here.
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_open_group`.
+ * - `clip` — valid handle from `ownaudio_v1_group_clip_open`, decoded at the
+ *   group's rate and width.
+ * - `start_frame` — clip start on the group's content timeline, in frames.
+ * - `out_id` — receives the placement id used to move and remove it.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success, `UnsupportedConfig` when
+ * the clip's format differs from the group's or the group is full, a decoder
+ * error code when a streamed clip's file cannot be reopened.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ * - `clip` must be a live handle from `ownaudio_v1_group_clip_open` that has not been destroyed.
+ * - `out_id` must point to a writable `u64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_group_source_add_clip(struct OwnAudioGroupSourceHandle *source,
+                                          struct OwnAudioGroupClipHandle *clip,
+                                          uint64_t start_frame,
+                                          uint64_t *out_id);
+
+/**
+ * Takes a clip off the group's timeline.  `*out_removed` is `0` when the group
+ * holds no clip with that id.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ * - `out_removed` must point to a writable `u8`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_group_source_remove_clip(struct OwnAudioGroupSourceHandle *source,
+                                             uint64_t clip_id,
+                                             uint8_t *out_removed);
+
+/**
+ * Moves a clip to `start_frame` on the group's timeline, effective from the next
+ * render block.  `*out_found` is `0` when the group holds no clip with that id.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ * - `out_found` must point to a writable `u8`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_group_source_set_clip_start(struct OwnAudioGroupSourceHandle *source,
+                                                uint64_t clip_id,
+                                                uint64_t start_frame,
+                                                uint8_t *out_found);
+
+/**
+ * Requests a jump of the group's content cursor to `frame_position`.
+ *
+ * Non-blocking: the audio thread applies it on its next read, re-aims every
+ * streamed clip and clears the finished latch.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_group_source_seek(struct OwnAudioGroupSourceHandle *source,
+                                      uint64_t frame_position);
+
+/**
+ * Writes `1` to `*out_finished` once the group's cursor has run past the end of
+ * its last clip, `0` otherwise.  Cleared by a seek.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ * - `out_finished` must point to a writable `u8`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_group_source_is_finished(struct OwnAudioGroupSourceHandle *source,
+                                             uint8_t *out_finished);
+
+/**
+ * Writes the frame just past the end of the group's last clip to `*out_frames`,
+ * zero for an empty group.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ * - `out_frames` must point to a writable `u64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_group_source_get_end_frame(struct OwnAudioGroupSourceHandle *source,
+                                               uint64_t *out_frames);
+
+/**
+ * Destroys a group-source control handle.
+ *
+ * Passing `null` is safe and has no effect.  Dropping this handle only releases
+ * the control block; the group and its clips live on the audio thread until the
+ * track's source is cleared or the track is removed, at which point they are
+ * retired off the real-time path.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ */
+void ownaudio_v1_group_source_destroy(struct OwnAudioGroupSourceHandle *source);
 
 /**
  * Opens an input stream on `track`, wiring device capture straight into the

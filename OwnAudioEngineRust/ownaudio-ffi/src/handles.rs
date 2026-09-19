@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use ownaudio_core::multitrack::{FxTapReader, MixerController};
 use ownaudio_core::{
-    AudioEngine, CaptureController, FileSourceControl, InputStream, MemorySourceControl,
-    MixerShared, MultiTrackMixer, OutputStream, RingBufferReader, RingBufferWriter, StreamingTrack,
-    TrackShared,
+    AudioEngine, CaptureController, FileSourceControl, GroupClipData, GroupSourceControl,
+    InputStream, MemorySourceControl, MixerShared, MultiTrackMixer, OutputStream, RingBufferReader,
+    RingBufferWriter, StreamingTrack, TrackShared,
 };
 
 /// Opaque handle to an [`AudioEngine`] instance.
@@ -236,6 +236,28 @@ pub struct OwnAudioMemorySourceHandle {
     _private: [u8; 0],
 }
 
+/// Opaque handle to the control side of a group track source.
+///
+/// Create with `ownaudio_v1_track_open_group`; release with
+/// `ownaudio_v1_group_source_destroy`.  The clips play on the audio thread; the
+/// control thread adds, moves and removes them, seeks the group's timeline and
+/// polls the end-of-stream latch through this handle.
+#[repr(C)]
+pub struct OwnAudioGroupSourceHandle {
+    _private: [u8; 0],
+}
+
+/// Opaque handle to a clip loaded for group sources.
+///
+/// Create with `ownaudio_v1_group_clip_open`; release with
+/// `ownaudio_v1_group_clip_destroy`.  Independent of any track: the same clip can
+/// be placed on any number of groups, one after the other or at once, without
+/// being decoded again.
+#[repr(C)]
+pub struct OwnAudioGroupClipHandle {
+    _private: [u8; 0],
+}
+
 /// Opaque handle to the control side of an input-capture track source.
 ///
 /// Create with `ownaudio_v1_track_open_input`; release with
@@ -418,6 +440,19 @@ pub(crate) struct MemorySourceWrapper {
     pub control: Arc<MemorySourceControl>,
 }
 
+/// Owns the control side of a group track source.
+///
+/// The matching [`GroupTrackSource`] was installed as the track's source on the
+/// audio thread. Every call on the shared [`GroupSourceControl`] takes `&self` and
+/// serialises clip edits behind its own lock, so this wrapper is only ever lent out
+/// shared.
+///
+/// [`GroupTrackSource`]: ownaudio_core::GroupTrackSource
+pub(crate) struct GroupSourceWrapper {
+    /// Shared control block for the audio-thread group source.
+    pub control: Arc<GroupSourceControl>,
+}
+
 /// Lock-free peak metering for a native input capture, shared between the cpal
 /// capture callback (writer) and the control thread (reader). Values are stored as
 /// `f32` bits in an [`AtomicU32`].
@@ -510,6 +545,8 @@ unsafe impl Send for FileSourceWrapper {}
 unsafe impl Sync for FileSourceWrapper {}
 unsafe impl Send for MemorySourceWrapper {}
 unsafe impl Sync for MemorySourceWrapper {}
+unsafe impl Send for GroupSourceWrapper {}
+unsafe impl Sync for GroupSourceWrapper {}
 unsafe impl Send for InputSourceWrapper {}
 unsafe impl Sync for InputSourceWrapper {}
 
@@ -591,6 +628,28 @@ pub(crate) unsafe fn memory_source_from_ptr<'a>(
         None
     } else {
         Some(&mut *(ptr as *mut MemorySourceWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioGroupClipHandle` back to `&GroupClipData`.
+pub(crate) unsafe fn group_clip_from_ptr<'a>(
+    ptr: *mut OwnAudioGroupClipHandle,
+) -> Option<&'a GroupClipData> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&*(ptr as *const GroupClipData))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioGroupSourceHandle` back to `&GroupSourceWrapper`.
+pub(crate) unsafe fn group_source_from_ptr<'a>(
+    ptr: *mut OwnAudioGroupSourceHandle,
+) -> Option<&'a GroupSourceWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&*(ptr as *const GroupSourceWrapper))
     }
 }
 

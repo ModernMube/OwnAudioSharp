@@ -34,6 +34,9 @@ pub(crate) struct SymphoniaBackend {
 
     stream_info: AudioStreamInfo,
 
+    /// Container frame count scaled to the output rate, `None` when the container is silent.
+    total_output_frames: Option<u64>,
+
     /// Reused interleaved-`f32` view over the most recently decoded packet.
     sample_buf: Option<SampleBuffer<f32>>,
 
@@ -125,6 +128,11 @@ impl SymphoniaBackend {
             _ => AudioStreamInfo::UNKNOWN_DURATION,
         };
 
+        let total_output_frames = params.n_frames.map(|frames| {
+            ((frames as u128 * output_rate as u128 + source_rate as u128 / 2) / source_rate as u128)
+                as u64
+        });
+
         let resampler = if output_rate != source_rate {
             Some(StreamResampler::new(
                 source_rate,
@@ -150,6 +158,7 @@ impl SymphoniaBackend {
             output_channels,
             output_rate,
             stream_info,
+            total_output_frames,
             sample_buf: None,
             resampler,
             residual: Vec::new(),
@@ -252,6 +261,10 @@ impl SymphoniaBackend {
 impl AudioDecoderBackend for SymphoniaBackend {
     fn stream_info(&self) -> AudioStreamInfo {
         self.stream_info
+    }
+
+    fn total_output_frames(&self) -> Option<u64> {
+        self.total_output_frames
     }
 
     fn read_frames(&mut self, buffer: &mut [f32]) -> Result<DecoderReadResult> {

@@ -89,6 +89,44 @@ public sealed partial class MultiTrackSession : IDisposable
     }
 
     /// <summary>
+    /// Adds a track fed by an empty native group. Loaded <see cref="GroupClip"/>s go on through
+    /// the returned <see cref="GroupTrack"/>; they have to be loaded at the session rate and this
+    /// width.
+    /// </summary>
+    /// <param name="channels">width of every clip, 0 takes the session's</param>
+    public GroupTrack AddGroupTrack(ushort channels = 0)
+    {
+        _throwIfDisposed();
+
+        ushort width = channels == 0 ? _channels : channels;
+
+        AudioTrack track = AddTrack();
+
+        try
+        {
+            int code = OwnAudioNative.ownaudio_v1_track_open_group(
+                _mixerHandle.DangerousGetHandle(),
+                track.GetNativeHandle(),
+                (uint)_sampleRate,
+                width,
+                out IntPtr rawSource);
+            ErrorCodeMapper.ThrowIfError(code, nameof(AddGroupTrack));
+
+            var sourceHandle = new GroupSourceHandle();
+            Marshal.InitHandle(sourceHandle, rawSource);
+
+            var groupTrack = new GroupTrack(track, sourceHandle, _sampleRate);
+            _groupTracks.Add(groupTrack);
+            return groupTrack;
+        }
+        catch
+        {
+            RemoveTrack(track);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Adds a track served straight from an interleaved buffer by the audio thread. The
     /// samples must already be at session rate/channels; they're copied into native
     /// memory once here, never on the audio path.
@@ -273,6 +311,15 @@ public sealed partial class MultiTrackSession : IDisposable
                 {
                     _memoryTracks[i].Dispose();
                     _memoryTracks.RemoveAt(i);
+                }
+            }
+
+            for (int i = _groupTracks.Count - 1; i >= 0; i--)
+            {
+                if (_groupTracks[i].Track == track)
+                {
+                    _groupTracks[i].Dispose();
+                    _groupTracks.RemoveAt(i);
                 }
             }
 
