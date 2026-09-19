@@ -215,6 +215,9 @@ jobs:
 
       - name: Set up Android NDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy "tools" package is gone from cmdline-tools 16, asking for it fails the step
+          packages: platform-tools
 
       - name: Cache Cargo
         uses: actions/cache@v4
