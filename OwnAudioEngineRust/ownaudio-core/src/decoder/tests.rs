@@ -228,6 +228,25 @@ fn streaming_track_seek_then_read() {
 }
 
 #[test]
+fn a_seek_after_eof_is_not_eof() {
+    let wav = TempWav::write(1, SR, &mono_ramp(2_000));
+    let mut track = open_streaming(wav.path_str(), 0, 0, SR as usize).expect("open streaming");
+
+    let mut buf = vec![0.0f32; 1024];
+    for _ in 0..500 {
+        if track.read(&mut buf) == 0 && track.is_eof() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert!(track.is_eof());
+
+    //Until the prefetch thread takes the seek on, the old latch must not show through
+    track.seek(0);
+    assert!(!track.is_eof());
+}
+
+#[test]
 fn drop_stops_prefetch_thread() {
     let ramp = mono_ramp(100_000);
     let wav = TempWav::write(1, SR, &ramp);

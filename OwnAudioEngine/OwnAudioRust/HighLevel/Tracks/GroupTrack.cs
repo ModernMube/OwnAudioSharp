@@ -69,7 +69,8 @@ public sealed class GroupTrack : IDisposable
     public float SampleRate => _sampleRate;
 
     /// <summary>
-    /// True once the cursor ran past the last clip end. Clears on a Seek.
+    /// True once the cursor ran past the last clip end. Clears on a Seek, or when a clip lands
+    /// ahead of the cursor again.
     /// </summary>
     public bool IsFinished
     {
