@@ -31,6 +31,7 @@ Use `OwnAudioSharp.Basic` when you want a lean playback/recording engine and non
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across local network (< 5ms accuracy on LAN)
   - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
+  - **Clips on One Track**: `GroupSource` lays several files out on one timeline — a DAW lane sharing one tempo, effect chain and fader, with effect tails ringing across the cuts
   - **SmartMaster Effect**: Intelligent audio mastering with auto-calibration
   - **VST3 Plugin Support**: Load and host VST3 audio effect plugins
   - Built-in effects and DSP routines (EQ, compressor, reverb, etc.)

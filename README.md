@@ -150,6 +150,20 @@ Play multiple audio files in perfect sync using a shared central clock. Each tra
 ### Real-Time Tempo & Pitch
 Adjust playback speed and pitch independently, in real time, across multiple tracks simultaneously.
 
+### Clips on One Track
+`GroupSource` is a DAW lane: several audio files laid out on one timeline and summed natively into a single track, so they share one tempo and pitch stage, one effect chain and one fader — and a reverb tail rings on across a cut instead of stopping with it. Clips can be added, moved and removed while it plays; short files load into memory, long ones stream from disk.
+
+```csharp
+var lane = new GroupSource(sampleRate: 48000, channels: 2);
+lane.AddClip("take1.wav", 0.0);
+SourceClip solo = lane.AddClip("solo.wav", 32.0);
+
+mixer.AddSource(lane);
+solo.StartSeconds = 36.0;   // moved while it plays
+```
+
+> Guide: [GroupSource](https://modernmube.github.io/OwnAudioSharp/documents/api-sources.html#groupsource)
+
 ### 16 Real-Time DSP Effects
 Reverb, OwnReverb (16-line FDN reverb with ducking), equalizer, compressor, limiter, chorus, delay, distortion and more — freely combinable, inserted per-track or on the master bus.
 
