@@ -26,6 +26,7 @@ C ABI FFI layer for OwnAudioSharp. Wraps [`ownaudio-core`](../ownaudio-core) wit
   - [Host API Selection](#host-api-selection)
   - [Mixer Lifecycle](#mixer-lifecycle)
   - [Track Management](#track-management)
+  - [Group Sources](#group-sources)
   - [Effects](#effects)
 - [Callback Signatures](#callback-signatures)
 - [C# Integration Example](#c-integration-example)
@@ -162,6 +163,8 @@ All handles are opaque pointers. Never dereference them directly.
 | `OwnAudioMixerHandle*` | Multi-track mixer |
 | `OwnAudioTrackHandle*` | Individual mixer track (non-owning; owned by mixer) |
 | `OwnAudioEffectHandle*` | Effect in a track's effect chain (non-owning; owned by mixer) |
+| `OwnAudioGroupClipHandle*` | Audio file loaded for group sources, independent of any track (owning) |
+| `OwnAudioGroupSourceHandle*` | Control side of a group installed on a track (owning) |
 
 **Ownership model:**
 
@@ -381,6 +384,59 @@ ownaudio_v1_track_remove(mixer, track);
 ownaudio_v1_track_destroy(track);
 track = NULL;
 ```
+
+### Group Sources
+
+A group lays several audio files out on one content timeline and sums them into a single track,
+so they share its stretch stage, effect chain, gain, pan and route. Clips are loaded once, then
+placed, moved and removed while the track plays — none of it touches the audio thread's
+allocator.
+
+```c
+// Load a file for groups. Files up to memory_max_frames decode into memory inside this call
+// (keep it off the UI thread); longer ones are only probed and stream once placed.
+int32_t ownaudio_v1_group_clip_open(
+    const char*               path,
+    uint32_t                  sample_rate,      // must match the groups it goes on
+    uint32_t                  channels,
+    uint64_t                  memory_max_frames,
+    OwnAudioGroupClipHandle** out_clip,
+    uint64_t*                 out_length_frames,
+    uint8_t*                  out_in_memory      // 1 = memory, 0 = streamed
+);
+void ownaudio_v1_group_clip_destroy(OwnAudioGroupClipHandle* clip);  // groups keep playing it
+
+// Install an empty group on a track (pass the mixer's rate)
+int32_t ownaudio_v1_track_open_group(
+    OwnAudioMixerHandle*        mixer,
+    OwnAudioTrackHandle*        track,
+    uint32_t                    sample_rate,
+    uint32_t                    channels,
+    OwnAudioGroupSourceHandle** out_source
+);
+
+// Clip edits — live, effective from the next render block
+int32_t ownaudio_v1_group_source_add_clip(OwnAudioGroupSourceHandle* source,
+    OwnAudioGroupClipHandle* clip, uint64_t start_frame, uint64_t* out_id);
+int32_t ownaudio_v1_group_source_remove_clip(OwnAudioGroupSourceHandle* source,
+    uint64_t clip_id, uint8_t* out_removed);
+int32_t ownaudio_v1_group_source_set_clip_start(OwnAudioGroupSourceHandle* source,
+    uint64_t clip_id, uint64_t start_frame, uint8_t* out_found);
+
+// Timeline
+int32_t ownaudio_v1_group_source_seek(OwnAudioGroupSourceHandle* source, uint64_t frame_position);
+int32_t ownaudio_v1_group_source_is_finished(OwnAudioGroupSourceHandle* source, uint8_t* out_finished);
+int32_t ownaudio_v1_group_source_get_end_frame(OwnAudioGroupSourceHandle* source, uint64_t* out_frames);
+
+void ownaudio_v1_group_source_destroy(OwnAudioGroupSourceHandle* source);
+```
+
+- A clip whose rate or width differs from the group's is refused with `UnsupportedConfig`, and so
+  is the 257th clip — a group holds at most 256.
+- `is_finished` is `1` while the cursor stands at or past the last clip end. A seek clears it, and
+  so does a clip added or moved ahead of the cursor, even on a paused track.
+- Destroying the source handle frees the control block only; the clips live on the audio thread
+  until the track's source is cleared or the track removed.
 
 ### Effects
 

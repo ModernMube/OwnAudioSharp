@@ -12,6 +12,7 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across local network (< 5ms accuracy on LAN)
   - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
+  - **Clips on One Track**: `GroupSource` lays several files out on one timeline — a DAW lane sharing one tempo, effect chain and fader, with effect tails ringing across the cuts
   - **SmartMaster Effect**: Intelligent audio mastering with auto-calibration
   - Audio matchering and mastering
   - Real-time chord detection

@@ -22,6 +22,7 @@ Cross-platform audio I/O library for OwnAudioSharp, built on [`cpal`](https://gi
 - [Multi-Track Mixing](#multi-track-mixing)
   - [Track Control](#track-control)
   - [SampleClock](#sampleclock)
+  - [Group Sources](#group-sources)
 - [Error Handling](#error-handling)
 - [Real-Time Constraints](#real-time-constraints)
 
@@ -37,6 +38,7 @@ Cross-platform audio I/O library for OwnAudioSharp, built on [`cpal`](https://gi
 - **High-quality resampler** — sinc-based SRC via `rubato`
 - **18 built-in audio effects** — reverb, OwnReverb (16-line FDN), compressor, EQ (10 or 30 band), delay, chorus, etc.
 - **Multi-track mixer** — per-track gain, mute, solo, tempo/pitch, effect chains, transport clock
+- **Group sources** — several files on one track timeline, sharing its stretch, effects and fader
 - **Zero-allocation audio path** — all buffers pre-allocated; no heap activity in callbacks
 
 ---
@@ -493,6 +495,34 @@ let sample_pos = clock.seconds_to_samples(2.5);  // → 120_000 at 48 kHz
 ```
 
 `SampleClock` uses `AtomicU64` internally; reads and writes are lock-free and safe across threads.
+
+### Group Sources
+
+A `GroupTrackSource` is a `TrackSource` that lays several files out on one content timeline and
+sums whichever clips overlap the block, padding the gaps with silence — a DAW lane on a single
+track. What a clip plays comes from a `GroupClipData`, loaded once and placeable on any number of
+groups: short files are decoded into a shared buffer, long ones are probed and streamed per
+placement.
+
+```rust
+use ownaudio_core::{GroupClipData, GroupTrackSource};
+
+// Up to 30 s at 48 kHz goes into memory, anything longer streams
+let verse = GroupClipData::open("verse.wav", 48_000, 2, 48_000 * 30)?;
+
+let (source, control) = GroupTrackSource::new(48_000, 2);
+let id = control.add_clip(&verse, 0)?;   // placed at frame 0
+
+// `source` becomes a track's TrackSource; `control` stays on the control thread
+control.set_clip_start(id, 96_000);      // moved, lands on the next block
+control.seek_frames(0);
+let finished = control.is_finished();
+```
+
+Adding and removing go through a lock-free queue and moving is an atomic store, so all three are
+safe while the track plays; removed clips travel back to the control side to be dropped. A group
+holds at most `MAX_GROUP_CLIPS` (256) clips, and every clip has to decode to the group's rate and
+width.
 
 ---
 

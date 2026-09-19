@@ -3,6 +3,41 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.8-preview.13 — 2026-09-19
+
+### Added
+
+- **`GroupSource` — several audio files on one track timeline.** A DAW lane with its clips: the
+  files are laid out on one content timeline and summed natively into a single track, so they
+  share one tempo and pitch stage, one effect chain, one volume, pan and route, and an effect tail
+  rings on across a clip edge instead of stopping with it. `AddClip(path, startSeconds)` loads a
+  file once — up to `memoryMaxSeconds` (30 s by default) into memory, anything longer streams
+  from disk — and returns a `SourceClip`; setting its `StartSeconds` moves it and `RemoveClip`
+  takes it off, all three while the source plays. Gaps between clips cost nothing. Taking the
+  source off the mixer and adding it back, the usual stop/play cycle, decodes nothing again.
+  It rides the master clock like a `FileSource` does: start offset, seek, tempo-aware position
+  and network drift correction all work the same way. Playback is native only — in managed mode
+  `ReadSamples` hands back silence.
+- **The mixer refuses a `GroupSource` at another sample rate.** Its clips are decoded at the
+  group's own rate when they are added, so a group created at 44.1 kHz on a 48 kHz mixer could
+  only have played nothing. `AddSource` and `AddSourcePrepared` throw `ArgumentException` for it
+  instead, before the source is registered — also when it sits inside a `SourceWithEffects`.
+- **`GroupTrack` and `GroupClip` on the low-level session.** `MultiTrackSession.AddGroupTrack()`
+  installs an empty native group on a new track; a `GroupClip` loaded with `GroupClip.Open` is
+  independent of any session and can be placed on any number of groups without being decoded
+  again. `GroupTrack.Completed` fires once the cursor runs past the last clip end, and adding or
+  moving a clip ahead of the cursor clears `IsFinished` again, paused or not.
+- **Native `ownaudio_v1_group_clip_*` and `ownaudio_v1_group_source_*` exports**, plus
+  `ownaudio_v1_track_open_group`. A group holds up to 256 clips.
+
+### Fixed
+
+- **A streamed track reported end of stream while a seek was still in flight.** Once a file had
+  been decoded to its end, a seek back into it kept `is_eof` true until the prefetch thread got
+  round to the seek, a few milliseconds later. A `FileSource` could flag the end again straight
+  after such a seek, and a streamed group clip lost those milliseconds for good and played late
+  against the rest of the lane. End of stream now reads false for as long as a seek is pending.
+
 ## 4.0.8-preview.8 — 2026-09-05
 
 ### Fixed
