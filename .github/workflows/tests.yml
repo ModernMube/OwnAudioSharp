@@ -63,10 +63,31 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Install system ALSA runtime
+      - name: Install system ALSA runtime and dev headers
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2t64
+          sudo apt-get install -y libasound2t64 libasound2-dev pkg-config
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            OwnAudioEngineRust/target
+          key: ${{ runner.os }}-cargo-ffi-${{ hashFiles('OwnAudioEngineRust/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-ffi-
+
+      # The committed runtimes/ binary is only refreshed after a push to master, so a PR that adds
+      # an export would test against a library that lacks it. Build the one under test instead.
+      - name: Build native engine from this commit
+        working-directory: OwnAudioEngineRust
+        run: |
+          cargo build --release -p ownaudio-ffi
+          cp target/release/libownaudio_ffi.so ../OwnAudioEngine/OwnAudioRust/runtimes/linux-x64/native/libownaudio_ffi.so
 
       - name: Restore
         run: dotnet restore OwnAudioTests/Ownaudio.OwnaudioNET/Ownaudio.Test.OwnaudioNET.csproj
