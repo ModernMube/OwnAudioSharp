@@ -3,6 +3,15 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.8 — 2026-09-20
+
+The preview line closes here — nothing has landed since `4.0.8-preview.13` but the CI job that
+builds the native engine the .NET suite runs against. What the release brings over 4.0.7, in the
+order it arrived: one DSP behind `IEffectProcessor.Process` and the mixer twin, `GateEffect` and
+`PitchShiftEffect`, dry/wet and bypass that work on a VST3 in a mixer chain, AudioUnit hosting on
+macOS, three fixes to what the stretch stage costs, and `GroupSource` — several clips on one
+track timeline. The sections below have it in detail.
+
 ## 4.0.8-preview.13 — 2026-09-19
 
 ### Added
@@ -37,6 +46,66 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   round to the seek, a few milliseconds later. A `FileSource` could flag the end again straight
   after such a seek, and a streamed group clip lost those milliseconds for good and played late
   against the rest of the lane. End of stream now reads false for as long as a seek is pending.
+
+## 4.0.8-preview.12 — 2026-09-13
+
+### Changed
+
+- **The SoundTouch FIR filter vectorises.** Mono and stereo now sum in eight independent `f32`
+  lanes instead of one `f64` chain per tap — a single running sum cannot be reordered, so the
+  compiler could never turn it into SIMD. Multichannel keeps the scalar loop. The filter output
+  can differ from the old one in the last bits of a sample; a test holds it to the previous
+  scalar loop as reference.
+
+## 4.0.8-preview.11 — 2026-09-12
+
+### Changed
+
+- **Tempo-only projects no longer run the anti-alias filter.** At a rate of exactly 1.0 the
+  rate transposer is a plain copy, and the filter it would guard is set to a Nyquist cut-off that
+  limits nothing — yet it still cost 64 taps per sample, about a third of the mix load when only
+  the tempo is changed. Right after a seek, when the stretch stage pushes a whole sequence
+  through in one block, it was what took the render block past its deadline. It is skipped at
+  unity rate now, and the stage's latency loses the half-filter term with it.
+
+## 4.0.8-preview.10 — 2026-09-11
+
+### Changed
+
+- **Tracks off unity tempo no longer run their stretch search in the same block.** SoundTouch
+  idles until a whole WSOLA sequence has built up and then does the entire seek search at once,
+  and tracks started together at one tempo filled their FIFOs in lockstep — 22 of them spent
+  ~15 ms in one block against a 10.7 ms deadline, a dropout every sequence for as long as the
+  tempo stayed off 1.0. Each track now keeps a slightly different amount of processed audio in
+  hand, picked from its track id, which moves its search into a different render block. The
+  emitted samples are unchanged, so the tracks stay in sync with each other; the cost is FIFO
+  depth only.
+
+## 4.0.8-preview.9 — 2026-09-08
+
+### Added
+
+- **AudioUnit plugins on macOS, next to VST3.** Built on OwnAudioVst 1.7.0 (up from 1.6.7).
+  `AudioPluginBrowser` lists what is installed across both formats — AudioUnits live in the
+  macOS component registry, not in a directory, so `VST3PluginHost.FindPlugins` could never see
+  them. `ScanAsync` is a near-instant quick scan that leaves the channel counts at `-1`;
+  `ResolveAsync` loads the one plugin to fill them in, and `GetCacheXml` / `RestoreCache`
+  round-trip the results so the next start can skip the scan. `IsSupported` and
+  `AudioUnitSupported` tell what the platform offers.
+- **`VST3PluginHost.CreateAsync` takes an `AudioPluginInfo` or a bundle sub-index**, and the
+  host reports the `Format` and `Identifier` it actually resolved to, plus `IsAudioUnit`.
+
+### Changed
+
+- **`HasEditor` comes from the plugin.** It used to be hard-coded `true`; plenty of AudioUnits
+  have no view at all, so gate an "open editor" action on it.
+
+### Fixed
+
+- **A wider block no longer re-prepares the plugin on the audio thread.** The native host
+  refuses a block wider than the one `Initialize` prepared for, so the bridge passes the dry
+  signal through for that block while a background re-prepare widens both the plugin and its
+  scratch buffers.
 
 ## 4.0.8-preview.8 — 2026-09-05
 
@@ -113,6 +182,86 @@ copies had produced a handful of real differences, and unifying them changes beh
   assemblies since they have nothing in common to reference.
 - Seven files over 400 code lines split into 32 partials and per-type files; the largest managed
   file is now 381 code lines.
+
+## 4.0.8-preview.6 — 2026-09-05
+
+### Added
+
+- **`GateEffect` and `PitchShiftEffect`.** The engine has had a noise gate and a WSOLA pitch
+  shifter for a while and the low-level wrappers were wired for both, but neither had a managed
+  `IEffectProcessor` — so nothing could pair them with a native twin and both were out of reach
+  from `Process()` and from `AddMasterEffect()`. They follow the usual model: parameter holders
+  whose DSP runs on the native engine, with the ranges the Rust side uses. `PitchShiftEffect`
+  reports its pipeline latency, so the mixer's delay compensation keeps a shifted track aligned.
+  Its `Mix` blends against that delay-aligned dry rather than the original samples — a raw dry
+  blend would comb-filter.
+
+### Changed
+
+- **A VST3's `Mix` and bypass go through the bridge on both call paths.**
+  `VST3EffectProcessor.Process` used to convert to planar, call the plugin and blend dry/wet
+  itself while the mixer went through the Rust bridge — two hosts for one plugin, disagreeing on
+  what bypass and mix mean. `Process` builds a standalone bridge from the same plugin instance
+  now, and the mixer stopped ignoring `Mix` and toggling the host's own bypass. Both use the
+  bridge's soft bypass and dry/wet. `Mix` defaults to 1.0, so this is only audible to someone who
+  had set it; in exchange `Mix` works on a mixer chain, where it never did, and bypass no longer
+  depends on the host implementing one.
+
+### Fixed
+
+- **A VST3's dry path is delayed by the plugin latency.** The bridge blended an undelayed dry
+  against a wet the plugin had delayed, so a partial mix comb-filtered the two and flipping bypass
+  shifted the output by that latency — which is why the mixer had to reach past the bridge and
+  toggle the host's bypass instead. A dry ring of `latency` frames fixes both, and it keeps
+  running at full wet so the dry it hands back after a mix change is not stale by however long
+  `Mix` sat at 1.0.
+
+## 4.0.8-preview.3 — 2026-09-04
+
+### Changed
+
+- **`IEffectProcessor.Process` runs on the native engine.** Two call paths remain — the mixer twin
+  and a direct `Process()` — but they are one DSP now: every built-in effect holds a
+  `NativeEffectEngine`, `Initialize` builds a standalone native instance from the config, and
+  `Process` mirrors the parameters that moved onto it and hands it the buffer. Matchering,
+  `SourceWithEffects.ReadSamples` and the DSP suite all reach the engine the mixer plays through,
+  so the same preset can no longer sound two ways. Same types, properties, presets and
+  constructors — the public surface does not move.
+- **`Equalizer30BandEffect` takes a Q and a centre frequency per band, `DynamicAmpEffect` an
+  initial gain.** All three were accepted, clamped, stored and then dropped on the way to the
+  engine. The EQ defaults to the 1/3-octave values, so a filterbank nobody reshapes sounds the
+  same; the gain rider's seed is what `Reset` returns to now, instead of unity. Matchering needs
+  both: it picks a Q per band and deconvolves its band gains against exactly those widths, and it
+  pulls the file down to make room for the EQ boosts and expects the rider to open back up from
+  the inverse.
+
+### Fixed
+
+- **An effect with no native twin could stop the mixer.** It was logged and skipped, so it played
+  silently; refusing it is right, but refusing it from inside the chain rebuild was not. The
+  control tick runs that same rebuild, the cached version never advanced past the throw, and the
+  tick then threw every 15 ms: the master clock stopped advancing, `PlaybackEnded` never fired,
+  other tracks stopped mirroring, and after 500 passes the loop gave up. The check moved to where
+  the caller can act on it — `AddMasterEffect` validates before the effect reaches the list, and
+  `SourceWithEffects` gets a validator the mixer installs, which is a no-op off a mixer since
+  there the managed `Process` is the chain. The rebuild logs and skips, because the tick is its
+  other caller.
+- **The gain meters would have frozen.** `AutoGainEffect.CurrentGain` / `InputLevel`,
+  `DynamicAmpEffect.CurrentGain` and the limiter's gain reduction were managed properties fed by
+  managed state, which nothing updates once `Process` is on the engine. They read two read-only
+  parameter ids off the native instance now, falling back to the managed field until it is up.
+- **Matchering renders on the engine.** The mastering render built managed effects and called
+  `Process` on them, so it went through a parameter model meant for a mixer chain and lost
+  anything that model does not mirror. It builds the four native effects by type and addresses
+  them by parameter id now. The README's chain order is corrected too — it had the compressor
+  ahead of the EQ, while the code has always run the EQ first.
+
+### Internal
+
+- A mixer-free standalone effect surface on the ABI (`ownaudio_v1_standalone_effect_*`) and its
+  `StandaloneEffect` wrapper. The mixer keeps its DSP on the audio thread behind a command queue,
+  so there was no way to run an effect anywhere else; a twin and a standalone instance are never
+  the same handle, since sharing one would race the audio thread.
 
 ## 4.0.7 — 2026-09-03
 
