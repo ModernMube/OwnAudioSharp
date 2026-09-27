@@ -1,7 +1,5 @@
-using Logger;
 using Ownaudio.Core;
 using OwnaudioNET;
-using OwnaudioNET.Core;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.NetworkSync;
 using OwnaudioNET.Sources;
@@ -20,15 +18,20 @@ public class ClientProgram
     private static FileSource? _drums, _bass, _other, _vocals;
     private static ConnectionState _connectionState = ConnectionState.Disconnected;
 
+    /// <summary>
+    /// Synced is where the client sits once the clock ticks arrive, Connected only precedes it.
+    /// </summary>
+    private static bool _isOnline => _connectionState is ConnectionState.Connected or ConnectionState.Synced;
+
     public static async Task Main(string[] args)
     {
-        Log.Info("=== OwnaudioNET NetworkSync Client ===\n");
-        Log.Info("This client synchronizes audio playback with a NetworkSync server.\n");
+        Console.WriteLine("=== OwnaudioNET NetworkSync Client ===\n");
+        Console.WriteLine("This client synchronizes audio playback with a NetworkSync server.\n");
 
         try
         {
             // Initialize audio engine
-            Log.Info("[1/5] Initializing audio engine...");
+            Console.WriteLine("[1/5] Initializing audio engine...");
             AudioConfig config = new AudioConfig
             {
                 SampleRate = 48000,
@@ -39,17 +42,17 @@ public class ClientProgram
 
             OwnaudioNet.Initialize(config);
             OwnaudioNet.Start();
-            Log.Info($"  ✓ Engine initialized and started");
+            Console.WriteLine($"  ✓ Engine initialized and started");
 
             // Create AudioMixer (automatically registers for NetworkSync)
-            Log.Info("\n[2/5] Creating AudioMixer...");
+            Console.WriteLine("\n[2/5] Creating AudioMixer...");
             var engine = OwnaudioNet.Engine!.UnderlyingEngine;
             _mixer = new AudioMixer(engine, bufferSizeInFrames: 512);
             _mixer.MasterVolume = 0.8f;
-            Log.Info($"  ✓ AudioMixer created (ID: {_mixer.MixerId})");
+            Console.WriteLine($"  ✓ AudioMixer created (ID: {_mixer.MixerId})");
 
             // Load audio files
-            Log.Info("\n[3/5] Loading audio files...");
+            Console.WriteLine("\n[3/5] Loading audio files...");
             string? exePath = Assembly.GetExecutingAssembly().Location;
             string? exeDirectory = Path.GetDirectoryName(exePath);
 
@@ -66,7 +69,7 @@ public class ClientProgram
             _other = new FileSource(otherPath, 8192, targetSampleRate: targetSampleRate, targetChannels: targetChannels);
             _vocals = new FileSource(vocalsPath, 8192, targetSampleRate: targetSampleRate, targetChannels: targetChannels);
 
-            Log.Info($"  ✓ Loaded 4 tracks ({_drums.Duration:F1}s duration)");
+            Console.WriteLine($"  ✓ Loaded 4 tracks ({_drums.Duration:F1}s duration)");
 
             // Adding a source also attaches it to the mixer's MasterClock
             _mixer.AddSource(_drums);
@@ -75,19 +78,19 @@ public class ClientProgram
             _mixer.AddSource(_vocals);
 
             _mixer.Start();
-            Log.Info($"  ✓ Sources synchronized with MasterClock");
+            Console.WriteLine($"  ✓ Sources synchronized with MasterClock");
 
             // Subscribe to connection state changes
             OwnaudioNet.NetworkSyncConnectionChanged += OnConnectionStateChanged;
 
             // Start NetworkSync client (auto-discovery)
-            Log.Info("\n[4/5] Connecting to NetworkSync server...");
+            Console.WriteLine("\n[4/5] Connecting to NetworkSync server...");
             await OwnaudioNet.StartNetworkSyncClientAsync(
                 serverAddress: null,  // Auto-discovery
                 port: 9876,
                 allowOfflinePlayback: true);
-            Log.Info($"  ✓ NetworkSync client started (auto-discovery mode)");
-            Log.Info($"  ✓ Searching for server on local network...");
+            Console.WriteLine($"  ✓ NetworkSync client started (auto-discovery mode)");
+            Console.WriteLine($"  ✓ Searching for server on local network...");
 
             // Start playback (will sync with server when connected)
             _drums.Play();
@@ -96,10 +99,10 @@ public class ClientProgram
             _vocals.Play();
 
             // Interactive status display
-            Log.Info("\n[5/5] Client ready!\n");
-            Log.Info("Available commands:");
-            Log.Info("  status       - Show connection status");
-            Log.Info("  quit         - Exit client\n");
+            Console.WriteLine("\n[5/5] Client ready!\n");
+            Console.WriteLine("Available commands:");
+            Console.WriteLine("  status       - Show connection status");
+            Console.WriteLine("  quit         - Exit client\n");
 
             // Status update loop
             bool running = true;
@@ -134,7 +137,7 @@ public class ClientProgram
                                 break;
 
                             default:
-                                Log.Info($"  ! Unknown command: {command}");
+                                Console.WriteLine($"  ! Unknown command: {command}");
                                 break;
                         }
                     }
@@ -152,11 +155,11 @@ public class ClientProgram
             _mixer.Stop();
 
             Console.WriteLine("  Disposing resources...");
+            _mixer.Dispose();
             _drums?.Dispose();
             _bass?.Dispose();
             _other?.Dispose();
             _vocals?.Dispose();
-            _mixer?.Dispose();
 
             Console.WriteLine("  Stopping engine...");
             OwnaudioNet.Stop();
@@ -174,11 +177,11 @@ public class ClientProgram
             try
             {
                 OwnaudioNet.StopNetworkSync();
+                _mixer?.Dispose();
                 _drums?.Dispose();
                 _bass?.Dispose();
                 _other?.Dispose();
                 _vocals?.Dispose();
-                _mixer?.Dispose();
                 OwnaudioNet.Shutdown();
             }
             catch { }
@@ -193,6 +196,7 @@ public class ClientProgram
         
         string stateText = e.NewState switch
         {
+            ConnectionState.Synced => "SYNCED",
             ConnectionState.Connected => "CONNECTED",
             ConnectionState.Disconnected => "DISCONNECTED",
             ConnectionState.Connecting => "CONNECTING",
@@ -201,7 +205,7 @@ public class ClientProgram
 
         Console.WriteLine($"\n  >>> Connection state: {stateText}");
         
-        if (e.NewState == ConnectionState.Connected)
+        if (e.NewState == ConnectionState.Synced)
         {
             Console.WriteLine($"  >>> Synchronized with server");
         }
@@ -214,14 +218,14 @@ public class ClientProgram
     private static void ShowQuickStatus()
     {
         var syncStatus = OwnaudioNet.GetNetworkSyncStatus();
-        string stateIcon = _connectionState == ConnectionState.Connected ? "●" : "○";
+        string stateIcon = _isOnline ? "●" : "○";
         string stateText = _connectionState.ToString();
 
         Console.Write($"\r  {stateIcon} {stateText,-15} | ");
         Console.Write($"Position: {_drums?.Position:F1}s / {_drums?.Duration:F1}s | ");
         Console.Write($"MasterClock: {_mixer?.MasterClock.CurrentTimestamp:F2}s | ");
         
-        if (_connectionState == ConnectionState.Connected)
+        if (_isOnline)
         {
             Console.Write($"Latency: {syncStatus.AverageLatency:F1}ms");
         }
@@ -239,7 +243,7 @@ public class ClientProgram
         Console.WriteLine($"  Connection: {_connectionState}");
         Console.WriteLine($"  NetworkSync: {(syncStatus.IsEnabled ? "Enabled" : "Disabled")}");
         
-        if (_connectionState == ConnectionState.Connected)
+        if (_isOnline)
         {
             Console.WriteLine($"  Server latency: {syncStatus.AverageLatency:F1}ms");
             Console.WriteLine($"  Local control: {(syncStatus.IsLocalControlAllowed ? "Allowed" : "Server controlled")}");

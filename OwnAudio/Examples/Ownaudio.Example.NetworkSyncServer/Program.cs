@@ -1,9 +1,8 @@
-using Logger;
 using Ownaudio.Core;
 using OwnaudioNET;
-using OwnaudioNET.Core;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
+using System.Globalization;
 using System.Reflection;
 
 namespace Ownaudio.Example.NetworkSyncServer;
@@ -128,7 +127,7 @@ public class ServerProgram
                         break;
 
                     case "seek":
-                        if (parts.Length > 1 && double.TryParse(parts[1], out double position))
+                        if (parts.Length > 1 && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double position))
                         {
                             SeekTracks(position);
                         }
@@ -162,11 +161,11 @@ public class ServerProgram
             _mixer.Stop();
 
             Console.WriteLine("  Disposing resources...");
+            _mixer.Dispose();
             _drums?.Dispose();
             _bass?.Dispose();
             _other?.Dispose();
             _vocals?.Dispose();
-            _mixer?.Dispose();
 
             Console.WriteLine("  Stopping engine...");
             OwnaudioNet.Stop();
@@ -184,11 +183,11 @@ public class ServerProgram
             try
             {
                 OwnaudioNet.StopNetworkSync();
+                _mixer?.Dispose();
                 _drums?.Dispose();
                 _bass?.Dispose();
                 _other?.Dispose();
                 _vocals?.Dispose();
-                _mixer?.Dispose();
                 OwnaudioNet.Shutdown();
             }
             catch { }
@@ -237,17 +236,18 @@ public class ServerProgram
         _bass?.Stop();
         _other?.Stop();
         _vocals?.Stop();
+        _mixer?.Seek(0);
         _isPlaying = false;
 
         Console.WriteLine($"  ✓ Playback stopped");
     }
 
+    /// <summary>
+    /// Seek goes through the mixer - it moves the master clock with every track, the clients follow the clock.
+    /// </summary>
     private static void SeekTracks(double position)
     {
-        _drums?.Seek(position);
-        _bass?.Seek(position);
-        _other?.Seek(position);
-        _vocals?.Seek(position);
+        _mixer?.Seek(position);
 
         Console.WriteLine($"  ✓ Seeked to {position:F2}s");
     }

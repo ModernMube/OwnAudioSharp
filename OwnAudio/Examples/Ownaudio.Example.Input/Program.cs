@@ -1,4 +1,3 @@
-using Logger;
 using OwnaudioNET;
 using OwnaudioNET.Sources;
 using OwnaudioNET.Effects;
@@ -24,7 +23,7 @@ namespace OwnaudioInput
             // Initialize the OwnAudio engine
             var config = OwnaudioNet.CreateDefaultConfig();
             config.EnableInput = true;
-            config.HostType = Ownaudio.Core.EngineHostType.None; // Force WASAPI for better compatibility
+            config.HostType = Ownaudio.Core.EngineHostType.None; // platform default host
             OwnaudioNet.Initialize(config);
 
             if (!OwnaudioNet.IsInitialized)
@@ -53,7 +52,7 @@ namespace OwnaudioInput
                 Console.WriteLine();
 
                 // List and select input device
-                var inputDevices = OwnaudioNet.Engine.GetInputDevices();
+                var inputDevices = OwnaudioNet.GetInputDevices();
                 Console.WriteLine("Available Input Devices:");
                 for (int i = 0; i < inputDevices.Count; i++)
                 {
@@ -72,7 +71,7 @@ namespace OwnaudioInput
                     OwnaudioNet.Stop();
                     OwnaudioNet.Shutdown();
 
-                    config.InputDeviceId = selectedDevice.Name;
+                    config.InputDeviceId = selectedDevice.DeviceId;
                     OwnaudioNet.Initialize(config);
                     OwnaudioNet.Start();
 
@@ -127,8 +126,7 @@ namespace OwnaudioInput
                     wet: 0.28f,           // Reverb amount
                     dry: 0.85f,           // Keep the voice present
                     stereoWidth: 1.0f,    // Full stereo spread
-                    mix: 0.25f,           // Tasteful wet blend
-                    gainLevel: 1.0f       // Unity input into the reverb tank
+                    mix: 0.25f            // Tasteful wet blend
                 );
                 reverbEffect.Enabled = true;
                 sourceWithEffects.AddEffect(reverbEffect);
@@ -223,7 +221,9 @@ namespace OwnaudioInput
                                     // Mute input during playback to hear recording clearly
                                     inputSource.Volume = 0.0f;
 
-                                    playbackSource = new FileSource(recordFilePath);
+                                    playbackSource = new FileSource(recordFilePath,
+                                        targetSampleRate: OwnaudioNet.Engine!.Config.SampleRate,
+                                        targetChannels: OwnaudioNet.Engine!.Config.Channels);
                                     playbackSource.StateChanged += (s, e) => {
                                         if (e.NewState == AudioState.EndOfStream)
                                         {
@@ -287,6 +287,7 @@ namespace OwnaudioInput
                 mixer.RemoveSource(sourceWithEffects);
                 sourceWithEffects.Dispose();
                 mixer.Dispose();
+                playbackSource?.Dispose();
 
                 Console.WriteLine("Resources released.");
             }

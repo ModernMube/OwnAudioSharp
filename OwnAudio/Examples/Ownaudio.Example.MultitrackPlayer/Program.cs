@@ -1,40 +1,23 @@
-using Logger;
-﻿using Avalonia;
+using Avalonia;
 using System;
 
 namespace MultitrackPlayer;
 
 /// <summary>
-/// Entry point class for the multitrack audio player application.
-/// Configures and starts the Avalonia application framework.
+/// Entry point, plain Avalonia desktop start.
 /// </summary>
 class Program
 {
-    #region Entry Point
-
-    /// <summary>
-    /// Main entry point for the application.
-    /// Initializes the Avalonia framework and starts the desktop application.
-    /// </summary>
-    /// <param name="args">Command-line arguments.</param>
     [STAThread]
     public static void Main(string[] args) => BuildAvaloniaApp()
         .StartWithClassicDesktopLifetime(args);
 
-    #endregion
-
-    #region Avalonia Configuration
-
     /// <summary>
-    /// Configures the Avalonia application framework.
-    /// This method is also used by the visual designer.
+    /// Also what the designer calls.
     /// </summary>
-    /// <returns>A configured AppBuilder instance.</returns>
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
-
-    #endregion
 }

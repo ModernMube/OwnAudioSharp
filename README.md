@@ -37,6 +37,29 @@ Decoding is pure Rust too — no external codecs, no FFmpeg, no system dependenc
 
 ---
 
+> [!IMPORTANT]
+> **The example projects have been rewritten for the current OwnAudioSharp version.**
+> Every sample in [`OwnAudio/Examples`](OwnAudio/Examples) now follows the 4.x API rules: tracks
+> start together through `AddSourcePrepared` / `StartPreparedSources`, seeking goes through
+> `AudioMixer.Seek`, and the end of a song, device loss and DSP load come from `PlaybackEnded`,
+> `StreamFaulted` and `SessionLoad` instead of the obsolete dropout events. The Multitrack Player
+> has been rebuilt from scratch as a compact, readable reference app. If you copied code from an
+> older example, it is worth a second look.
+
+## 🎵 Try OwnMusicAi — a Suno-style song generator that runs on your own machine
+
+<div align="center">
+  <a href="https://github.com/ModernMube/OwnMusicAi">
+    <img src="https://img.shields.io/badge/GitHub-ModernMube%2FOwnMusicAi-181717?style=for-the-badge&logo=github" alt="OwnMusicAi on GitHub">
+  </a>
+</div>
+
+I built a Suno-like AI that writes and generates whole songs **locally, on your own computer** —
+no cloud, no subscription — with OwnAudioSharp doing the audio. Give it a try and use it freely,
+just for fun: **[github.com/ModernMube/OwnMusicAi](https://github.com/ModernMube/OwnMusicAi)**
+
+---
+
 ## 🆕 The documentation site has been rebuilt
 
 <div align="center">

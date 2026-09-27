@@ -1,11 +1,9 @@
-using Logger;
 using Android.App;
 using Android.Content.PM;
 using Android.OS;
 using Android.Widget;
 using AndroidX.AppCompat.App;
 using OwnaudioNET;
-using OwnaudioNET.Core;
 using OwnaudioNET.Effects;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
@@ -14,10 +12,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using AlertDialog = AndroidX.AppCompat.App.AlertDialog;
-using AudioEngine = Ownaudio.Core.IAudioEngine;
-using AudioEngineFactory = Ownaudio.Core.AudioEngineFactory;
 using AudioConfig = Ownaudio.Core.AudioConfig;
-using System.Diagnostics;
 using Ownaudio.Example.Android;
 
 namespace OwnaudioAndroidExample
@@ -52,6 +47,9 @@ namespace OwnaudioAndroidExample
         // Progress update
         private System.Threading.Timer? _progressTimer;
         private DateTime _startTime;
+
+        // Set when the activity went to the background mid-song
+        private bool _pausedInBackground;
 
         protected override void OnCreate(Bundle? savedInstanceState)
         {
@@ -127,22 +125,15 @@ namespace OwnaudioAndroidExample
                 // Step 2: Start Audio Engine
                 UpdateStatus("\n[2/6] Starting audio engine...");
 
-                // Create audio mixer using the underlying engine directly
-                var engine = OwnaudioNet.Engine!.UnderlyingEngine;
-
-                // Start the underlying engine asynchronously
-                int startResult = await Task.Run(() => engine.Start());
-                if (startResult < 0)
-                {
-                    throw new Exception($"Failed to start audio engine. Error code: {startResult}");
-                }
+                // Engine calls can block, so they stay off the UI thread
+                await Task.Run(OwnaudioNet.Start);
 
                 UpdateStatus($"✓ Engine running");
 
                 // Step 3: Create Audio Mixer
                 UpdateStatus("\n[3/6] Creating audio mixer...");
 
-                _mixer = new AudioMixer(engine, bufferSizeInFrames: 512);
+                _mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 512);
                 _mixer.MasterVolume = _volume;
 
                 UpdateStatus($"✓ Mixer created, Master volume: {_volume:P0}");
@@ -151,6 +142,16 @@ namespace OwnaudioAndroidExample
                 {
                     UpdateStatus($"! Source error: {e.Message}");
                 };
+
+                // Device lost or backend error on the native output
+                _mixer.StreamFaulted += (sender, e) =>
+                {
+                    UpdateStatus($"! Output fault: {e.Kind}");
+                    Android.Util.Log.Warn("OwnaudioAndroidTest", e.ToString());
+                };
+
+                // Every track ran out
+                _mixer.PlaybackEnded += (sender, e) => RunOnUiThread(() => BtnStop_Click(null, EventArgs.Empty));
 
                 // Create mastering effects
                 UpdateStatus("Adding mastering effects...");
@@ -232,7 +233,6 @@ namespace OwnaudioAndroidExample
                     wet: 0.25f,
                     dry: 0.75f,
                     stereoWidth: 0.8f,
-                    gainLevel: 0.015f,
                     mix: 0.25f
                 );
 
@@ -253,19 +253,11 @@ namespace OwnaudioAndroidExample
                 _fileSource2.StartOffset = 0.0;  // Other start immediately
                 _fileSource3.StartOffset = 0.0;  // Vocals start immediately
 
-                // Adding a source attaches it to the Master Clock for sample-accurate synchronization
-                _mixer.AddSource(_fileSource0);
-                _mixer.AddSource(_fileSource1);
-                _mixer.AddSource(_fileSource2);
-                _mixer.AddSource(_fileSource3Effect);   // the wrapper attaches _fileSource3 too
-
-                // Subscribe to dropout events for monitoring
-                _mixer.TrackDropout += (sender, e) =>
-                {
-                    UpdateStatus($"! Track dropout: {e.TrackName} at {e.MasterTimestamp:F3}s");
-                    Android.Util.Log.Warn("OwnaudioAndroidTest",
-                        $"Track dropout: {e.TrackName}, Reason: {e.Reason}, Missed frames: {e.MissedFrames}");
-                };
+                // Registered prepared: attached to the Master Clock, started together on Play
+                _mixer.AddSourcePrepared(_fileSource0);
+                _mixer.AddSourcePrepared(_fileSource1);
+                _mixer.AddSourcePrepared(_fileSource2);
+                _mixer.AddSourcePrepared(_fileSource3Effect);   // the wrapper attaches _fileSource3 too
 
                 UpdateStatus($"✓ Master Clock sync configured");
                 UpdateStatus($"✓ Active sources: {_mixer.SourceCount}");
@@ -362,29 +354,16 @@ namespace OwnaudioAndroidExample
                 if (_btnStop != null)
                     _btnStop.Enabled = true;
 
-                // If mixer was disposed (after Stop), reinitialize everything
                 if (_mixer == null)
+                    throw new InvalidOperationException("Press Initialize first");
+
+                // All four start on the same clock position, then the mixer lets them go together
+                var mixer = _mixer;
+                await Task.Run(() =>
                 {
-                    // Reinitialize by calling Initialize again
-                    BtnInitialize_Click(sender, e);
-
-                    // Wait a bit for initialization to complete
-                    await Task.Delay(1000);
-
-                    if (_mixer == null)
-                    {
-                        throw new Exception("Mixer reinitialization failed");
-                    }
-                }
-
-                // Start mixer
-                _mixer.Start();
-
-                // Start all sources for playback (IMPORTANT with Master Clock!)
-                _fileSource0.Play();
-                _fileSource1.Play();
-                _fileSource2.Play();
-                _fileSource3.Play();
+                    mixer.StartPreparedSources(0.0);
+                    mixer.Start();
+                });
 
                 // Record start time for tempo accuracy calculation
                 _startTime = DateTime.Now;
@@ -432,7 +411,6 @@ namespace OwnaudioAndroidExample
 
                     UpdateStatus($"\n=== FINAL STATISTICS ===");
                     UpdateStatus($"Total mixed frames: {_mixer.TotalMixedFrames}");
-                    UpdateStatus($"Total underruns: {_mixer.TotalUnderruns}");
                     UpdateStatus($"Real-time elapsed: {elapsed.TotalSeconds:F2}s");
                     UpdateStatus($"Audio position: {finalPosition:F2}s");
                     UpdateStatus($"Master Clock timestamp: {_mixer.MasterClock.CurrentTimestamp:F2}s");
@@ -465,15 +443,14 @@ namespace OwnaudioAndroidExample
                         if (_fileSource3Effect != null) _mixer.RemoveSource(_fileSource3Effect);
                     }
 
+                    // Mixer first - it also disposes the master effects it holds
+                    _mixer?.Stop();
+                    _mixer?.Dispose();
+
                     _fileSource0?.Dispose();
                     _fileSource1?.Dispose();
                     _fileSource2?.Dispose();
-                    _fileSource3?.Dispose();
-                    _fileSource3Effect?.Dispose();
-
-                    // Stop the mixer (may block up to 2000ms)
-                    _mixer?.Stop();
-                    _mixer?.Dispose();
+                    _fileSource3Effect?.Dispose();   // disposes _fileSource3 as well
                 });
 
                 // Clear references
@@ -488,7 +465,7 @@ namespace OwnaudioAndroidExample
                 await OwnaudioNet.StopAsync();
 
                 if (_btnPlay != null)
-                    _btnPlay.Enabled = true;
+                    _btnPlay.Enabled = false;
                 if (_btnStop != null)
                     _btnStop.Enabled = false;
 
@@ -519,15 +496,9 @@ namespace OwnaudioAndroidExample
 
         private void UpdateProgressCallback(object? state)
         {
-            if (_fileSource0 == null || _fileSource0.State != AudioState.Playing)
-            {
-                // Auto-stop when playback completes
-                if (_fileSource0?.State == AudioState.Stopped)
-                {
-                    RunOnUiThread(() => BtnStop_Click(null, EventArgs.Empty));
-                }
+            // The end of the song is handled by the mixer's PlaybackEnded event
+            if (_fileSource0 == null || _mixer == null)
                 return;
-            }
 
             RunOnUiThread(() =>
             {
@@ -553,7 +524,7 @@ namespace OwnaudioAndroidExample
                     // Update statistics
                     if (_tvStats != null && _mixer != null)
                     {
-                        _tvStats.Text = $"Mixed: {_mixer.TotalMixedFrames} | Underruns: {_mixer.TotalUnderruns}";
+                        _tvStats.Text = $"Mixed: {_mixer.TotalMixedFrames} | Clock: {_mixer.MasterClock.CurrentTimestamp:F2}s";
                     }
 
                     // Enable master effects at 30 seconds (same as desktop)
@@ -622,22 +593,25 @@ namespace OwnaudioAndroidExample
         {
             base.OnPause();
 
-            Task.Run(() =>
-            {
-                try
-                {
-                    // Pause audio when app goes to background
-                    _mixer?.Stop();
-                    _fileSource0?.Stop();
-                    _fileSource1?.Stop();
-                    _fileSource2?.Stop();
-                    _fileSource3?.Stop();
-                }
-                catch (Exception ex)
-                {
-                    Android.Util.Log.Error("OwnaudioAndroidTest", $"OnPause error: {ex.Message}");
-                }
-            });
+            // Background: the mixer holds, the sources stay on it and OnResume picks up from here
+            var mixer = _mixer;
+            if (mixer == null || !mixer.IsRunning)
+                return;
+
+            _pausedInBackground = true;
+            Task.Run(mixer.Pause);
+        }
+
+        protected override void OnResume()
+        {
+            base.OnResume();
+
+            var mixer = _mixer;
+            if (!_pausedInBackground || mixer == null)
+                return;
+
+            _pausedInBackground = false;
+            Task.Run(mixer.Start);
         }
 
         protected override void OnDestroy()
@@ -651,14 +625,12 @@ namespace OwnaudioAndroidExample
             {
                 try
                 {
-                    // Note: No need to stop sync group - Master Clock handles cleanup automatically
                     _mixer?.Stop();
                     _mixer?.Dispose();
 
                     _fileSource0?.Dispose();
                     _fileSource1?.Dispose();
                     _fileSource2?.Dispose();
-                    _fileSource3?.Dispose();
                     _fileSource3Effect?.Dispose();
 
                     // This prevents up to 2000ms UI freeze and potential ANR

@@ -1,474 +1,94 @@
 using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Avalonia.Threading;
+using System.IO;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using OwnaudioNET.Effects.SmartMaster;
 
 namespace MultitrackPlayer.ViewModels;
 
 /// <summary>
-/// SmartMaster effect functionality for MainWindowViewModel.
-/// Contains: SmartMaster effect management, presets, measurement wizard, and calibration.
+/// Smart Master at the tail of the master chain. Built the first time someone asks for it,
+/// an untouched one costs nothing.
 /// </summary>
 public partial class MainWindowViewModel
 {
-    #region Properties
+    private SmartMasterEffect? _smartMaster;
 
-    /// <summary>
-    /// Gets or sets whether SmartMaster effect is enabled.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isSmartMasterEnabled;
-
-    /// <summary>
-    /// Tracks whether the SmartMaster effect has been inserted into the mixer's master chain,
-    /// so <see cref="SyncSmartMasterAttachment"/> never adds it twice.
-    /// </summary>
-    private bool _smartMasterInChain;
-
-    /// <summary>
-    /// Called when IsSmartMasterEnabled changes.
-    /// </summary>
-    partial void OnIsSmartMasterEnabledChanged(bool value)
+    private static readonly JsonSerializerOptions _presetJson = new JsonSerializerOptions
     {
-        // Bypass, not detach. The effect's own Enabled flag is mirrored onto the native node,
-        // which passes the signal through untouched while it is off. Pulling the node out of
-        // the chain instead would drop its reported latency out of the master bus and the whole
-        // mix would jump by that many samples on every toggle.
-        if (_smartMaster != null)
-        {
-            _smartMaster.Enabled = value;
-        }
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
-        SyncSmartMasterAttachment();
-    }
+    public SpeakerType[] SpeakerPresets { get; } = Enum.GetValues<SpeakerType>();
 
-    /// <summary>
-    /// Makes sure the SmartMaster effect is present in the mixer master chain. It stays there for
-    /// the whole session once added; the enable toggle only bypasses it. No-op before the mixer or
-    /// the effect exist, and idempotent afterwards.
-    /// </summary>
-    private void SyncSmartMasterAttachment()
-    {
-        var mixer = _audioService.Mixer;
-        if (mixer == null || _smartMaster == null || _smartMasterInChain)
-            return;
-
-        try
-        {
-            mixer.AddMasterEffect(_smartMaster);
-            _smartMasterInChain = true;
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Error attaching SmartMaster: {ex.Message}";
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the selected speaker preset type.
-    /// </summary>
     [ObservableProperty]
     private SpeakerType _selectedSpeakerPreset = SpeakerType.Default;
 
     /// <summary>
-    /// Gets the list of available speaker presets.
+    /// The mixer initializes it on AddMasterEffect, nothing else to prepare.
     /// </summary>
-    public List<SpeakerType> AvailableSpeakerPresets { get; } = new()
+    private SmartMasterEffect? _ensureSmartMaster()
     {
-        SpeakerType.Default,
-        SpeakerType.HiFi,
-        SpeakerType.Headphone,
-        SpeakerType.Studio,
-        SpeakerType.Club,
-        SpeakerType.Concert
-    };
+        if (_smartMaster != null || _audio.Mixer == null) return _smartMaster;
 
-    /// <summary>
-    /// Gets or sets whether a measurement is currently in progress.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isMeasuring;
-
-    /// <summary>
-    /// Gets or sets the measurement progress (0-100).
-    /// </summary>
-    [ObservableProperty]
-    private float _measurementProgress;
-
-    /// <summary>
-    /// Gets or sets the measurement status text.
-    /// </summary>
-    [ObservableProperty]
-    private string _measurementStatusText = "";
-
-    /// <summary>
-    /// Gets or sets the microphone input volume (0.0 - 2.0).
-    /// </summary>
-    [ObservableProperty]
-    private float _micVolume = 1.0f;
-
-    /// <summary>
-    /// Called when MicVolume changes.
-    /// </summary>
-    partial void OnMicVolumeChanged(float value)
-    {
-        if (_smartMaster != null)
-        {
-            var config = _smartMaster.GetConfiguration();
-            config.MicInputGain = value;
-        }
+        _smartMaster = new SmartMasterEffect { Enabled = false };
+        _audio.Mixer.AddMasterEffect(_smartMaster);
+        return _smartMaster;
     }
 
     /// <summary>
-    /// Gets or sets the current microphone level in dB.
+    /// Bypass toggle - the node stays on the chain either way.
     /// </summary>
-    [ObservableProperty]
-    private float _micLevel = -100.0f;
-
-    /// <summary>
-    /// Gets or sets whether microphone monitoring is active.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isMicMonitoring;
-
-    #endregion
-
-    #region Commands
-
-    /// <summary>
-    /// Toggles the SmartMaster effect on/off.
-    /// </summary>
-    [RelayCommand]
-    private void ToggleSmartMaster()
+    public bool IsSmartMasterEnabled
     {
-        // Flipping the property raises OnIsSmartMasterEnabledChanged, which mirrors Enabled onto the
-        // effect, which the mixer mirrors onto the native node as a bypass.
-        IsSmartMasterEnabled = !IsSmartMasterEnabled;
-
-        if (_smartMaster != null)
+        get => _smartMaster?.Enabled ?? false;
+        set
         {
-            StatusMessage = IsSmartMasterEnabled ? "SmartMaster enabled" : "SmartMaster disabled";
+            var effect = value ? _ensureSmartMaster() : _smartMaster;
+            if (effect == null || effect.Enabled == value) return;
+
+            effect.Enabled = value;
+            OnPropertyChanged();
+            StatusMessage = value ? "Smart Master on" : "Smart Master off";
         }
     }
 
-    /// <summary>
-    /// Loads the selected factory preset.
-    /// </summary>
-    [RelayCommand]
-    private void LoadFactoryPreset()
+    partial void OnSelectedSpeakerPresetChanged(SpeakerType value)
     {
-        if (_smartMaster == null)
-            return;
+        var effect = _ensureSmartMaster();
+        if (effect == null) return;
+
+        effect.LoadSpeakerPreset(value);
+        StatusMessage = $"Smart Master preset: {value}";
+    }
+
+    public void SaveSmartMasterPreset(string filePath)
+    {
+        var effect = _ensureSmartMaster();
+        if (effect == null) return;
 
         try
         {
-            _smartMaster.LoadSpeakerPreset(SelectedSpeakerPreset);
-            StatusMessage = $"Loaded {SelectedSpeakerPreset} preset";
+            File.WriteAllText(filePath, JsonSerializer.Serialize(effect.GetConfiguration(), _presetJson));
+            StatusMessage = $"Saved {Path.GetFileName(filePath)}";
         }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Error loading preset: {ex.Message}";
-        }
+        catch (Exception ex) { StatusMessage = $"Could not save the preset: {ex.Message}"; }
     }
 
-    /// <summary>
-    /// Loads the measured preset from the last measurement.
-    /// </summary>
-    [RelayCommand]
-    private void LoadMeasuredPreset()
+    public void LoadSmartMasterPreset(string filePath)
     {
-        if (_smartMaster == null)
-            return;
+        var effect = _ensureSmartMaster();
+        if (effect == null) return;
 
         try
         {
-            _smartMaster.Load("measured");
-            StatusMessage = "Loaded measured preset (from last measurement)";
+            var config = JsonSerializer.Deserialize<SmartMasterConfig>(File.ReadAllText(filePath), _presetJson);
+            if (config == null) return;
+
+            effect.ApplyConfiguration(config);
+            StatusMessage = $"Loaded {Path.GetFileName(filePath)}";
         }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Error loading measured preset: {ex.Message}";
-        }
+        catch (Exception ex) { StatusMessage = $"Could not load the preset: {ex.Message}"; }
     }
-
-    /// <summary>
-    /// Starts the measurement wizard.
-    /// </summary>
-    [RelayCommand]
-    private async Task StartMeasurementAsync()
-    {
-        if (_smartMaster == null || IsMeasuring)
-            return;
-
-        try
-        {
-            IsMeasuring = true;
-            MeasurementProgress = 0;
-            MeasurementStatusText = "Starting measurement...";
-
-            // Start measurement timer
-            _measurementTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-            _measurementTimer.Tick += MeasurementTimer_Tick;
-            _measurementTimer.Start();
-
-            // Pause the mixer to prevent it from fighting for the output buffer
-            bool wasMixerRunning = _audioService.Mixer != null;
-            if (wasMixerRunning)
-            {
-                _audioService.Mixer?.Pause();
-                await Task.Delay(100);
-            }
-
-            try
-            {
-                // Start measurement
-                await _smartMaster.StartMeasurementAsync();
-            }
-            finally
-            {
-                try
-                {
-                    _smartMaster?.Reset();
-                    
-                    if (OwnaudioNET.OwnaudioNet.Engine != null)
-                    {
-                        OwnaudioNET.OwnaudioNet.Engine.ClearOutputBuffer();
-                        // Give the engine a moment to stabilize (flush pending buffers)
-                        await Task.Delay(50);
-                    }
-                }
-                catch {}
-
-                if (wasMixerRunning)
-                {
-                    _audioService.Mixer?.Start();
-                }
-            }
-
-            // Stop timer
-            _measurementTimer?.Stop();
-            _measurementTimer = null;
-
-            IsMeasuring = false;
-
-            // Check the final measurement status
-            var finalStatus = _smartMaster.GetMeasurementStatus();
-            
-            if (finalStatus.Status == OwnaudioNET.Effects.SmartMaster.MeasurementStatus.Error)
-            {
-                MeasurementProgress = 0;
-                MeasurementStatusText = $"Error: {finalStatus.ErrorMessage ?? "Unknown error"}";
-                StatusMessage = $"Measurement failed: {finalStatus.ErrorMessage ?? "Unknown error"}";
-            }
-            else if (finalStatus.Status == OwnaudioNET.Effects.SmartMaster.MeasurementStatus.Completed)
-            {
-                MeasurementProgress = 100;
-                MeasurementStatusText = finalStatus.CurrentStep;
-                StatusMessage = finalStatus.Warnings.Length > 0 
-                    ? $"Measurement completed with {finalStatus.Warnings.Length} warning(s)" 
-                    : "Measurement completed successfully";
-            }
-            else
-            {
-                MeasurementProgress = 0;
-                MeasurementStatusText = "Measurement ended unexpectedly";
-                StatusMessage = "Measurement ended unexpectedly";
-            }
-        }
-        catch (Exception ex)
-        {
-            _measurementTimer?.Stop();
-            _measurementTimer = null;
-            IsMeasuring = false;
-            MeasurementProgress = 0;
-            MeasurementStatusText = $"Error: {ex.Message}";
-            StatusMessage = $"Measurement failed: {ex.Message}";
-        }
-    }
-
-    /// <summary>
-    /// Cancels the ongoing measurement.
-    /// </summary>
-    [RelayCommand]
-    private void CancelMeasurement()
-    {
-        if (_smartMaster == null || !IsMeasuring)
-            return;
-
-        _smartMaster.CancelMeasurement();
-        _measurementTimer?.Stop();
-        _measurementTimer = null;
-        IsMeasuring = false;
-        MeasurementStatusText = "Measurement cancelled";
-        StatusMessage = "Measurement cancelled";
-    }
-
-    /// <summary>
-    /// Toggles microphone monitoring on/off.
-    /// </summary>
-    [RelayCommand]
-    private void ToggleMicMonitoring()
-    {
-        if (_smartMaster == null)
-            return;
-
-        IsMicMonitoring = !IsMicMonitoring;
-
-        if (IsMicMonitoring)
-        {
-            // Start monitoring
-            _smartMaster.StartMicMonitoring();
-            
-            // Start timer for UI updates
-            _measurementTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-            _measurementTimer.Tick += MicMonitoringTimer_Tick;
-            _measurementTimer.Start();
-            
-            StatusMessage = "Microphone monitoring started";
-        }
-        else
-        {
-            // Stop monitoring
-            _smartMaster.StopMicMonitoring();
-            _measurementTimer?.Stop();
-            _measurementTimer = null;
-            MicLevel = -100.0f;
-            
-            StatusMessage = "Microphone monitoring stopped";
-        }
-    }
-
-    /// <summary>
-    /// Saves current settings as a custom preset.
-    /// </summary>
-    /// <param name="filePath">Full path to the preset file. Extension will be auto-appended if missing.</param>
-    public async Task SaveCustomPresetAsync(string filePath)
-    {
-        if (_smartMaster == null)
-            return;
-
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            StatusMessage = "Error: No file path provided";
-            return;
-        }
-
-        try
-        {
-            // Ensure the path ends with .smartmaster.json
-            if (!filePath.EndsWith(".smartmaster.json", StringComparison.OrdinalIgnoreCase))
-            {
-                // Remove any existing extension and add .smartmaster.json
-                var pathWithoutExt = System.IO.Path.ChangeExtension(filePath, null);
-                filePath = pathWithoutExt + ".smartmaster.json";
-            }
-
-            // Get the current configuration from SmartMaster
-            var configuration = _smartMaster.GetConfiguration();
-
-            // Serialize to JSON
-            var options = new System.Text.Json.JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-            };
-
-            string json = System.Text.Json.JsonSerializer.Serialize(configuration, options);
-            
-            // Save directly to the user-selected path
-            System.IO.File.WriteAllText(filePath, json);
-
-            string fileName = System.IO.Path.GetFileName(filePath);
-            StatusMessage = $"Saved preset: {fileName}";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Error saving preset: {ex.Message}";
-        }
-
-        await Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// Loads a custom preset.
-    /// </summary>
-    /// <param name="filePath">Full path to the preset file to load.</param>
-    public async Task LoadCustomPresetAsync(string filePath)
-    {
-        if (_smartMaster == null)
-            return;
-
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            StatusMessage = "Error: No file path provided";
-            return;
-        }
-
-        if (!System.IO.File.Exists(filePath))
-        {
-            StatusMessage = $"Error: File not found: {System.IO.Path.GetFileName(filePath)}";
-            return;
-        }
-
-        try
-        {
-            // Read the JSON file
-            string json = System.IO.File.ReadAllText(filePath);
-
-            // Deserialize the configuration
-            var options = new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-            };
-
-            var loadedConfig = System.Text.Json.JsonSerializer.Deserialize<OwnaudioNET.Effects.SmartMaster.SmartMasterConfig>(json, options);
-
-            if (loadedConfig != null)
-            {
-                _smartMaster.ApplyConfiguration(loadedConfig);
-
-                string fileName = System.IO.Path.GetFileName(filePath);
-                StatusMessage = $"Loaded preset: {fileName}";
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Error loading preset: {ex.Message}";
-        }
-
-        await Task.CompletedTask;
-    }
-
-    #endregion
-
-    #region Private Methods
-
-    /// <summary>
-    /// Updates measurement progress from timer.
-    /// </summary>
-    private void MeasurementTimer_Tick(object? sender, EventArgs e)
-    {
-        if (_smartMaster == null)
-            return;
-
-        var status = _smartMaster.GetMeasurementStatus();
-        MeasurementProgress = status.Progress * 100;
-        MeasurementStatusText = status.CurrentStep;
-    }
-
-    /// <summary>
-    /// Updates microphone level from timer.
-    /// </summary>
-    private void MicMonitoringTimer_Tick(object? sender, EventArgs e)
-    {
-        if (_smartMaster == null)
-            return;
-
-        MicLevel = _smartMaster.GetLastMicLevel();
-    }
-
-    #endregion
 }

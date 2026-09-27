@@ -1,7 +1,6 @@
 using AVFoundation;
 using Foundation;
 using OwnaudioNET;
-using OwnaudioNET.Core;
 using OwnaudioNET.Effects;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
@@ -63,7 +62,7 @@ namespace OwnaudioIosExample
 
             _lblProgress = _infoLabel("Position: 00:00 / 00:00 (0%)");
             _lblPeaks = _infoLabel("Peaks: L=0.00 R=0.00");
-            _lblStats = _infoLabel("Mixed: 0 | Underruns: 0");
+            _lblStats = _infoLabel("Mixed: 0 | Clock: 0.00s");
             _lblVolume = _infoLabel($"Volume: {(int)(_volume * 100)}%");
 
             _sldVolume = new UISlider { MinValue = 0f, MaxValue = 1f, Value = _volume };
@@ -154,17 +153,16 @@ namespace OwnaudioIosExample
                 _log($"+ Buffer: {OwnaudioNet.Engine?.FramesPerBuffer} frames");
 
                 _log("[2/6] Starting audio engine...");
-                var _engine = OwnaudioNet.Engine!.UnderlyingEngine;
-
-                int _started = await Task.Run(() => _engine.Start());
-                if (_started < 0) throw new Exception($"Failed to start audio engine, code {_started}");
+                await Task.Run(OwnaudioNet.Start);
 
                 _log("+ Engine running");
 
                 _log("[3/6] Creating mixer...");
-                _mixer = new AudioMixer(_engine, bufferSizeInFrames: 512);
+                _mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 512);
                 _mixer.MasterVolume = _volume;
                 _mixer.SourceError += (s, e) => _log($"! Source error: {e.Message}");
+                _mixer.StreamFaulted += (s, e) => _log($"! Output fault: {e.Kind}");
+                _mixer.PlaybackEnded += (s, e) => InvokeOnMainThread(() => _ = _stopAsync());
 
                 _equalizer = new Equalizer30BandEffect();
                 _equalizer.SetPreset(Equalizer30Preset.Pop);
@@ -207,12 +205,10 @@ namespace OwnaudioIosExample
                 _log("+ Vocal chain added");
 
                 _log("[5/6] Adding sources — each one is attached to the master clock here...");
-                _mixer.AddSource(_drums);
-                _mixer.AddSource(_bass);
-                _mixer.AddSource(_other);
-                _mixer.AddSource(_vocalsWithFx);   // the wrapper attaches the inner source too
-
-                _mixer.TrackDropout += (s, e) => _log($"! Dropout: {e.TrackName} at {e.MasterTimestamp:F3}s");
+                _mixer.AddSourcePrepared(_drums);
+                _mixer.AddSourcePrepared(_bass);
+                _mixer.AddSourcePrepared(_other);
+                _mixer.AddSourcePrepared(_vocalsWithFx);   // the wrapper attaches the inner source too
 
                 _log($"+ Sources: {_mixer.SourceCount}, clock mode {_mixer.MasterClock.Mode}");
                 _log("[6/6] Ready to play!");
@@ -236,11 +232,9 @@ namespace OwnaudioIosExample
                 _btnPlay.Enabled = false;
                 _btnStop.Enabled = true;
 
-                _mixer!.Start();
-                _drums!.Play();
-                _bass!.Play();
-                _other!.Play();
-                _vocals!.Play();
+                //All four start on the same clock position, then the mixer lets them go together
+                _mixer!.StartPreparedSources(0.0);
+                _mixer.Start();
 
                 _startTime = DateTime.Now;
                 _progressTimer = NSTimer.CreateRepeatingScheduledTimer(TimeSpan.FromMilliseconds(100), _ => _tick());
@@ -269,7 +263,7 @@ namespace OwnaudioIosExample
                     TimeSpan _elapsed = DateTime.Now - _startTime;
 
                     _log("=== FINAL STATISTICS ===");
-                    _log($"Mixed frames: {_mixer.TotalMixedFrames}, underruns: {_mixer.TotalUnderruns}");
+                    _log($"Mixed frames: {_mixer.TotalMixedFrames}");
                     _log($"Real time: {_elapsed.TotalSeconds:F2}s, audio position: {_position:F2}s");
 
                     if (_elapsed.TotalSeconds > 0)
@@ -289,14 +283,13 @@ namespace OwnaudioIosExample
                         if (_vocalsWithFx != null) _mixer.RemoveSource(_vocalsWithFx);
                     }
 
+                    _mixer?.Stop();
+                    _mixer?.Dispose();
+
                     _drums?.Dispose();
                     _bass?.Dispose();
                     _other?.Dispose();
-                    _vocals?.Dispose();
                     _vocalsWithFx?.Dispose();
-
-                    _mixer?.Stop();
-                    _mixer?.Dispose();
                 });
 
                 _drums = null;
@@ -335,19 +328,13 @@ namespace OwnaudioIosExample
         {
             if (_drums == null || _mixer == null) return;
 
-            if (_drums.State == AudioState.Stopped)
-            {
-                _ = _stopAsync();
-                return;
-            }
-
             double _position = _drums.Position;
             double _duration = _drums.Duration;
             int _percent = _duration > 0 ? (int)(_position / _duration * 100) : 0;
 
             _lblProgress.Text = $"Position: {TimeSpan.FromSeconds(_position):mm\\:ss} / {TimeSpan.FromSeconds(_duration):mm\\:ss} ({_percent}%)";
             _lblPeaks.Text = $"Peaks: L={_mixer.LeftPeak:F2} R={_mixer.RightPeak:F2}";
-            _lblStats.Text = $"Mixed: {_mixer.TotalMixedFrames} | Underruns: {_mixer.TotalUnderruns}";
+            _lblStats.Text = $"Mixed: {_mixer.TotalMixedFrames} | Clock: {_mixer.MasterClock.CurrentTimestamp:F2}s";
 
             if (_position > 30 && _position < 35 && _equalizer != null && !_equalizer.Enabled)
             {

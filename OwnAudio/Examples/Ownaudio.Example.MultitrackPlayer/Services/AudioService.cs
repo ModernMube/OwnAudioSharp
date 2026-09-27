@@ -1,180 +1,105 @@
 using System;
 using System.Threading.Tasks;
+using Logger;
 using OwnaudioNET;
+using OwnaudioNET.Events;
 using OwnaudioNET.Mixing;
 
 namespace MultitrackPlayer.Services;
 
 /// <summary>
-/// Singleton service for managing the OwnaudioNet engine and AudioMixer lifecycle.
-/// Ensures proper initialization and cleanup of audio resources.
+/// Owns the engine and the one mixer on it. Everything else talks to the audio stack through here.
 /// </summary>
-public class AudioService : IDisposable
+public sealed class AudioService : IDisposable
 {
-    #region Fields
-
-    /// <summary>
-    /// The singleton instance of the AudioService.
-    /// </summary>
     private static AudioService? _instance;
+    private static readonly object _lock = new object();
 
-    /// <summary>
-    /// Lock object for thread-safe singleton initialization.
-    /// </summary>
-    private static readonly object _lock = new();
-
-    /// <summary>
-    /// The audio mixer instance for managing multiple audio sources.
-    /// </summary>
     private AudioMixer? _mixer;
-
-    /// <summary>
-    /// Indicates whether the audio engine has been initialized.
-    /// </summary>
-    private bool _isInitialized;
-
-    /// <summary>
-    /// Indicates whether this instance has been disposed.
-    /// </summary>
     private bool _disposed;
 
-    #endregion
+    private AudioService() { }
 
-    #region Properties
-
-    /// <summary>
-    /// Gets the current AudioMixer instance.
-    /// </summary>
-    public AudioMixer? Mixer => _mixer;
-
-    /// <summary>
-    /// Gets a value indicating whether the audio engine has been initialized.
-    /// </summary>
-    public bool IsInitialized => _isInitialized;
-
-    #endregion
-
-    #region Constructor
-
-    /// <summary>
-    /// Prevents a default instance of the <see cref="AudioService"/> class from being created.
-    /// Use the <see cref="Instance"/> property to access the singleton instance.
-    /// </summary>
-    private AudioService()
-    {
-    }
-
-    #endregion
-
-    #region Singleton Instance
-
-    /// <summary>
-    /// Gets the singleton instance of the AudioService.
-    /// Thread-safe lazy initialization.
-    /// </summary>
     public static AudioService Instance
     {
         get
         {
             if (_instance == null)
             {
-                lock (_lock)
-                {
-                    _instance ??= new AudioService();
-                }
+                lock (_lock) { _instance ??= new AudioService(); }
             }
             return _instance;
         }
     }
 
-    #endregion
+    /// <summary>
+    /// Null until InitializeAsync ran.
+    /// </summary>
+    public AudioMixer? Mixer => _mixer;
 
-    #region Public Methods
+    public bool IsInitialized => _mixer != null && OwnaudioNet.IsInitialized;
 
     /// <summary>
-    /// Initializes the audio engine asynchronously to avoid blocking the UI thread.
-    /// Creates the AudioMixer with a 2048-frame buffer for stable playback.
+    /// Native output died - unplug, sleep/wake, rate change. Raised off the mixer's control thread.
     /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    public event EventHandler<AudioStreamFaultEventArgs>? StreamFaulted;
+
+    /// <summary>
+    /// Every source ran out. Off the native end-of-stream latch, not the UI thread either.
+    /// </summary>
+    public event EventHandler? PlaybackEnded;
+
+    /// <summary>
+    /// Opens the engine on the default device and starts a mixer on it. A second call does nothing.
+    /// </summary>
     public async Task InitializeAsync()
     {
-        if (_isInitialized)
-            return;
+        if (IsInitialized) return;
 
         var config = OwnaudioNet.CreateDefaultConfig();
-        config.EnableInput = false;
-        config.HostType = Ownaudio.Core.EngineHostType.None;
         await OwnaudioNet.InitializeAsync(config);
-
         OwnaudioNet.Start();
 
-        if (OwnaudioNet.Engine != null)
-        {
-            _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 1024);
-            _mixer.Start();
-        }
-
-        _isInitialized = true;
+        _mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: config.BufferSize);
+        _mixer.StreamFaulted += _onStreamFaulted;
+        _mixer.PlaybackEnded += _onPlaybackEnded;
+        _mixer.Start();
     }
 
-    /// <summary>
-    /// Restarts the audio engine and mixer from scratch.
-    /// This is the safest way to ensure clean state after track changes.
-    /// Performs complete cleanup with minimal blocking time.
-    /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task RestartAsync()
-    {
-        if (!_isInitialized)
-            return;
+    private void _onStreamFaulted(object? sender, AudioStreamFaultEventArgs e) => StreamFaulted?.Invoke(this, e);
 
-        // Stop and dispose existing mixer
-        _mixer?.Stop();
-        _mixer?.Dispose();
-        _mixer = null;
-
-        // Stop and shutdown audio engine
-        await OwnaudioNet.StopAsync();
-        await OwnaudioNet.ShutdownAsync();
-
-        // Brief wait for resources to be released (reduced from 200ms to 50ms)
-        await Task.Delay(50);
-
-        // Restart audio engine
-        OwnaudioNet.Initialize();
-        OwnaudioNet.Start();
-
-        // Create new mixer
-        if (OwnaudioNet.Engine != null)
-        {
-            _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 4096);
-            _mixer.Start();
-        }
-    }
-
-    #endregion
-
-    #region IDisposable Implementation
+    private void _onPlaybackEnded(object? sender, EventArgs e) => PlaybackEnded?.Invoke(this, e);
 
     /// <summary>
-    /// Releases all resources used by the AudioService.
-    /// Stops and disposes the mixer, and shuts down the audio engine.
+    /// Mixer first, then the engine. Each step on its own, a faulted device throws from the
+    /// mixer's dispose and that must not skip the engine shutdown.
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
-            return;
+        if (_disposed) return;
 
-        _mixer?.Stop();
-        _mixer?.Dispose();
-        _mixer = null;
+        if (_mixer != null)
+        {
+            _mixer.StreamFaulted -= _onStreamFaulted;
+            _mixer.PlaybackEnded -= _onPlaybackEnded;
 
-        OwnaudioNet.Stop();
-        OwnaudioNet.Shutdown();
+            _step("Mixer stop", _mixer.Stop);
+            _step("Mixer dispose", _mixer.Dispose);
+            _mixer = null;
+        }
 
-        _isInitialized = false;
+        if (OwnaudioNet.IsInitialized)
+        {
+            _step("Engine stop", OwnaudioNet.Stop);
+            _step("Engine shutdown", OwnaudioNet.Shutdown);
+        }
+
         _disposed = true;
     }
 
-    #endregion
+    private static void _step(string what, Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { Log.Error($"[AudioService] {what} threw, carrying on", ex); }
+    }
 }

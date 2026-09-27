@@ -1,4 +1,3 @@
-using Logger;
 using Ownaudio.Core;
 using OwnaudioNET.Core;
 using OwnaudioNET.Effects;
@@ -17,9 +16,9 @@ public class TestProgram
 {
     public static async Task Main(string[] args)
     {
-        Log.Info("=== OwnaudioNET AudioMixer Demonstration ===\n");
-        Log.Info("This program demonstrates audio playback using the AudioMixer");
-        Log.Info("with a FileSource at 80% volume.\n");
+        Console.WriteLine("=== OwnaudioNET AudioMixer Demonstration ===\n");
+        Console.WriteLine("This program demonstrates audio playback using the AudioMixer");
+        Console.WriteLine("with a FileSource at 80% volume.\n");
 
         AudioMixer? mixer = null;
         FileSource? fileSource0 = null;
@@ -30,7 +29,7 @@ public class TestProgram
         try
         {
             // Step 1: Initialize Audio Engine
-            Log.Info("[1/6] Initializing audio engine...");
+            Console.WriteLine("[1/6] Initializing audio engine...");
 
             // Use the standard OwnaudioNet API - it uses the Rust-backed engine (cpal)
             AudioConfig config = new AudioConfig()
@@ -44,19 +43,19 @@ public class TestProgram
             // Initialize via OwnaudioNet (uses AudioEngineFactory internally)
             OwnaudioNet.Initialize(config);
 
-            Log.Info($"  ✓ Initialized: {OwnaudioNet.IsInitialized}");
-            Log.Info($"  ✓ Version: {OwnaudioNet.Version}");
-            Log.Info($"  ✓ Engine Wrapper: {OwnaudioNet.Engine?.GetType().Name}");
-            Log.Info($"  ✓ Underlying Engine: {OwnaudioNet.Engine?.UnderlyingEngine.GetType().Name}");
-            Log.Info($"  ✓ Sample Rate: {OwnaudioNet.Engine?.Config.SampleRate} Hz");
+            Console.WriteLine($"  ✓ Initialized: {OwnaudioNet.IsInitialized}");
+            Console.WriteLine($"  ✓ Version: {OwnaudioNet.Version}");
+            Console.WriteLine($"  ✓ Engine Wrapper: {OwnaudioNet.Engine?.GetType().Name}");
+            Console.WriteLine($"  ✓ Underlying Engine: {OwnaudioNet.Engine?.UnderlyingEngine.GetType().Name}");
+            Console.WriteLine($"  ✓ Sample Rate: {OwnaudioNet.Engine?.Config.SampleRate} Hz");
             Console.WriteLine($"  ✓ Channels: {OwnaudioNet.Engine?.Config.Channels}");
             Console.WriteLine($"  ✓ Buffer Size: {OwnaudioNet.Engine?.FramesPerBuffer} frames");
             Console.WriteLine($"  ✓ Expected Latency: {(OwnaudioNet.Engine?.FramesPerBuffer / (double)OwnaudioNet.Engine?.Config.SampleRate! * 1000):F2} ms");
 
 
             // Get current audio device information
-            var outputDevices = OwnaudioNet.Engine?.UnderlyingEngine.GetOutputDevices();
-            if (outputDevices != null && outputDevices.Count > 0)
+            var outputDevices = OwnaudioNet.GetOutputDevices();
+            if (outputDevices.Count > 0)
             {
                 AudioDeviceInfo? currentDevice = null;
 
@@ -317,13 +316,10 @@ public class TestProgram
             Console.WriteLine($"  ✓ Drum bus attached to clock: {drumBus.IsAttachedToClock}");
             Console.WriteLine($"  ✓ File source state: {drumBus.State}");
 
-            // Subscribe to dropout events for monitoring
-            mixer.TrackDropout += (sender, e) =>
+            //Device loss or a backend error on the native output, the playback goes silent after it
+            mixer.StreamFaulted += (sender, e) =>
             {
-                Console.WriteLine($"\n  ! Track dropout: {e.TrackName}");
-                Console.WriteLine($"    At time: {e.MasterTimestamp:F3}s");
-                Console.WriteLine($"    Missed frames: {e.MissedFrames}");
-                Console.WriteLine($"    Reason: {e.Reason}");
+                Console.WriteLine($"\n  ! Stream fault: {e.Kind} on {e.Direction} ({e.ErrorCount} errors so far)");
             };
 
             mixer.Start();
@@ -466,7 +462,7 @@ public class TestProgram
             // Display Final Statistics
             Console.WriteLine("\n=== FINAL STATISTICS ===");
             Console.WriteLine($"  Total mixed frames: {mixer.TotalMixedFrames}");
-            Console.WriteLine($"  Total underruns: {mixer.TotalUnderruns}");
+            Console.WriteLine($"  Render load: {mixer.SessionLoad?.ToString() ?? "n/a"}");
             Console.WriteLine($"  Master volume: {mixer.MasterVolume:P0}");
             Console.WriteLine($"  Source state: {drumBus.State}");
             Console.WriteLine($"  Final position: {drumBus.Position:F2}s / {drumBus.Duration:F2}s");

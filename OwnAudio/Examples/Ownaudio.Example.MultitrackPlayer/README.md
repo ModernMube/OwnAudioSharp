@@ -1,253 +1,96 @@
 # OwnAudio Multitrack Player
 
-A professional multitrack audio player built with Avalonia UI and the OwnAudioSharp library. **Now featuring the new MasterClock timeline-based synchronization system (v2.4.0+)!**
+A small Avalonia multitrack player on top of OwnAudioSharp 4.x. It is a trimmed-down take on how a
+full backing-track player drives the library: one mixer, every track on the master clock, the
+transport talking to the mixer, and the master bus carrying a plugin and the Smart Master.
 
-## Features
+## What it does
 
-### Core Audio Features (Updated for v2.4.0+)
-- **Multitrack Playback**: Load and play multiple audio tracks simultaneously (WAV, MP3, FLAC)
-- **NEW: Timeline-Based Synchronization**: Sample-accurate sync using MasterClock (timestamp-based)
-- **NEW: Dropout Monitoring**: Real-time notifications and statistics for buffer underruns
-- **NEW: Start Offset Support**: DAW-style regions - tracks can start at different timeline positions
-- **Real-time Mixing**: Professional audio mixing with per-track volume controls
-- **Global Tempo & Pitch**: Tempo and pitch shifting applied globally to all synchronized tracks (like professional DAWs)
-- **Zero-Allocation Design**: Optimized for minimal heap activity and low CPU usage
+- **Tracks** — load WAV, MP3 or FLAC files; each track has a volume fader, mute, solo, a stereo
+  level meter and a remove button. A track added while playing joins in at the current position.
+- **Transport** — Play, Pause, Stop and a seek slider. The song stops by itself when every track
+  has run out.
+- **Master** — master volume and meter, global tempo (the library's allowed range) and pitch
+  (±12 semitones) for every track, and a Reset button.
+- **Plugin** — one effect plugin on the master bus: VST3 on every platform, AudioUnit on macOS as
+  well. Load, bypass, open its editor, remove.
+- **Smart Master** — on/off, speaker preset, and saving or loading its settings as
+  `*.smartmaster.json`.
+- **DSP load** — the status bar shows how much of each render block the engine uses. A peak at
+  100 % means a block was late, which is a dropout.
 
-### User Interface
-- **Modern Dark Theme**: Professional audio workstation aesthetic
-- **Track Management**:
-  - Add multiple tracks via file picker
-  - Individual volume controls (0-100%)
-  - Mute (M) and Solo (S) buttons per track
-  - Visual track list with file names
-  - Remove tracks individually
-
-- **Master Controls**:
-  - Master volume (0-100%)
-  - Tempo control (50%-200% speed)
-  - Pitch shift (-12 to +12 semitones)
-  - Reset button for all controls
-
-- **NEW: SmartMaster Effect** (v2.5.0+):
-  - Enable/Disable toggle for intelligent audio mastering
-  - Factory preset selection (Default, HiFi, Headphone, Studio, Club, Concert)
-  - Auto-calibration wizard with progress tracking (requires measurement microphone)
-  - Custom preset save/load functionality
-  - Professional processing chain: 30-band EQ, subharmonic synthesis, compression, crossover, phase alignment, limiter
-
-- **NEW: Sync Statistics Panel** (v2.4.0+):
-  - Real-time dropout count display
-  - Last dropout message (track name, missed frames, timestamp)
-  - MasterClock status indicator
-
-- **Playback Controls**: Play, Stop (with seek slider)
-- **Status Display**: Real-time feedback on application state
-
-## Architecture
-
-### Application Structure
+## Layout
 
 ```
-MultitrackPlayer/
-├── Services/
-│   └── AudioService.cs          # Singleton managing audio engine lifecycle
-├── Models/
-│   └── TrackInfo.cs             # Model representing an audio track
-├── ViewModels/
-│   ├── MainWindowViewModel.cs   # Main application logic
-│   └── TrackViewModel.cs        # Individual track view model
-├── Effects/
-│   └── MasterTimeStretchEffect.cs # Tempo/Pitch adapter for SoundTouch
-└── Views/
-    └── MainWindow.axaml         # UI layout
+Services/AudioService.cs                   engine + mixer lifecycle, fault and end-of-playback events
+ViewModels/TrackViewModel.cs               one track: FileSource, fader, mute, solo, meters
+ViewModels/MainWindowViewModel.cs          startup, events, shutdown order
+ViewModels/MainWindowViewModel.Transport.cs  play / pause / stop / seek, position, DSP load
+ViewModels/MainWindowViewModel.Tracks.cs   add / remove, solo, level meters
+ViewModels/MainWindowViewModel.Master.cs   master volume, tempo, pitch
+ViewModels/MainWindowViewModel.Plugin.cs   master plugin (AudioPluginBrowser, VST3PluginHost)
+ViewModels/MainWindowViewModel.SmartMaster.cs  Smart Master
+MainWindow.axaml(.cs)                      the UI, file pickers, seek slider handling
 ```
 
-### Audio Pipeline (NEW - v2.4.0+)
+## How the audio side works
 
-```
-UI Thread
-  └─> MainWindowViewModel
-       └─> AudioService
-            └─> AudioMixer (dedicated thread)
-                 ├─> MasterClock (timeline tracking)
-                 │    └─> CurrentTimestamp (physical time)
-                 │
-                 ├─> Track 1 (FileSource + IMasterClockSource)
-                 │    ├─> Attached to MasterClock by AddSource
-                 │    ├─> StartOffset (timeline position)
-                 │    ├─> ReadSamplesAtTime(timestamp)
-                 │    └─> Automatic drift correction (10ms)
-                 │
-                 ├─> Track 2 (FileSource + IMasterClockSource)
-                 │    └─> ... (same as Track 1)
-                 │
-                 └─> Audio Engine (WASAPI/PulseAudio/CoreAudio)
-                      └─> Dropout Events → UI Updates
-```
+**Startup.** `OwnaudioNet.InitializeAsync` + `OwnaudioNet.Start`, then one `AudioMixer` on
+`OwnaudioNet.Engine.UnderlyingEngine`, started right away. The UI never calls the engine directly.
 
-### Key Components
+**Play from a stopped state.** Every track is registered with `AddSourcePrepared`, which also puts
+it on the mixer's master clock. The mixer is paused while `StartPreparedSources(position)` starts
+them, then `Start` releases them together, so all tracks enter on the same block.
 
-1. **AudioService**: Singleton service managing:
-   - OwnaudioNet engine initialization (async to avoid UI blocking)
-   - AudioMixer lifecycle with MasterClock
-   - Playback state management
-
-2. **MainWindowViewModel** (NEW - v2.4.0+):
-   - Track collection management
-   - Playback control commands (Play, Stop)
-   - MasterClock attachment and synchronization
-   - Dropout event handling and UI updates
-   - Per-track tempo and pitch control
-   - Solo/Mute logic with zero-allocation caching
-
-3. **MasterClock Integration**:
-   - Timeline-based synchronization (timestamp in seconds)
-   - Sample-accurate position tracking
-   - Automatic drift correction (10ms tolerance)
-   - Realtime rendering mode
-   - Seek operations via timeline
-
-4. **Dropout Monitoring**:
-   - Real-time event notifications
-   - UI feedback for buffer underruns
-   - Statistics tracking (total count, last message)
-
-## Building and Running
-
-### Prerequisites
-- .NET 9.0 SDK
-- Windows, Linux, or macOS
-
-### Build
-```bash
-dotnet build MultitrackPlayer.csproj
-```
-
-### Run
-```bash
-dotnet run --project MultitrackPlayer.csproj
-```
-
-## Usage
-
-1. **Launch the Application**: The audio engine initializes automatically in the background
-2. **Add Tracks**: Click "Add Tracks" and select one or more audio files
-3. **Adjust Track Settings**:
-   - Use volume sliders to balance individual tracks (0-100%)
-   - Use "M" (Mute) to silence a track
-   - Use "S" (Solo) to hear only selected tracks
-   - Click "×" to remove a track
-4. **Master Controls**:
-   - Adjust master volume to control overall output level (0-100%)
-   - Change tempo (50%-200%): affects all tracks via SoundTouch
-   - Shift pitch (±12 semitones): 1 octave range
-   - Click "Reset" to restore defaults (100% volume, 100% tempo, 0 semitones)
-5. **Playback**:
-   - Click "Play" to start synchronized playback with MasterClock
-   - Drag the timeline slider to seek to any position
-   - Click "Stop" to stop and reset to the beginning
-6. **Monitor Synchronization** (NEW - v2.4.0+):
-   - Watch "Sync Statistics" panel for dropout count
-   - View last dropout details (track, frames, timestamp)
-   - Zero dropouts = perfect synchronization!
-
-## Technical Highlights
-
-### NEW: MasterClock Synchronization (v2.4.0+)
-- **Timeline-Based**: Physical time in seconds (not frame-based)
-- **Sample-Accurate**: Long precision sample position tracking
-- **Drift Correction**: Automatic resyncing with 10ms tolerance
-- **Global Tempo**: Tempo is applied globally to all synchronized tracks (like professional DAWs)
-- **Start Offset Support**: DAW-style regions (tracks start at different times)
-- **Dropout Events**: Real-time notifications for buffer underruns
-- **Zero Overhead**: Single null check when not using sync features
-
-### Zero-Allocation Audio Processing
-- Uses cached arrays for track iteration (no LINQ allocations)
-- `Span<T>` for stack-allocated audio processing
-- Lock-free ring buffers for cross-thread communication
-- No allocations in the audio processing hot path
-- Debounced slider updates (250ms) to reduce heap activity
-
-### Thread Safety
-- Audio initialization happens async to prevent UI freezing
-- Dedicated mixer thread with highest priority
-- Thread-safe track addition/removal
-- Interlocked operations for MasterClock updates
-- Event-driven UI updates via Dispatcher
-
-### Cross-Platform
-- Single codebase for Windows, Linux, and macOS
-- Platform-specific audio engines selected at runtime:
-  - Windows: WASAPI
-  - Linux: PulseAudio
-  - macOS: Core Audio
-
-## Performance Targets
-- Mix 4+ tracks simultaneously (tested with 22+ tracks)
-- Latency: < 12ms @ 512 buffer size, ~85ms @ 4096 buffer (high track counts)
-- CPU: < 15% single core
-- Zero allocations in mix loop
-- Zero dropouts under normal operation
-- Drift correction: < 10ms deviation
-- UI updates: 4 times/second (250ms interval)
-
-## Dependencies
-- **Avalonia** (11.3.9): Cross-platform UI framework
-- **CommunityToolkit.Mvvm** (8.4.0): Modern MVVM toolkit
-- **OwnaudioNET** (v2.4.0+): Core audio library with MasterClock
-- **SoundTouch.NET** (2.3.2): Time-stretching and pitch-shifting
-- **OwnAudioEngine**: Platform-specific audio I/O (WASAPI/PulseAudio/CoreAudio)
-
-## What's New in v2.4.0
-
-### MasterClock Timeline Synchronization
-This version introduces a major architectural upgrade from the legacy GhostTrack system to the new **MasterClock** timeline-based synchronization.
-
-**Legacy (Deprecated - will be removed in v3.0.0):**
 ```csharp
-// OLD: GhostTrack + AudioSynchronizer
-mixer.CreateSyncGroup("MainTracks", sources);
-mixer.SetSyncGroupTempo("MainTracks", 1.5f);
-mixer.StartSyncGroup("MainTracks");
+mixer.Seek(start);
+foreach (var t in tracks) mixer.AddSourcePrepared(t.Source);
+mixer.Pause();
+mixer.StartPreparedSources(start);
+mixer.Start();
 ```
 
-**NEW (v2.4.0+):**
-```csharp
-// NEW: MasterClock attachment, done by the mixer
-foreach (var source in sources) {
-    if (source is IMasterClockSource clockSource) {
-        clockSource.StartOffset = 0.0; // Optional: DAW regions — set before adding
-    }
-    mixer.AddSource(source);           // attaches the source to mixer.MasterClock
-    source.Play();
-}
+**Pause / resume.** `mixer.Pause()` plus `Pause()` on each source; everything stays on the mixer.
+Resume is `Play()` on each source and `mixer.Start()`.
+
+**Stop.** The sources stop, `mixer.Seek(0)`, and they come off the mixer with `RemoveSource`.
+They stay loaded on their tracks for the next Play.
+
+**Seek.** Always `mixer.Seek(seconds)`. It moves the master clock together with every native
+track. Moving one source or the clock by hand does not work: in native mode the clock follows the
+tracks and is overwritten on the next tick.
+
+**Position.** `mixer.MasterClock.CurrentTimestamp`, in project time, so a tempo change is already
+in it. The duration shown is the longest file divided by the tempo.
+
+**Tempo and pitch.** `SetTempoSmooth` / `SetPitchSmooth` on each `FileSource`. They glide over
+without flushing buffers, so they can follow the slider on every step.
+
+**Solo and mute.** One solo anywhere sets `SoloActive` on every track, and each track works out its
+own level (`Level`) from volume, mute and solo in one place.
+
+**End of song and device loss.** `AudioMixer.PlaybackEnded` stops the transport when every source
+ran out; `AudioMixer.StreamFaulted` stops it when the output device goes away.
+
+**Master chain.** The plugin is loaded with `VST3PluginHost.CreateAsync`, checked with `IsEffect`,
+prepared with `InitializeAudioAsync`, and its processor goes on with `AddMasterEffect`. The on/off
+switch is a bypass (`Enabled`), not a removal, so the chain latency never changes under the mix.
+The Smart Master is created the first time it is switched on and always stays last in the chain.
+
+**Shutdown.** The mixer is disposed first (it disposes the master effects it holds), then the
+engine, then the plugin host, and the track sources last.
+
+## Build and run
+
+```bash
+dotnet run --project OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/Ownaudio.Example.MultitrackPlayer.csproj
 ```
 
-**Benefits:**
-- ✅ Timeline-based (seconds) vs frame-based synchronization
-- ✅ Sample-accurate drift correction (10ms tolerance)
-- ✅ Real-time dropout event notifications
-- ✅ Global tempo control (all tracks synchronized, like professional DAWs)
-- ✅ Start offset support (DAW-style regions)
-- ✅ Simpler API (no sync groups needed)
-- ✅ Zero overhead when not using sync features
+Requires the .NET 10 SDK. The native engine comes prebuilt from `OwnAudioEngine/OwnAudioRust/runtimes`.
 
-### Migration Guide
-The application has been fully migrated to the new MasterClock API:
-- `Timer_Tick()`: Uses `mixer.MasterClock.CurrentTimestamp`
-- `PlayAsync()`: Direct clock attachment per track
-- `StopAsync()`: Individual track stop + clock reset
-- `EndSeek()`: Direct clock seek operations
-- `OnTempoPercentChanged()`: Direct per-track tempo updates
+## Not included
 
-**Legacy code still works** but shows deprecation warnings. Update to the new API before v3.0.0 release.
-
-## License
-This example is part of the OwnAudioSharp project.
-
-## Contributing
-This example demonstrates best practices for building a professional multitrack audio application with OwnAudioSharp. It showcases the new MasterClock synchronization system introduced in v2.4.0. Feel free to use it as a starting point for your own projects!
+Room measurement and microphone monitoring for the Smart Master are left out of this example.
 
 ---
 
