@@ -54,9 +54,11 @@ Decoding is pure Rust too — no external codecs, no FFmpeg, no system dependenc
   </a>
 </div>
 
-I built a Suno-like AI that writes and generates whole songs **locally, on your own computer** —
-no cloud, no subscription — with OwnAudioSharp doing the audio. Give it a try and use it freely,
-just for fun: **[github.com/ModernMube/OwnMusicAi](https://github.com/ModernMube/OwnMusicAi)**
+OwnMusicAi generates whole songs **locally, on your own computer** — no cloud, no subscription.
+The music itself comes from **YuE2-3B**, a recently released open model; the AI is not my work.
+What I built is the application around it: the program that drives the model, with OwnAudioSharp
+doing the audio. Give it a try and use it freely, just for fun:
+**[github.com/ModernMube/OwnMusicAi](https://github.com/ModernMube/OwnMusicAi)**
 
 ---
 
