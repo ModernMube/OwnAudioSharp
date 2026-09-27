@@ -2162,7 +2162,6 @@ namespace OwnaudioNET.Visualization
         public bool LoadFromAudioFile(string filePath, int maxSamples = 100000, bool preferFFmpeg = false, int channels = 1, int sampleRate = 44100) { }
         public System.Threading.Tasks.Task<bool> LoadFromAudioFileAsync(string filePath, int maxSamples = 100000, bool preferFFmpeg = false, int channels = 1, int sampleRate = 44100, System.Threading.CancellationToken cancellationToken = default) { }
         public bool LoadFromAudioStream(System.IO.Stream stream, Ownaudio.Decoders.AudioFormat audioFormat, bool preferFFmpeg = false, int channels = 1, int sampleRate = 44100) { }
-        protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e) { }
         protected override void OnPointerMoved(Avalonia.Input.PointerEventArgs e) { }
         protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e) { }
         protected override void OnPointerReleased(Avalonia.Input.PointerReleasedEventArgs e) { }

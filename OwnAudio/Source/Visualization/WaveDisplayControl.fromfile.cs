@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using Logger;
 using Ownaudio.Decoders;
 using System.Buffers;
@@ -13,29 +14,19 @@ namespace OwnaudioNET.Visualization
         public bool LoadFromAudioFile(string filePath, int maxSamples = 100000, bool preferFFmpeg = false,
             int channels = 1, int sampleRate = 44100)
         {
-            if (string.IsNullOrEmpty(filePath)) throw new ArgumentNullException(nameof(filePath));
-
-            if (!File.Exists(filePath))
-            {
-                Log.Error($"[WaveDisplay] '{filePath}' does not exist, waveform left empty");
-                return false;
-            }
-
             ResetView();
-            try {
-                using var decoder = AudioDecoderFactory.Create(filePath, sampleRate, channels);
-                return ProcessDecoderData(decoder, maxSamples);
-            }
-            catch (Exception ex) {
-                Log.Error($"[WaveDisplay] Cannot decode '{filePath}', waveform left empty", ex);
-                return false;
-            }
+            return ShowData(ReadFile(filePath, maxSamples, channels, sampleRate));
         }
 
-        // same but off the UI thread
-        public Task<bool> LoadFromAudioFileAsync(string filePath, int maxSamples = 100000, bool preferFFmpeg = false,
+        // same but the decode runs on the thread pool, the view is only touched on the UI thread
+        public async Task<bool> LoadFromAudioFileAsync(string filePath, int maxSamples = 100000, bool preferFFmpeg = false,
             int channels = 1, int sampleRate = 44100, CancellationToken cancellationToken = default)
-            => Task.Run(() => LoadFromAudioFile(filePath, maxSamples, preferFFmpeg, channels, sampleRate), cancellationToken);
+        {
+            await Dispatcher.UIThread.InvokeAsync(ResetView);
+            var data = await Task.Run(() => ReadFile(filePath, maxSamples, channels, sampleRate), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return await Dispatcher.UIThread.InvokeAsync(() => ShowData(data));
+        }
 
         // load waveform from stream, audioFormat tells the decoder what's inside (wav/mp3/flac)
         public bool LoadFromAudioStream(Stream stream, AudioFormat audioFormat, bool preferFFmpeg = false,
@@ -46,7 +37,7 @@ namespace OwnaudioNET.Visualization
             ResetView();
             try {
                 using var decoder = AudioDecoderFactory.Create(stream, audioFormat, sampleRate, channels);
-                return ProcessDecoderData(decoder, _maxsample);
+                return ShowData(ReadSamples(decoder, _maxsample));
             }
             catch (Exception ex) {
                 Log.Error($"[WaveDisplay] Cannot decode the {audioFormat} stream, waveform left empty", ex);
@@ -58,25 +49,57 @@ namespace OwnaudioNET.Visualization
         void ResetView()
         {
             _audioData = null;
+            _wave = null;
             ZoomFactor = 1.0;
             ScrollOffset = 0.0;
             InvalidateVisual();
         }
 
-        // decode whole stream, downsample to maxSamples, channels averaged to mono
-        bool ProcessDecoderData(IAudioDecoder decoder, int maxSamples)
+        bool ShowData(float[]? data)
+        {
+            if (data == null) return false;
+            _audioData = data;
+            _wave = null;
+            InvalidateVisual();
+            return true;
+        }
+
+        // no UI state in here, safe off the UI thread; null = nothing to show
+        static float[]? ReadFile(string filePath, int maxSamples, int channels, int sampleRate)
+        {
+            if (string.IsNullOrEmpty(filePath)) throw new ArgumentNullException(nameof(filePath));
+
+            if (!File.Exists(filePath))
+            {
+                Log.Error($"[WaveDisplay] '{filePath}' does not exist, waveform left empty");
+                return null;
+            }
+
+            try {
+                using var decoder = AudioDecoderFactory.Create(filePath, sampleRate, channels);
+                return ReadSamples(decoder, maxSamples);
+            }
+            catch (Exception ex) {
+                Log.Error($"[WaveDisplay] Cannot decode '{filePath}', waveform left empty", ex);
+                return null;
+            }
+        }
+
+        // decode whole stream, downsample to maxSamples, channels averaged to mono.
+        // The array is sized from the duration up front, so a normal file costs exactly one allocation
+        static float[]? ReadSamples(IAudioDecoder decoder, int maxSamples)
         {
             var info = decoder.StreamInfo;
-            if (info.Channels == 0 || info.SampleRate == 0) return false;
+            if (info.Channels == 0 || info.SampleRate == 0) return null;
 
-            long estimated = (long)(info.Duration.TotalSeconds * info.SampleRate * info.Channels);
-            int step = Math.Max(1, (int)(estimated / maxSamples));
-            int ch = info.Channels, counter = 0;
+            long frames = (long)(info.Duration.TotalSeconds * info.SampleRate);
+            int step = (int)Math.Max(1, (frames + maxSamples - 1) / maxSamples);
+            int ch = info.Channels, counter = 0, count = 0;
 
-            var samples = new List<float>(maxSamples);
+            var samples = new float[frames > 0 ? (int)Math.Min(maxSamples, (frames + step - 1) / step) : maxSamples];
             var byteBuffer = ArrayPool<byte>.Shared.Rent(4096 * ch * sizeof(float));
             try {
-                while (samples.Count < maxSamples)
+                while (count < samples.Length)
                 {
                     var result = decoder.ReadFrames(byteBuffer);
                     if (result.IsEOF || !result.IsSucceeded) break;
@@ -85,23 +108,22 @@ namespace OwnaudioNET.Visualization
                     var floats = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(
                         byteBuffer.AsSpan(0, result.FramesRead * ch * sizeof(float)));
 
-                    for (int i = 0; i + ch <= floats.Length && samples.Count < maxSamples; i += ch)
+                    for (int i = 0; i + ch <= floats.Length && count < samples.Length; i += ch)
                     {
                         if (counter++ % step == 0)
                         {
                             float s = 0f;
                             for (int c = 0; c < ch; c++) s += floats[i + c];
-                            samples.Add(s / ch);
+                            samples[count++] = s / ch;
                         }
                     }
                 }
             }
             finally { ArrayPool<byte>.Shared.Return(byteBuffer); }
 
-            if (samples.Count == 0) return false;
-            _audioData = samples.ToArray();
-            InvalidateVisual();
-            return true;
+            if (count == 0) return null;
+            if (count < samples.Length) Array.Resize(ref samples, count);
+            return samples;
         }
     }
 }

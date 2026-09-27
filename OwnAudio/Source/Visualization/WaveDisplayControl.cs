@@ -1,26 +1,23 @@
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
-using System.Buffers;
 
 namespace OwnaudioNET.Visualization
 {
     /// <summary>
-    /// Waveform view for Avalonia. Zoom + scroll + click/drag to seek, no GC in render.
+    /// Waveform view for Avalonia. Zoom + scroll + click/drag to seek. The wave is built into
+    /// one geometry and kept until data, size or view changes, so a moving playhead is one line.
     /// </summary>
     public partial class WaveAvaloniaDisplay : Avalonia.Controls.Control
     {
         private float[]? _audioData;
 
-        // pooled scratch buffer, filled with line-pair points every frame
-        private readonly ArrayPool<Point> _pointPool = ArrayPool<Point>.Shared;
-        private Point[] _pointCache;
-        private int _pointCacheSize;
-        private int _pointCacheCapacity = 1000;
+        // the wave as drawn last time, null = rebuild on next render
+        private StreamGeometry? _wave;
+        private Size _waveSize;
 
         private Pen _waveformPen;
         private Pen _playbackPen;
-        private readonly Point[] _linePoints = new Point[2];
 
         private bool _dragging;
         private bool _updatingProps;   // stops scroll<->playhead feedback loop
@@ -129,25 +126,27 @@ namespace OwnaudioNET.Visualization
         public WaveAvaloniaDisplay()
         {
             MinHeight = 50;
-            _pointCache = _pointPool.Rent(_pointCacheCapacity);
-            _waveformPen = new Pen(WaveformBrush);
+            _waveformPen = WavePen(WaveformBrush);
             _playbackPen = new Pen(PlaybackPositionBrush, 2);
         }
+
+        // bevel, a miter join spikes out on the sharp turns of a zoomed-in wave
+        static Pen WavePen(IBrush brush) => new Pen(brush, lineJoin: PenLineJoin.Bevel);
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
             var p = change.Property;
 
-            if (p == WaveformBrushProperty) _waveformPen = new Pen(WaveformBrush);
+            if (p == WaveformBrushProperty) _waveformPen = WavePen(WaveformBrush);
             else if (p == PlaybackPositionBrushProperty) _playbackPen = new Pen(PlaybackPositionBrush, 2);
-            else if (p == ZoomFactorProperty) ValidateScrollOffset();
+            else if (p == ZoomFactorProperty) { ValidateScrollOffset(); _wave = null; }
             else if (p == PlaybackPositionProperty)
             {
                 if (AutoFollow && !_dragging && !_updatingProps) UpdateAutoFollow();
             }
-            else if (p != VerticalScaleProperty && p != DisplayStyleProperty &&
-                     p != ScrollOffsetProperty && p != AutoFollowProperty) return;
+            else if (p == VerticalScaleProperty || p == DisplayStyleProperty || p == ScrollOffsetProperty) _wave = null;
+            else if (p != AutoFollowProperty) return;
 
             InvalidateVisual();
         }
@@ -179,6 +178,7 @@ namespace OwnaudioNET.Visualization
         public void SetAudioData(float[] audioData)
         {
             _audioData = audioData;
+            _wave = null;
             ZoomFactor = 1.0;
             ScrollOffset = 0.0;
             PlaybackPosition = 0.0;
@@ -194,64 +194,66 @@ namespace OwnaudioNET.Visualization
             base.Render(context);
             if (_audioData == null || _audioData.Length == 0) return;
 
-            double width = Bounds.Width, height = Bounds.Height, centerY = height / 2;
-            float vScale = (float)(centerY * VerticalScale);
+            double width = Bounds.Width, height = Bounds.Height;
 
             int total = _audioData.Length;
-            double zoom = Math.Max(1.0, ZoomFactor);
-            double spp = total / (zoom * width);
+            double spp = total / (Math.Max(1.0, ZoomFactor) * width);
             double start = Math.Clamp(total * ScrollOffset, 0.0, Math.Max(0.0, total - spp * width));
 
-            EnsurePointCache((int)width * 2);
-            _pointCacheSize = 0;
-
-            if (spp < 1.0) RenderSamples(centerY, vScale, start, spp);
-            else RenderBlocks(width, height, centerY, vScale, start, spp);
-
-            for (int i = 0; i + 1 < _pointCacheSize; i += 2)
-                context.DrawLine(_waveformPen, _pointCache[i], _pointCache[i + 1]);
+            if (_wave == null || _waveSize != Bounds.Size)
+            {
+                _wave = BuildWave(width, height, start, spp);
+                _waveSize = Bounds.Size;
+            }
+            context.DrawGeometry(null, _waveformPen, _wave);
 
             double px = SampleToPixel(PlaybackPosition * total, start, spp);
             if ((px >= 0 && px <= width) || AutoFollow)
             {
                 double x = Math.Clamp(px, 0, width);
                 x = _playbackPen.Thickness % 2 != 0 ? Math.Floor(x) + 0.5 : Math.Round(x);
-                _linePoints[0] = new Point(x, 0);
-                _linePoints[1] = new Point(x, height);
-                context.DrawLine(_playbackPen, _linePoints[0], _linePoints[1]);
+                context.DrawLine(_playbackPen, new Point(x, 0), new Point(x, height));
             }
         }
 
-        void EnsurePointCache(int required)
+        // the whole visible wave as one figure set, only redone when the view moves
+        StreamGeometry BuildWave(double width, double height, double start, double spp)
         {
-            if (_pointCache != null && _pointCacheCapacity >= required) return;
-            if (_pointCache != null) _pointPool.Return(_pointCache);
-            _pointCacheCapacity = Math.Max(required, 1000);
-            _pointCache = _pointPool.Rent(_pointCacheCapacity);
+            double centerY = height / 2;
+            float vScale = (float)(centerY * VerticalScale);
+
+            var geometry = new StreamGeometry();
+            using (var ctx = geometry.Open())
+            {
+                if (spp < 1.0) RenderSamples(ctx, width, centerY, vScale, start, spp);
+                else RenderBlocks(ctx, width, height, centerY, vScale, start, spp);
+            }
+            return geometry;
         }
 
         // zoomed in past 1 sample/px: connect the actual samples
-        void RenderSamples(double centerY, float vScale, double start, double spp)
+        void RenderSamples(StreamGeometryContext ctx, double width, double centerY, float vScale, double start, double spp)
         {
             var data = _audioData!;
             int first = (int)Math.Max(0, Math.Floor(start));
-            int last = (int)Math.Min(data.Length, Math.Ceiling(start + Bounds.Width * spp) + 1);
+            int last = (int)Math.Min(data.Length, Math.Ceiling(start + width * spp) + 1);
             if (first >= data.Length) return;
 
-            double prevX = SampleToPixel(first, start, spp);
-            double prevY = centerY + data[first] * vScale;
+            ctx.BeginFigure(new Point(SampleToPixel(first, start, spp), centerY + data[first] * vScale), false);
             for (int i = first + 1; i < last; i++)
-            {
-                double x = SampleToPixel(i, start, spp);
-                double y = centerY + data[i] * vScale;
-                _pointCache[_pointCacheSize++] = new Point(prevX, prevY);
-                _pointCache[_pointCacheSize++] = new Point(x, y);
-                prevX = x; prevY = y;
-            }
+                ctx.LineTo(new Point(SampleToPixel(i, start, spp), centerY + data[i] * vScale));
+            ctx.EndFigure(false);
+        }
+
+        static void Column(StreamGeometryContext ctx, double x, double y0, double y1)
+        {
+            ctx.BeginFigure(new Point(x, y0), false);
+            ctx.LineTo(new Point(x, y1));
+            ctx.EndFigure(false);
         }
 
         // one column per pixel, style decides what the column shows
-        void RenderBlocks(double width, double height, double centerY, float vScale, double start, double spp)
+        void RenderBlocks(StreamGeometryContext ctx, double width, double height, double centerY, float vScale, double start, double spp)
         {
             var data = _audioData!;
             var style = DisplayStyle;
@@ -272,19 +274,13 @@ namespace OwnaudioNET.Visualization
                     sum += s * s;
                 }
 
-                if (style == WaveformDisplayStyle.MinMax) {
-                    _pointCache[_pointCacheSize++] = new Point(x, centerY + min * vScale);
-                    _pointCache[_pointCacheSize++] = new Point(x, centerY + max * vScale);
-                }
-                else if (style == WaveformDisplayStyle.Positive) {
-                    float peak = Math.Max(Math.Abs(min), max);
-                    _pointCache[_pointCacheSize++] = new Point(x, height);
-                    _pointCache[_pointCacheSize++] = new Point(x, height - peak * vScale);
-                }
+                if (style == WaveformDisplayStyle.MinMax)
+                    Column(ctx, x, centerY + min * vScale, centerY + max * vScale);
+                else if (style == WaveformDisplayStyle.Positive)
+                    Column(ctx, x, height, height - Math.Max(Math.Abs(min), max) * vScale);
                 else {
                     float rms = (float)Math.Sqrt(sum / (s1 - s0));
-                    _pointCache[_pointCacheSize++] = new Point(x, centerY + rms * vScale);
-                    _pointCache[_pointCacheSize++] = new Point(x, centerY - rms * vScale);
+                    Column(ctx, x, centerY + rms * vScale, centerY - rms * vScale);
                 }
             }
         }
@@ -372,16 +368,6 @@ namespace OwnaudioNET.Visualization
             }
             double maxOff = Math.Max(0.0, 1.0 - 1.0 / ZoomFactor);
             if (ScrollOffset > maxOff) ScrollOffset = maxOff;
-        }
-
-        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
-        {
-            base.OnDetachedFromVisualTree(e);
-            if (_pointCache != null)
-            {
-                _pointPool.Return(_pointCache);
-                _pointCache = null!;
-            }
         }
     }
 }
