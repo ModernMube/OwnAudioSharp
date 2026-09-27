@@ -1,157 +1,53 @@
-using Ownaudio.Core;
 using OwnaudioNET.Effects.SmartMaster.Components;
-using OwnaudioNET.Sources;
 using Logger;
 
 namespace OwnaudioNET.Effects.SmartMaster
 {
     /// <summary>
-    /// The spectrum half of the measurement: the sweep itself, the mono downmix and turning the
-    /// measured curve into correction values.
+    /// The spectrum half of the measurement: the reference run, the room curve against it and
+    /// turning that curve into correction values.
     /// </summary>
     internal sealed partial class SmartMasterMeasurementService
     {
         /// <summary>
-        /// Spectrum analysis, hands back the low end verdict too.
+        /// Band levels of the reference run and the rate they were taken at. Nobody writes into
+        /// the array afterwards, so one copy serves every measurement.
         /// </summary>
-        private async Task<LowEndReading> AnalyzeSpectrumAsync(MeasurementResults results, float micInputGain, CancellationToken cancellationToken)
+        private static float[]? _reference;
+        private static int _referenceRate;
+
+        /// <summary>
+        /// The same noise the speakers get, through the same analyzer. Subtracting it takes the
+        /// window's low end smearing and the band edge rounding out, what's left is the room.
+        /// </summary>
+        private float[] _referenceSpectrum()
         {
-            try
-            {
-                if (OwnaudioNET.OwnaudioNet.Engine == null)
-                {
-                    Log.Warning("[SmartMaster] Audio engine not available for measurement");
-                    return default;
-                }
-                
-                int durationSeconds = 4;
-                int sampleCount = _config.SampleRate * durationSeconds;
-                float[] pinkNoise = NoiseGenerator.GeneratePinkNoise(sampleCount, 0.3f);
-                
-                float[] channelAudio = new float[sampleCount * _config.Channels];
-                for (int i = 0; i < sampleCount; i++)
-                {
-                    for (int ch = 0; ch < _config.Channels; ch++)
-                    {
-                        channelAudio[i * _config.Channels + ch] = pinkNoise[i];
-                    }
-                }
-                
-                int noiseCursor = 0;
+            if (_reference != null && _referenceRate == _config.SampleRate) return _reference;
 
-                int playbackFrames = _config.SampleRate * 4;
-                int playbackSamples = playbackFrames * _config.Channels;
-                const int chunkFrames = 512;
-                float[] playbackBuffer = new float[chunkFrames * _config.Channels];
-                
-                int recordDuration = 3000;
-                int recordFrames = _config.SampleRate * recordDuration / 1000;
-                int recordSamples = recordFrames * _config.Channels;
-                float[] recordedBuffer = new float[recordSamples];
-                
-                int totalPlayed = 0;
-                int totalRead = 0;
-                
-                await Task.Delay(200, cancellationToken);
-                
-                int engineBufferCapacity = OwnaudioNET.OwnaudioNet.Engine.FramesPerBuffer * _config.Channels * 2;
-                
-                while (totalPlayed < playbackSamples && totalRead < recordFrames)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    
-                    int bufferOccupied = OwnaudioNET.OwnaudioNet.Engine.OutputBufferAvailable;
-                    int bufferFree = engineBufferCapacity - bufferOccupied;
-                    
-                    if (bufferFree >= 64 * _config.Channels)
-                    {
-                        int framesSpace = bufferFree / _config.Channels;
-                        int framesToPlay = Math.Min(framesSpace, (playbackSamples - totalPlayed) / _config.Channels);
-                        framesToPlay = Math.Min(framesToPlay, 1024);
-                        
-                        if (framesToPlay > 0)
-                        {
-                            if (playbackBuffer.Length < framesToPlay * _config.Channels)
-                            {
-                                playbackBuffer = new float[framesToPlay * _config.Channels];
-                            }
+            var _buffer = new float[_config.SampleRate * 8];
+            new PinkNoise().Render(_buffer, 1, -1);
 
-                            int samplesPlayed = _takeNoise(channelAudio, ref noiseCursor, playbackBuffer.AsSpan(), framesToPlay);
-                            if (samplesPlayed > 0)
-                            {
-                                OwnaudioNET.OwnaudioNet.Send(playbackBuffer.AsSpan(0, samplesPlayed * _config.Channels));
-                                totalPlayed += samplesPlayed * _config.Channels;
-                            }
-                        }
-                    }
-
-                    if (totalPlayed > _config.SampleRate * 500 / 1000)
-                    {
-                        int framesToRecord = Math.Min(512, recordFrames - totalRead);
-                        if (framesToRecord > 0)
-                            totalRead += _captureInto(recordedBuffer, totalRead, framesToRecord, micInputGain);
-                    }
-
-                    await Task.Delay(1, cancellationToken);
-                }
-
-                await FadeOutSourceAsync(channelAudio, noiseCursor, cancellationToken);
-
-                Log.Info($"[SmartMaster] Spectrum recording completed: {totalRead}/{recordFrames} frames");
-                
-                var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
-
-                float[] captured = _monoDownmix(recordedBuffer, totalRead);
-                float[] measuredSpectrum = analyzer.AnalyzeSpectrum(captured);
-                float[] referenceSpectrum = analyzer.AnalyzeSpectrum(pinkNoise);
-
-                float offset = _bandGroupDb(measuredSpectrum, RefBandFirst, RefBandLast)
-                             - _bandGroupDb(referenceSpectrum, RefBandFirst, RefBandLast);
-
-                for (int i = 0; i < SmartMasterConfig.EqBands; i++)
-                {
-                    float measuredDb = 20f * (float)Math.Log10(Math.Max(measuredSpectrum[i], 1e-10f));
-                    float referenceDb = 20f * (float)Math.Log10(Math.Max(referenceSpectrum[i], 1e-10f));
-
-                    results.FrequencyResponse[i] = referenceDb + offset - measuredDb;
-                }
-
-                Log.Info("[SmartMaster] Spectrum analysis completed:");
-                for (int i = 0; i < SmartMasterConfig.EqBands; i++)
-                {
-                    Log.Info($"  Band {i}: {results.FrequencyResponse[i]:+0.0;-0.0} dB");
-                }
-
-                return _evaluateLowEnd(measuredSpectrum, referenceSpectrum, analyzer.CalculateRMSdB(captured));
-            }
-            catch (Exception ex)
-            {
-                Log.Error("[SmartMaster] Spectrum analysis error", ex);
-
-                Array.Clear(results.FrequencyResponse);
-                return default;
-            }
+            _reference = new SmartMasterSpectrumAnalyzer(_config.SampleRate).AnalyzeBuffer(_buffer);
+            _referenceRate = _config.SampleRate;
+            return _reference;
         }
 
         /// <summary>
-        /// Interleaved capture folded to one stream - handing the analyzer the
-        /// interleaved buffer drags every band down an octave.
+        /// Deviation per band, positive where the room is short. Both curves are lined up on
+        /// the midrange first, so the mic's distance and gain don't matter.
         /// </summary>
-        private float[] _monoDownmix(float[] interleaved, int frames)
+        private static void _fillFrequencyResponse(MeasurementResults results, float[] measured, float[] reference)
         {
-            int channels = _config.Channels;
-            var mono = new float[frames];
+            float offset = _bandGroupDb(measured, RefBandFirst, RefBandLast) - _bandGroupDb(reference, RefBandFirst, RefBandLast);
 
-            for (int i = 0; i < frames; i++)
+            for (int i = 0; i < SmartMasterConfig.EqBands; i++)
+                results.FrequencyResponse[i] = reference[i] + offset - measured[i];
+
+            Log.Info("[SmartMaster] Spectrum analysis completed:");
+            for (int i = 0; i < SmartMasterConfig.EqBands; i++)
             {
-                float sum = 0;
-                for (int c = 0; c < channels; c++)
-                    sum += interleaved[i * channels + c];
-
-                mono[i] = sum / channels;
+                Log.Info($"  Band {i}: {results.FrequencyResponse[i]:+0.0;-0.0} dB");
             }
-
-            return mono;
         }
 
         /// <summary>
@@ -167,10 +63,9 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// </summary>
         private static readonly float[] TargetCurve =
         {
-             3.0f,  3.0f,  3.0f,  2.8f,  2.5f,  2.0f,  1.5f,  1.0f,
-             0.5f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,
-             0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f, -0.2f, -0.4f,
-            -0.8f, -1.2f, -1.6f, -2.0f, -2.5f, -3.0f
+             3.0f,  2.8f,  2.6f,  2.3f,  2.0f,  1.7f,  1.4f,  1.0f,  0.7f,  0.4f,
+             0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f, -0.2f,
+            -0.4f, -0.7f, -1.0f, -1.3f, -1.6f, -1.9f, -2.2f, -2.6f, -3.0f, -3.5f
         };
 
         /// <summary>
@@ -180,13 +75,16 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// </summary>
         private void CalculateCorrectionsToConfig(MeasurementResults results, LowEndReading lowEnd, SmartMasterConfig targetConfig)
         {
-            float[] deviation = _smoothedDeviation(results.FrequencyResponse);
+            var wanted = new float[SmartMasterConfig.EqBands];
+            for (int i = 0; i < wanted.Length; i++)
+                wanted[i] = results.FrequencyResponse[i] + TargetCurve[i];
+
+            float[] smoothed = _smoothed(wanted);
 
             for (int i = 0; i < SmartMasterConfig.EqBands; i++)
             {
-                float gain = (deviation[i] + TargetCurve[i]) * CorrectionFactor;
                 float maxBoost = i < 5 ? 2.0f : 6.0f;
-                targetConfig.GraphicEQGains[i] = Math.Clamp(gain, -12.0f, maxBoost);
+                targetConfig.GraphicEQGains[i] = Math.Clamp(smoothed[i] * CorrectionFactor, -12.0f, maxBoost);
             }
 
             targetConfig.TimeDelays = results.ChannelDelays;
@@ -202,6 +100,24 @@ namespace OwnaudioNET.Effects.SmartMaster
             {
                 Log.Info("[SmartMaster] Low end is weak, leaving it to the EQ");
             }
+        }
+
+        /// <summary>
+        /// 1-2-1 weighted over neighbouring bands. A single mic position is full of
+        /// narrow interference dips that say nothing about the system.
+        /// </summary>
+        private static float[] _smoothed(float[] raw)
+        {
+            var smoothed = new float[raw.Length];
+
+            for (int i = 0; i < raw.Length; i++)
+            {
+                float previous = raw[Math.Max(0, i - 1)];
+                float next = raw[Math.Min(raw.Length - 1, i + 1)];
+                smoothed[i] = (previous + raw[i] * 2f + next) * 0.25f;
+            }
+
+            return smoothed;
         }
     }
 }

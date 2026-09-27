@@ -31,6 +31,8 @@ public sealed partial class AudioMixer
 
         //The mixer never calls Process, so the effect only reaches the bus through its native twin
         AttachMasterEffectToRust(effect);
+
+        (effect as IMasterBusAware)?.AttachMixer(this);
     }
 
     /// <summary>
@@ -48,7 +50,11 @@ public sealed partial class AudioMixer
         bool _removed;
         lock (_effectsLock) { _removed = _masterEffects.Remove(effect); }
 
-        if (_removed) DetachMasterEffectFromRust(effect);
+        if (_removed)
+        {
+            DetachMasterEffectFromRust(effect);
+            (effect as IMasterBusAware)?.AttachMixer(null);
+        }
 
         return _removed;
     }
@@ -60,9 +66,16 @@ public sealed partial class AudioMixer
     {
         _throwIfDisposed();
 
-        lock (_effectsLock) { _masterEffects.Clear(); }
+        IEffectProcessor[] _gone;
+        lock (_effectsLock)
+        {
+            _gone = _masterEffects.ToArray();
+            _masterEffects.Clear();
+        }
 
         ClearRustMasterEffects();
+
+        foreach (var effect in _gone) (effect as IMasterBusAware)?.AttachMixer(null);
     }
 
     /// <summary>

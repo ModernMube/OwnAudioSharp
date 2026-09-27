@@ -1,120 +1,208 @@
 using System;
 using System.Threading;
-using System.Threading.Tasks;
-using Ownaudio.Core;
+using Logger;
 using OwnaudioNET.Effects.SmartMaster.Components;
+using OwnaudioNET.Mixing;
+using OwnaudioNET.Monitoring;
 using OwnaudioNET.Sources;
 
 namespace OwnaudioNET.Effects.SmartMaster
 {
     /// <summary>
-    /// Monitors microphone input level for UI feedback.
-    /// Runs on a background thread with optimized memory usage.
+    /// Measurement mic. The capture hangs on the mixer as a muted InputSource and we read it
+    /// through an effect tap, which sits ahead of the track gain - full level with nothing
+    /// fed back into the speakers. The only reader of that tap, the measurement goes through here too.
     /// </summary>
     internal sealed class SmartMasterMicMonitor : IDisposable
     {
-        private readonly AudioConfig _config;
-        private readonly float _micInputGain;
-        
-        private CancellationTokenSource? _cancellation;
-        private Task? _monitoringTask;
+        private const int PollMilliseconds = 40;
+
+        private readonly AudioMixer _mixer;
+        private readonly object _lock = new object();
+        private readonly SmartMasterSpectrumAnalyzer _spectrum;
+
+        private InputSource? _input;
+        private EffectTap? _tap;
+        private Timer? _timer;
+        private float[] _pre = Array.Empty<float>();
+        private float[] _post = Array.Empty<float>();
         private float _lastMicLevel = -100.0f;
+        private double _rmsPower;
+        private long _rmsSamples;
         private bool _disposed;
-        
-        /// <summary>
-        /// Creates a new microphone monitor.
-        /// </summary>
-        /// <param name="config">Audio configuration.</param>
-        /// <param name="micInputGain">Microphone input gain (0.0 - 2.0).</param>
-        public SmartMasterMicMonitor(AudioConfig config, float micInputGain)
+
+        public SmartMasterMicMonitor(AudioMixer mixer)
         {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _micInputGain = micInputGain;
+            _mixer = mixer;
+            _spectrum = new SmartMasterSpectrumAnalyzer(mixer.Config.SampleRate);
         }
-        
+
         /// <summary>
-        /// Gets the last measured microphone level in dB.
+        /// Scales the capture before anything is measured, 1 is unity.
+        /// </summary>
+        public float Gain { get; set; } = 1.0f;
+
+        /// <summary>
+        /// Mic peak in dBFS from the last poll.
         /// </summary>
         public float LastMicLevel => _lastMicLevel;
-        
+
+        public bool IsRunning => _input != null;
+
         /// <summary>
-        /// Starts microphone monitoring.
+        /// Hangs the capture on the mixer and starts polling. False when the engine came up
+        /// without its input side.
         /// </summary>
-        public void Start()
+        public bool Start()
         {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(SmartMasterMicMonitor));
-            
-            if (_monitoringTask != null && !_monitoringTask.IsCompleted)
+            if (_disposed) throw new ObjectDisposedException(nameof(SmartMasterMicMonitor));
+
+            lock (_lock)
             {
-                return; // Already monitoring
+                if (_input != null) return true;
+
+                var _engine = OwnaudioNet.Engine;
+                if (_engine == null || !_engine.Config.EnableInput)
+                {
+                    Log.Warning("[SmartMaster] Audio input is not enabled (AudioConfig.EnableInput), nothing to measure with");
+                    return false;
+                }
+
+                var _source = new InputSource(_engine, 2048);
+                _source.Volume = 0f;
+
+                _mixer.AddSource(_source);
+                _source.Play();
+
+                //200ms of ring, a GC pause must not cost the measurement a window
+                int _capacity = _mixer.Config.SampleRate / 5 * _mixer.Config.Channels;
+
+                try
+                {
+                    _tap = _mixer.CreateEffectTap(_source.Id, _capacity);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("[SmartMaster] Could not tap the mic track", ex);
+                    _mixer.RemoveSource(_source.Id);
+                    _source.Dispose();
+                    return false;
+                }
+
+                if (_pre.Length < _capacity)
+                {
+                    _pre = new float[_capacity];
+                    _post = new float[_capacity];
+                }
+
+                _spectrum.ResetAverage();
+                _input = _source;
+                _timer = new Timer(_ => _poll(), null, PollMilliseconds, PollMilliseconds);
             }
-            
-            _cancellation = new CancellationTokenSource();
-            _monitoringTask = Task.Run(() => MonitoringLoop(_cancellation.Token));
+
+            Log.Info("[SmartMaster] Mic capture running");
+            return true;
         }
-        
-        /// <summary>
-        /// Stops microphone monitoring.
-        /// </summary>
+
         public void Stop()
         {
-            _cancellation?.Cancel();
-            _monitoringTask?.Wait(1000); // Wait up to 1 second
-            _cancellation?.Dispose();
-            _cancellation = null;
-            _monitoringTask = null;
-            _lastMicLevel = -100.0f;
-        }
-        
-        /// <summary>
-        /// Microphone monitoring loop - continuously reads input and updates level.
-        /// OPTIMIZED: Pre-allocates all buffers and analyzer to prevent GC.
-        /// </summary>
-        private void MonitoringLoop(CancellationToken cancellationToken)
-        {
-            try
+            _timer?.Dispose();
+            _timer = null;
+
+            lock (_lock)
             {
-                if (OwnaudioNET.OwnaudioNet.Engine == null || !OwnaudioNET.OwnaudioNet.Engine.Config.EnableInput)
+                var _source = _input;
+                if (_source == null) return;
+
+                _input = null;
+                _tap?.Dispose();
+                _tap = null;
+
+                _mixer.RemoveSource(_source.Id);
+                _source.Dispose();
+
+                _lastMicLevel = -100.0f;
+                _rmsPower = 0;
+                _rmsSamples = 0;
+            }
+
+            Log.Info("[SmartMaster] Mic capture stopped");
+        }
+
+        /// <summary>
+        /// Starts a fresh averaging window, spectrum and RMS both.
+        /// </summary>
+        public void BeginWindow()
+        {
+            lock (_lock)
+            {
+                _spectrum.ResetAverage();
+                _rmsPower = 0;
+                _rmsSamples = 0;
+            }
+        }
+
+        /// <summary>
+        /// Mean band levels in dBFS since BeginWindow, plus the true RMS of the same stretch -
+        /// a band sum carries the window's own gain and reads several dB off.
+        /// </summary>
+        /// <returns>Windows averaged, 0 means the mic never delivered a full one.</returns>
+        public int ReadWindow(float[] bandsDb, out float rmsDb)
+        {
+            lock (_lock)
+            {
+                rmsDb = _rmsSamples > 0
+                    ? (float)Math.Max(10.0 * Math.Log10(Math.Max(_rmsPower / _rmsSamples, 1e-12)), -100.0)
+                    : -100f;
+
+                return _spectrum.Average(bandsDb);
+            }
+        }
+
+        /// <summary>
+        /// Drains the tap once. Timer thread, allocation free.
+        /// </summary>
+        private void _poll()
+        {
+            lock (_lock)
+            {
+                if (_tap == null) return;
+
+                int _read;
+                try { _read = _tap.Read(_pre, _post); }
+                catch (Exception ex)
                 {
-                    Logger.Log.Warning("[SmartMaster] Audio input not available for microphone monitoring");
+                    //A ClearSources took the mic track away under us; a throw here would take the process down
+                    Log.Warning($"[SmartMaster] Mic tap went away, capture stops: {ex.Message}");
+                    _tap = null;
                     return;
                 }
-                
-                var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
 
-                //We pull the engine's capture queue directly - InputSource.ReadSamples is silence
-                //since the capture writes straight into the native track ring.
-                while (!cancellationToken.IsCancellationRequested)
+                if (_read <= 0) return;
+
+                float _gain = Gain;
+                float _peak = 0f;
+
+                for (int i = 0; i < _read; i++)
                 {
-                    float[]? captured = OwnaudioNET.OwnaudioNet.Receive(out int sampleCount);
+                    float _v = _pre[i] * _gain;
+                    _pre[i] = _v;
 
-                    if (captured != null)
-                    {
-                        if (sampleCount > 0)
-                        {
-                            float rmsLevel = analyzer.CalculateRMS(captured.AsSpan(0, sampleCount)) * _micInputGain;
-                            _lastMicLevel = 20f * (float)Math.Log10(Math.Max(rmsLevel, 1e-10f));
-                        }
-
-                        OwnaudioNET.OwnaudioNet.ReturnInputBuffer(captured);
-                    }
-
-                    Thread.Sleep(50); // Update ~20 times per second
+                    float _abs = Math.Abs(_v);
+                    if (_abs > _peak) _peak = _abs;
+                    _rmsPower += (double)_v * _v;
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log.Error("[SmartMaster] Microphone monitoring error", ex);
-                _lastMicLevel = -100.0f;
+
+                _rmsSamples += _read;
+                _lastMicLevel = _peak > 0.00001f ? MathF.Max(20f * MathF.Log10(_peak), -100f) : -100f;
+                _spectrum.Push(_pre.AsSpan(0, _read), _tap.Channels);
             }
         }
-        
+
         public void Dispose()
         {
-            if (_disposed)
-                return;
-            
+            if (_disposed) return;
+
             Stop();
             _disposed = true;
         }

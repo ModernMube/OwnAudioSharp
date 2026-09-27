@@ -82,39 +82,16 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
 
         /// <summary>
-        /// Mean band energy over an index range, in dB.
+        /// Mean band level over an index range, dB in and dB out - averaged as power.
         /// </summary>
-        private static float _bandGroupDb(float[] spectrum, int first, int last)
+        private static float _bandGroupDb(float[] bandsDb, int first, int last)
         {
-            double energy = 0;
+            double power = 0;
             for (int i = first; i <= last; i++)
-                energy += (double)spectrum[i] * spectrum[i];
+                power += Math.Pow(10.0, bandsDb[i] / 10.0);
 
-            energy /= last - first + 1;
-            return 10f * (float)Math.Log10(Math.Max(energy, 1e-20));
+            power /= last - first + 1;
+            return power > 1e-20 ? (float)(10.0 * Math.Log10(power)) : -100f;
         }
-
-        /// <summary>
-        /// Three band moving average over the deviation. A single mic position is
-        /// full of narrow interference dips that say nothing about the system.
-        /// </summary>
-        private static float[] _smoothedDeviation(float[] raw)
-        {
-            var smoothed = new float[SmartMasterConfig.EqBands];
-
-            for (int i = 0; i < smoothed.Length; i++)
-            {
-                float sum = raw[i];
-                int count = 1;
-
-                if (i > 0) { sum += raw[i - 1]; count++; }
-                if (i < smoothed.Length - 1) { sum += raw[i + 1]; count++; }
-
-                smoothed[i] = sum / count;
-            }
-
-            return smoothed;
-        }
-        
     }
 }

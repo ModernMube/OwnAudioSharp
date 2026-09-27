@@ -1,5 +1,6 @@
 using Ownaudio.Core;
 using OwnaudioNET.Interfaces;
+using OwnaudioNET.Mixing;
 using NativeEffectEngine = OwnaudioNET.Effects.NativeEffectEngine;
 
 namespace OwnaudioNET.Effects.SmartMaster
@@ -8,7 +9,7 @@ namespace OwnaudioNET.Effects.SmartMaster
     /// Smart Master effect - Intelligent master processing chain
     /// Facade pattern: Coordinates audio processing, measurement, and preset management.
     /// </summary>
-    public sealed class SmartMasterEffect : IEffectProcessor
+    public sealed class SmartMasterEffect : IEffectProcessor, IMasterBusAware
     {
         #region Fields
         
@@ -25,7 +26,12 @@ namespace OwnaudioNET.Effects.SmartMaster
         private SmartMasterPresetManager? _presetManager;
         private SmartMasterMeasurementService? _measurementService;
         private SmartMasterMicMonitor? _micMonitor;
-        
+
+        /// <summary>
+        /// The mixer whose master bus we sit on, the measurement plays and records through it.
+        /// </summary>
+        private AudioMixer? _mixer;
+
         private readonly object _configLock = new object();
         
         private CancellationTokenSource? _measurementCancellation;
@@ -107,7 +113,19 @@ namespace OwnaudioNET.Effects.SmartMaster
             _measurementService = new SmartMasterMeasurementService(config, presetsDirectory);
             _native.Initialize(this, config);
         }
-        
+
+        /// <summary>
+        /// The mic hangs on the old mixer as a source, so it goes when the bus changes.
+        /// </summary>
+        void IMasterBusAware.AttachMixer(AudioMixer? mixer)
+        {
+            if (ReferenceEquals(_mixer, mixer)) return;
+
+            _micMonitor?.Dispose();
+            _micMonitor = null;
+            _mixer = mixer;
+        }
+
         #endregion
         
         #region Audio Processing
@@ -255,34 +273,47 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
         
         /// <summary>
-        /// Starts the automatic measurement process asynchronously.
+        /// Plays pink noise through the mixer this effect sits on and measures the room with
+        /// the mic. The mixer has to be running; the effect is bypassed while it measures, so
+        /// it doesn't hear its own EQ back. The result goes to the 'measured' preset, not applied.
         /// </summary>
         public async Task StartMeasurementAsync()
         {
             ThrowIfDisposed();
-            
+
             if (_measurementService == null || _config == null)
                 throw new InvalidOperationException("Effect not initialized");
-            
-            if (_measurementStatus.Status != MeasurementStatus.Idle && 
-                _measurementStatus.Status != MeasurementStatus.Completed && 
+
+            if (_measurementStatus.Status != MeasurementStatus.Idle &&
+                _measurementStatus.Status != MeasurementStatus.Completed &&
                 _measurementStatus.Status != MeasurementStatus.Error)
             {
                 throw new InvalidOperationException("A measurement is already in progress!");
             }
-            
+
             bool wasEnabled = _enabled;
             _enabled = false;
-            
+
             Reset();
-            
+
             _measurementCancellation = new CancellationTokenSource();
-            
+            bool _ownMic = _micMonitor?.IsRunning != true;
+
             try
             {
-                var measuredConfig = await _measurementService.PerformMeasurementAsync(
+                if (_mixer == null)
+                    throw new InvalidOperationException(
+                        "SmartMaster is not on a mixer's master bus - AddMasterEffect it first, the measurement plays and records through that mixer.");
+
+                if (!_mixer.IsRunning)
+                    throw new InvalidOperationException("The mixer is not running, start it before measuring.");
+
+                var mic = _startMic();
+
+                await _measurementService.PerformMeasurementAsync(
+                    _mixer,
+                    mic,
                     status => _measurementStatus = status,
-                    _configuration.MicInputGain,
                     _measurementCancellation.Token);
             }
             catch (OperationCanceledException)
@@ -299,7 +330,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             finally
             {
-                _swapChain(new SmartMasterConfig());
+                if (_ownMic) _micMonitor?.Stop();
 
                 _enabled = wasEnabled;
                 
@@ -336,21 +367,35 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
         
         /// <summary>
-        /// Start microphone monitoring (for UI level meter)
+        /// Start microphone monitoring (for UI level meter). Needs the effect on a mixer's
+        /// master bus - the mic hangs on that mixer, muted.
         /// </summary>
         public void StartMicMonitoring()
         {
             ThrowIfDisposed();
-            
+
             if (_config == null)
                 throw new InvalidOperationException("Effect not initialized");
-            
-            if (_micMonitor == null)
-            {
-                _micMonitor = new SmartMasterMicMonitor(_config, _configuration.MicInputGain);
-            }
-            
-            _micMonitor.Start();
+
+            if (_mixer == null)
+                throw new InvalidOperationException("SmartMaster is not on a mixer's master bus - AddMasterEffect it first.");
+
+            _startMic();
+        }
+
+        /// <summary>
+        /// Builds the monitor on first use and starts it with the current mic gain.
+        /// </summary>
+        private SmartMasterMicMonitor _startMic()
+        {
+            _micMonitor ??= new SmartMasterMicMonitor(_mixer!);
+            _micMonitor.Gain = _configuration.MicInputGain;
+
+            if (!_micMonitor.Start())
+                throw new InvalidOperationException(
+                    "Microphone capture could not start. Set 'audioConfig.EnableInput = true' before initializing OwnAudioNet and check the input device.");
+
+            return _micMonitor;
         }
         
         /// <summary>

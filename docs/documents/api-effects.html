@@ -159,8 +159,10 @@ smartMaster.Load("my-studio");
 // Reset to defaults
 smartMaster.ResetToDefaults();
 
-// Auto room measurement
-await smartMaster.StartMeasurementAsync(); // plays test signal, auto-calibrates EQ
+// Auto room measurement - needs AudioConfig.EnableInput = true and a running mixer,
+// the noise plays and the mic records through the mixer the effect sits on
+smartMaster.StartMicMonitoring();          // optional: live level via GetLastMicLevel()
+await smartMaster.StartMeasurementAsync(); // plays pink noise, measures the room
 smartMaster.CancelMeasurement();
 MeasurementStatusInfo status = smartMaster.GetMeasurementStatus();
 // Result is saved to a "measured" preset, never applied on its own

@@ -27,8 +27,8 @@ Public entry point: `SmartMasterEffect`.
 | [SmartMasterConfig.cs](SmartMasterConfig.cs) | Serializable configuration + `MeasurementResults`. |
 | [SmartMasterPresetManager.cs](SmartMasterPresetManager.cs) | Load/save presets, create factory presets on disk. |
 | [SmartMasterPresetFactory.cs](SmartMasterPresetFactory.cs) | `SpeakerType` enum + built-in speaker preset definitions. |
-| [SmartMasterMeasurementService.cs](SmartMasterMeasurementService.cs) | Automatic room/speaker calibration via test-noise playback + mic recording. |
-| [SmartMasterMicMonitor.cs](SmartMasterMicMonitor.cs) | Background mic-level meter for the UI. |
+| [SmartMasterMeasurementService.cs](SmartMasterMeasurementService.cs) | Automatic room/speaker calibration: pink noise through the mixer, mic back through the monitor. |
+| [SmartMasterMicMonitor.cs](SmartMasterMicMonitor.cs) | The measurement mic: a muted `InputSource` on the mixer read through an effect tap; level meter + band averaging. |
 | [SmartMasterStatus.cs](SmartMasterStatus.cs) | `MeasurementStatus` enum + `MeasurementStatusInfo`. |
 | [SmartMasterJsonContext.cs](SmartMasterJsonContext.cs) | Source-generated JSON context (AOT/trim-safe). |
 | [Components/](Components/) | DSP building blocks the measurement uses, plus the public filter types (see below). |
@@ -41,8 +41,8 @@ types, kept because they are on the frozen API surface and are usable on their o
 
 | Component | Role | Used by |
 | --- | --- | --- |
-| [NoiseGenerator.cs](Components/NoiseGenerator.cs) | White / pink (Voss-McCartney) / low-frequency test noise. | measurement |
-| [SmartMasterSpectrumAnalyzer.cs](Components/SmartMasterSpectrumAnalyzer.cs) | FFT-based 30-band ISO spectrum + RMS for calibration. | measurement, mic monitor |
+| [PinkNoise.cs](Components/PinkNoise.cs) | Streaming Voss-McCartney pink noise with a per-channel mask. | measurement |
+| [SmartMasterSpectrumAnalyzer.cs](Components/SmartMasterSpectrumAnalyzer.cs) | FFT-based 30-band ISO third-octave levels, streamed or from a buffer. | measurement, mic monitor |
 | [Biquad.cs](Components/Biquad.cs) | RBJ coefficient builders (HP/LP/BP/peaking/shelf) + denormal-flushed TDF-II state. | the filters below |
 | [SubsonicFilter.cs](Components/SubsonicFilter.cs) | 4th-order Butterworth subsonic high-pass, 24 dB/oct. | callers only |
 | [ParametricEqStage.cs](Components/ParametricEqStage.cs) | 8-band sweepable input PEQ (bell / low shelf / high shelf). | callers only |
@@ -135,10 +135,18 @@ var status = sm.GetMeasurementStatus();     // poll progress / step / warnings
 sm.CancelMeasurement();                     // abort in-flight
 ```
 
-`StartMeasurementAsync` requires the OwnAudio engine to have **input enabled**
-(`audioConfig.EnableInput = true`) and an available input device. It disables
-processing during the sweep and **does not auto-apply** the result — the measured
-config is saved to a `measured` preset for the user to load explicitly.
+Both need the effect **on a mixer's master bus** (`mixer.AddMasterEffect(sm)`) —
+the noise plays and the mic is captured through that mixer, since in rust-native
+mode the mixer's session owns the device and nothing sent past it reaches the
+speakers. `StartMeasurementAsync` also needs the **mixer running** and the engine
+started with **input enabled** (`audioConfig.EnableInput = true`). Stop the
+program material first, it would be measured too. The mic source is muted, so
+nothing is fed back into the speakers.
+
+The effect is bypassed during the sweep, and the result is **not auto-applied** —
+the measured config is saved to a `measured` preset for the user to load
+explicitly. The live settings are left as they were, whether the measurement
+succeeds or fails.
 
 ---
 
@@ -147,11 +155,17 @@ config is saved to a `measured` preset for the user to load explicitly.
 Reported through `MeasurementStatusInfo` (status enum + 0–1 progress + step text
 + warnings):
 
-1. **Initializing** — verify input is enabled and a device exists.
-2. **Right / Left channel** — play 2 s white noise on one channel, record via
-   `InputSource`, measure RMS. Below −60 dBFS ⇒ channel error (aborts).
-3. **Analyzing spectrum** — play 4 s pink noise, record 3 s, fold the interleaved
-   capture to mono, FFT to 30 bands. The same noise is run through the same
+The noise is a `StreamingSource` added to the mixer for the duration of the
+run; the mic is the monitor's `InputSource` + `EffectTap`, which sits ahead of
+the track gain, so the capture comes in at full level with the monitor muted.
+
+1. **Initializing** — the reference spectrum (8 s of the same pink noise through
+   the same analyzer, cached per sample rate).
+2. **Left / Right channel** — pink noise on one channel only, 1.6 s averaged,
+   midrange level against the reference. Neither channel reaching the mic
+   (under −70 dB), or one channel 18 dB under the other ⇒ error (aborts).
+3. **Analyzing spectrum** — pink noise on L+R, 1 s settle, then 4 s of mic
+   capture averaged into the 30 third-octave bands. The same noise is run through the same
    analyzer as a reference, and the per-band deviation is taken against that,
    gain-aligned on 200 Hz – 2 kHz. Measuring against the analyzer's own answer
    rather than a flat line takes the window's low-frequency smearing out of the
@@ -168,7 +182,7 @@ Reported through `MeasurementStatusInfo` (status enum + 0–1 progress + step te
    octave divider, so on a box that is already down at 60 Hz it only writes
    energy further down, where even less comes out.
 5. **Calculating correction** — build a fresh `SmartMasterConfig`. The deviation
-   is 3-band smoothed first (a single mic position is full of narrow interference
+   is 1-2-1 smoothed first (a single mic position is full of narrow interference
    dips that say nothing about the system), then aimed at a house target curve
    (warm at the bottom, rolled off on top) and applied at 65 % — a room is not a
    minimum-phase system, so a 1:1 correction mostly makes it sound worse. Boosts
@@ -177,12 +191,7 @@ Reported through `MeasurementStatusInfo` (status enum + 0–1 progress + step te
    delays / polarity come from the channel results, the subharmonic synth from
    the low-end verdict above.
 6. Save to `measured.smartmaster.json` and report **Completed** (with any
-   warnings). The active chain is reset to defaults; the measured preset is not
-   applied automatically.
-
-Playback uses a "smart pumping" loop that watches the engine's output buffer
-occupancy and only sends when there's room; each test tone fades out to avoid
-clicks.
+   warnings). The measured preset is not applied automatically.
 
 ---
 
