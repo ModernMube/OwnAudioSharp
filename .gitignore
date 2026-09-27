@@ -442,6 +442,7 @@ FodyWeavers.xsd
 
 # Rider project structure cache files
 *.lscache
+.mcp.json
 
 # MT3 export scripts — local tooling, needs a GPL YourMT3 checkout to run
 /tools/
