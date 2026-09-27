@@ -8,6 +8,7 @@
 use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 
 use crate::error::MidiError;
+use crate::message::short_message_len;
 
 /// Client name advertised to the operating system for input connections.
 const INPUT_CLIENT_NAME: &str = "OwnAudio.Midi.In";
@@ -241,16 +242,16 @@ impl MidiOutputPort {
         &self.name
     }
 
-    /// Sends a short MIDI message, transmitting two bytes for Program Change and
-    /// Channel Pressure and three bytes for all other channel message types.
+    /// Sends a short message cut to the length its status calls for — a Clock
+    /// or Start is one byte on the wire, not three. The unused data bytes are
+    /// ignored. SysEx goes through [`MidiOutputPort::send_raw`].
     pub fn send(&mut self, status: u8, data1: u8, data2: u8) -> Result<(), MidiError> {
-        let message_type = status & 0xF0;
-        let result = if message_type == 0xC0 || message_type == 0xD0 {
-            self.connection.send(&[status, data1])
-        } else {
-            self.connection.send(&[status, data1, data2])
-        };
-        result.map_err(|e| MidiError::ConnectionFailed(e.to_string()))
+        let len = short_message_len(status).ok_or_else(|| {
+            MidiError::Internal(format!("0x{status:02X} is not a short message status"))
+        })?;
+        self.connection
+            .send(&[status, data1, data2][..len])
+            .map_err(|e| MidiError::ConnectionFailed(e.to_string()))
     }
 
     /// Sends a raw byte sequence such as a System Exclusive message.

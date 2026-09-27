@@ -128,15 +128,37 @@ public sealed class MidiMessageTests
     }
 
     /// <summary>
-    /// Verifies that real-time status 0xF8 yields <see cref="MidiMessageType.SysEx"/>
-    /// because the upper nibble 0xF0 maps to that enum value.
+    /// System messages are typed by the whole status byte, a clock must not read as SysEx.
     /// </summary>
     [TestMethod]
-    public void Type_TimingClockStatus_ReturnsSysExUpperNibble()
+    [DataRow((byte)0xF0, MidiMessageType.SysEx)]
+    [DataRow((byte)0xF1, MidiMessageType.TimeCodeQuarterFrame)]
+    [DataRow((byte)0xF2, MidiMessageType.SongPosition)]
+    [DataRow((byte)0xF8, MidiMessageType.TimingClock)]
+    [DataRow((byte)0xFA, MidiMessageType.Start)]
+    [DataRow((byte)0xFB, MidiMessageType.Continue)]
+    [DataRow((byte)0xFC, MidiMessageType.Stop)]
+    public void Type_SystemStatus_ReturnsWholeStatusByte(byte status, MidiMessageType expected)
     {
-        var msg = new MidiMessage(0xF8, 0, 0);
+        var msg = new MidiMessage(status, 0, 0);
 
-        Assert.AreEqual(MidiMessageType.SysEx, msg.Type);
+        Assert.AreEqual(expected, msg.Type);
+        Assert.IsTrue(msg.IsSystem);
+    }
+
+    [TestMethod]
+    public void IsSystem_ChannelMessage_ReturnsFalse()
+    {
+        Assert.IsFalse(new MidiMessage(0xEF, 0, 64).IsSystem);
+    }
+
+    [TestMethod]
+    public void ToString_TimingClock_HasNoChannel()
+    {
+        string result = new MidiMessage(0xF8, 0, 0).ToString();
+
+        StringAssert.Contains(result, "TimingClock");
+        Assert.IsFalse(result.Contains("Ch="));
     }
 
     #endregion

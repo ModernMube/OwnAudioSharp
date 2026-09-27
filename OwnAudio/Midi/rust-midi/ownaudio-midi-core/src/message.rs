@@ -53,6 +53,17 @@ impl MidiMessage {
     }
 }
 
+/// Wire length of a short message, status byte included. `None` for SysEx
+/// (0xF0 / 0xF7, variable length) and for data bytes that aren't a status at all.
+pub fn short_message_len(status: u8) -> Option<usize> {
+    match status {
+        0x80..=0xBF | 0xE0..=0xEF | 0xF2 => Some(3),
+        0xC0..=0xDF | 0xF1 | 0xF3 => Some(2),
+        0xF4..=0xF6 | 0xF8..=0xFF => Some(1),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,5 +94,31 @@ mod tests {
         let msg = MidiMessage::new(0x80, 60, 64, 0);
         assert!(!msg.is_note_on());
         assert!(msg.is_note_off());
+    }
+
+    #[test]
+    fn system_messages_are_not_padded_to_three_bytes() {
+        for status in [0xF6, 0xF8, 0xFA, 0xFB, 0xFC, 0xFE, 0xFF] {
+            assert_eq!(short_message_len(status), Some(1), "0x{status:02X}");
+        }
+        assert_eq!(short_message_len(0xF1), Some(2));
+        assert_eq!(short_message_len(0xF3), Some(2));
+        assert_eq!(short_message_len(0xF2), Some(3));
+    }
+
+    #[test]
+    fn channel_messages_keep_their_length() {
+        assert_eq!(short_message_len(0x93), Some(3));
+        assert_eq!(short_message_len(0xB0), Some(3));
+        assert_eq!(short_message_len(0xEF), Some(3));
+        assert_eq!(short_message_len(0xC5), Some(2));
+        assert_eq!(short_message_len(0xD0), Some(2));
+    }
+
+    #[test]
+    fn sysex_and_data_bytes_have_no_short_length() {
+        assert_eq!(short_message_len(0xF0), None);
+        assert_eq!(short_message_len(0xF7), None);
+        assert_eq!(short_message_len(0x40), None);
     }
 }

@@ -37,14 +37,20 @@ public readonly struct MidiMessage
     }
 
     /// <summary>
-    /// Message type off the upper nibble.
+    /// Message type. Channel messages go by the upper nibble, system ones (0xF0 and up)
+    /// by the whole status byte, so a clock is TimingClock and not SysEx.
     /// </summary>
-    public MidiMessageType Type => (MidiMessageType)(Status & 0xF0);
+    public MidiMessageType Type => (MidiMessageType)(IsSystem ? Status : Status & 0xF0);
 
     /// <summary>
-    /// Channel, 0-15.
+    /// Channel, 0-15. Means nothing on a system message.
     /// </summary>
     public int Channel => Status & 0x0F;
+
+    /// <summary>
+    /// System common / real-time / SysEx, i.e. not tied to a channel.
+    /// </summary>
+    public bool IsSystem => Status >= 0xF0;
 
     /// <summary>
     /// Note On with a real velocity behind it.
@@ -74,7 +80,9 @@ public readonly struct MidiMessage
     /// <summary>
     /// Readable form for logs.
     /// </summary>
-    public override string ToString() => $"[{Type} Ch={Channel} D1={Data1} D2={Data2}]";
+    public override string ToString() => IsSystem
+        ? $"[{Type} D1={Data1} D2={Data2}]"
+        : $"[{Type} Ch={Channel} D1={Data1} D2={Data2}]";
 }
 
 /// <summary>
@@ -123,7 +131,39 @@ public enum MidiMessageType : byte
     SysEx           = 0xF0,
 
     /// <summary>
-    /// File-only, never goes over the wire.
+    /// MTC quarter frame, one data byte.
+    /// </summary>
+    TimeCodeQuarterFrame = 0xF1,
+
+    /// <summary>
+    /// Song position in MIDI beats, 14 bit across both data bytes.
+    /// </summary>
+    SongPosition    = 0xF2,
+
+    /// <summary>
+    /// Song number in Data1.
+    /// </summary>
+    SongSelect      = 0xF3,
+
+    TuneRequest     = 0xF6,
+
+    /// <summary>
+    /// Closes a SysEx.
+    /// </summary>
+    EndOfExclusive  = 0xF7,
+
+    /// <summary>
+    /// 24 per quarter note.
+    /// </summary>
+    TimingClock     = 0xF8,
+
+    Start           = 0xFA,
+    Continue        = 0xFB,
+    Stop            = 0xFC,
+    ActiveSensing   = 0xFE,
+
+    /// <summary>
+    /// Meta event in a file. On the wire the same byte is System Reset.
     /// </summary>
     Meta            = 0xFF
 }
