@@ -22,7 +22,7 @@ internal interface IRustClockedSource : IMasterClockSource
     double RustNativeRealPosition { get; }
 
     /// <summary>
-    /// Network driven drift correction, called from the mixer's control tick.
+    /// Puts the clock's network tempo trim onto the native track, from the mixer's control tick.
     /// </summary>
     void ApplyRustNativeSync();
 }

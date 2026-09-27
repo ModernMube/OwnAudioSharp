@@ -15,6 +15,7 @@ namespace OwnaudioNET.Synchronization
         private readonly int _sampleRate;
         private readonly int _channels;
         private volatile ClockMode _mode;
+        private volatile float _tempoTrim = 1f;
         private readonly object _lock = new object();
         private bool _disposed;
 
@@ -36,6 +37,13 @@ namespace OwnaudioNET.Synchronization
 
         // when true the clock is driven from the network (client), not advanced locally
         public bool IsNetworkControlled { get; set; }
+
+        // the network follower's speed trim, riding on top of every track's own tempo; 1.0 = none
+        internal float TempoTrim
+        {
+            get => _tempoTrim;
+            set => _tempoTrim = value;
+        }
 
         public MasterClock(int sampleRate, int channels, ClockMode mode = ClockMode.Realtime)
         {

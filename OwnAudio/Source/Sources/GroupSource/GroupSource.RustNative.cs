@@ -206,7 +206,7 @@ public sealed partial class GroupSource : IRustNativeChainSource
         _rustTrack.Pan = Pan;
         //Stretch stage pinned on so the first tempo change lands on a warm FIFO, no click
         _rustTrack.SetStretchAlwaysOn(true);
-        _rustTrack.Tempo = _tempo;
+        _rustTrack.Tempo = _nativeTempo;
         _rustTrack.PitchSemitones = _pitchShift;
     }
 
@@ -275,50 +275,22 @@ public sealed partial class GroupSource : IRustNativeChainSource
     }
 
     /// <summary>
-    /// Network driven drift correction, same zones as a file source: green leaves it, yellow
-    /// nudges the tempo, red seeks.
+    /// Our tempo times the clock's network trim, what the native track runs at.
+    /// </summary>
+    private float _nativeTempo => _tempo * (_masterClock?.TempoTrim ?? 1f);
+
+    /// <summary>
+    /// Same as on a file source: puts the network follower's trim onto the native track,
+    /// from the mixer's control tick.
     /// </summary>
     internal void ApplyRustNativeSync()
     {
-        if (!_rustNative || State != AudioState.Playing) return;
+        if (!_rustNative) return;
 
-        MasterClock? _clock = _masterClock;
-        if (_clock is null || !_clock.IsNetworkControlled) return;
-
-        AudioTrack? _track;
-        double _actual;
         lock (_rustBackendLock)
         {
-            _track = _rustTrack;
-            if (_track is null) return;
-
-            _actual = _rustProjectBaseSeconds + _track.Position.TotalSeconds;
+            if (_rustTrack is not null) _rustTrack.Tempo = _nativeTempo;
         }
-
-        double _target = _clock.CurrentTimestamp - _startOffset;
-        if (_target < 0.0) return;
-
-        double _signedDrift = _target - _actual;
-        double _drift = Math.Abs(_signedDrift);
-
-        if (_drift <= SyncTolerance)
-        {
-            _track.Tempo = _tempo;
-            return;
-        }
-
-        if (_drift <= SoftSyncTolerance)
-        {
-            double _factor = Math.Min((_drift - SyncTolerance) / (SoftSyncTolerance - SyncTolerance), 1.0);
-            float _adjustment = (float)(_factor * SoftSyncMaxTempoAdjustment);
-
-            _track.Tempo = _signedDrift > 0.0 ? _tempo + _adjustment : _tempo - _adjustment;
-            return;
-        }
-
-        float _t = _tempo <= 0f ? 1f : _tempo;
-        Seek(Math.Min(_target * _t, Duration));
-        _track.Tempo = _tempo;
     }
 
     /// <summary>

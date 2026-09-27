@@ -19,8 +19,16 @@ public static partial class OwnaudioNet
     public static event EventHandler<ConnectionStateChangedEventArgs>? NetworkSyncConnectionChanged;
 
     /// <summary>
+    /// A command the server sent with BroadcastCommand arrived (client only), raised on a sync thread.
+    /// The transport itself (play, pause, seek) is followed without it — this is for the app's own extras,
+    /// like a tempo change.
+    /// </summary>
+    public static event EventHandler<CommandReceivedEventArgs>? NetworkSyncCommandReceived;
+
+    /// <summary>
     /// Starts network synchronization in server mode.
-    /// The server broadcasts timing information to all clients on the local network.
+    /// The server sends its heard song position to every client that pings it, and announces itself
+    /// on the local network so clients can find it.
     /// </summary>
     /// <param name="port">UDP port to use (default: 9876).</param>
     /// <param name="useLocalTimeOnly">Use local time synchronization only (no internet required).</param>
@@ -40,23 +48,27 @@ public static partial class OwnaudioNet
             if (mixer == null)
                 throw new InvalidOperationException("AudioMixer not available. Ensure the audio system is properly initialized.");
 
-            // Set clock mode
             mixer.MasterClock.Mode = ClockMode.NetworkServer;
             mixer.MasterClock.IsNetworkControlled = false;
 
-            // Create and start server
-            _networkSyncServer = new NetworkSyncServer(mixer.MasterClock, port);
+            _networkSyncServer = new NetworkSyncServer(mixer, port);
         }
 
-        await _networkSyncServer.StartAsync();
+        try { await _networkSyncServer.StartAsync(); }
+        catch
+        {
+            StopNetworkSync();
+            throw;
+        }
     }
 
     /// <summary>
     /// Starts network synchronization in client mode.
-    /// The client synchronizes with a server on the local network.
+    /// The client follows the server's transport and stays on its song position with a small tempo
+    /// trim; its own clock is never taken over, so losing the server changes nothing audible.
     /// </summary>
     /// <param name="serverAddress">Server IP address (null for auto-discovery).</param>
-    /// <param name="port">UDP port to use (default: 9876).</param>
+    /// <param name="port">The server's UDP port (default: 9876). Discovery listens on port + 1.</param>
     /// <param name="allowOfflinePlayback">Continue playback when disconnected from server.</param>
     /// <exception cref="InvalidOperationException">Thrown if not initialized or already running network sync.</exception>
     public static async Task StartNetworkSyncClientAsync(
@@ -77,25 +89,20 @@ public static partial class OwnaudioNet
             if (mixer == null)
                 throw new InvalidOperationException("AudioMixer not available. Ensure the audio system is properly initialized.");
 
-            // Set clock mode
             mixer.MasterClock.Mode = ClockMode.NetworkClient;
-            mixer.MasterClock.IsNetworkControlled = true;
+            mixer.MasterClock.IsNetworkControlled = false;
 
-            // Create and start client
-            _networkSyncClient = new NetworkSyncClient(
-                mixer.MasterClock,
-                serverAddress,
-                port,
-                allowOfflinePlayback);
-
-            // Forward connection state changes
-            _networkSyncClient.ConnectionStateChanged += (sender, e) =>
-            {
-                NetworkSyncConnectionChanged?.Invoke(sender, e);
-            };
+            _networkSyncClient = new NetworkSyncClient(mixer, serverAddress, port, allowOfflinePlayback);
+            _networkSyncClient.ConnectionStateChanged += (sender, e) => NetworkSyncConnectionChanged?.Invoke(sender, e);
+            _networkSyncClient.CommandReceived += (sender, e) => NetworkSyncCommandReceived?.Invoke(sender, e);
         }
 
-        await _networkSyncClient.StartAsync();
+        try { await _networkSyncClient.StartAsync(); }
+        catch
+        {
+            StopNetworkSync();
+            throw;
+        }
     }
 
     /// <summary>
@@ -120,8 +127,7 @@ public static partial class OwnaudioNet
                 _networkSyncClient = null;
             }
 
-            // Reset clock mode
-            var mixer = GetAudioMixer();
+            var mixer = GetRegisteredAudioMixer();
             if (mixer != null)
             {
                 mixer.MasterClock.Mode = ClockMode.Realtime;
@@ -151,9 +157,13 @@ public static partial class OwnaudioNet
                 status.IsEnabled = true;
                 status.IsClient = true;
                 status.ConnectionState = _networkSyncClient.ConnectionState;
-                status.AverageLatency = _networkSyncClient.AverageLatency * 1000.0; // Convert to ms
+                status.AverageLatency = _networkSyncClient.AverageLatency * 1000.0;
                 status.ServerLatency = _networkSyncClient.AverageLatency * 1000.0;
+                status.SyncDrift = _networkSyncClient.LastError * 1000.0;
                 status.IsLocalControlAllowed = _networkSyncClient.IsLocalControlAllowed;
+                status.TimeSyncTier = _networkSyncClient.ConnectionState >= NetworkSyncProtocol.ConnectionState.Connected
+                    ? LocalTimeProvider.TimeSyncTier.PeerToPeer
+                    : LocalTimeProvider.TimeSyncTier.SystemTime;
             }
 
             return status;

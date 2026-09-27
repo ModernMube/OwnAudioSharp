@@ -19,8 +19,8 @@ namespace OwnaudioNET.Mixing;
 public sealed partial class AudioMixer
 {
     /// <summary>
-    /// One network drift-correction pass over the attached file sources. No-op for anything
-    /// not playing under a network-controlled clock.
+    /// Hands the network sync's tempo trim to every timeline track. Nothing reaches the native
+    /// side while the trim stands still.
     /// </summary>
     internal void DriveRustNativeSyncOnce()
     {

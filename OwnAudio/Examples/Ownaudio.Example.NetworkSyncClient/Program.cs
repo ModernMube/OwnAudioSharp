@@ -91,12 +91,7 @@ public class ClientProgram
                 allowOfflinePlayback: true);
             Console.WriteLine($"  ✓ NetworkSync client started (auto-discovery mode)");
             Console.WriteLine($"  ✓ Searching for server on local network...");
-
-            // Start playback (will sync with server when connected)
-            _drums.Play();
-            _bass.Play();
-            _other.Play();
-            _vocals.Play();
+            Console.WriteLine($"  ✓ Play, pause and seek follow the server - nothing to start here");
 
             // Interactive status display
             Console.WriteLine("\n[5/5] Client ready!\n");

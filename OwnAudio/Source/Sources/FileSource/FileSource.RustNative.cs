@@ -237,7 +237,7 @@ public partial class FileSource : IRustNativeChainSource, IRustClockedSource
         _rustTrack.Pan = Pan;
         //Stretch stage pinned on so the first tempo change lands on a warm FIFO, no click
         _rustTrack.SetStretchAlwaysOn(true);
-        _rustTrack.Tempo = _tempo;
+        _rustTrack.Tempo = _nativeTempo;
         _rustTrack.PitchSemitones = _pitchShift;
 
         if (_rustFileTrack is not null) _rustFileTrack.Loop = Loop;
@@ -342,52 +342,22 @@ public partial class FileSource : IRustNativeChainSource, IRustClockedSource
     }
 
     /// <summary>
-    /// Network driven drift correction on the native track, called from the mixer's
-    /// control tick. Green = leave it, yellow = tempo nudge, red = hard seek.
+    /// What the native track really runs at: our tempo times the clock's network trim.
+    /// </summary>
+    private float _nativeTempo => _tempo * (_masterClock?.TempoTrim ?? 1f);
+
+    /// <summary>
+    /// From the mixer's control tick: keeps the network follower's trim on the native track.
+    /// The track setter skips an unchanged value, so an idle tick costs no native call.
     /// </summary>
     internal void ApplyRustNativeSync()
     {
-        if (!_rustNative || State != AudioState.Playing) return;
+        if (!_rustNative) return;
 
-        MasterClock? _clock = _masterClock;
-        if (_clock is null || !_clock.IsNetworkControlled) return;
-
-        AudioTrack? _track;
-        double _actual;
         lock (_rustBackendLock)
         {
-            _track = _rustTrack;
-            if (_track is null) return;
-
-            _actual = _rustProjectBaseSeconds + _track.Position.TotalSeconds;
+            if (_rustTrack is not null) _rustTrack.Tempo = _nativeTempo;
         }
-
-        double _target = _clock.CurrentTimestamp - _startOffset;
-        if (_target < 0.0) return;
-
-        double _signedDrift = _target - _actual;
-        double _drift = Math.Abs(_signedDrift);
-
-        if (_drift <= SyncTolerance)
-        {
-            _track.Tempo = _tempo;
-            return;
-        }
-
-        if (_drift <= SoftSyncTolerance)
-        {
-            double _range = SoftSyncTolerance - SyncTolerance;
-            double _factor = _range > 0.0 ? Math.Min((_drift - SyncTolerance) / _range, 1.0) : 1.0;
-            float _adjustment = (float)(_factor * SoftSyncMaxTempoAdjustment);
-
-            _track.Tempo = _signedDrift > 0.0 ? _tempo + _adjustment : _tempo - _adjustment;
-            return;
-        }
-
-        //Red zone, the project target is converted to content time via the tempo
-        float _t = _tempo <= 0f ? 1f : _tempo;
-        Seek(_target * _t);
-        _track.Tempo = _tempo;
     }
 
     /// <summary>

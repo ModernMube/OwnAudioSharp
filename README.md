@@ -243,7 +243,7 @@ Measures your speakers with a microphone and corrects the output automatically. 
 > Full guide: [OwnAudio/Source/Effects/SmartMaster/README.md](OwnAudio/Source/Effects/SmartMaster/README.md)
 
 ### NetworkSync — Multi-Device Synchronization
-Synchronizes playback across devices on the local network with sample-accurate precision (< 5 ms on LAN). Zero-configuration with automatic server discovery.
+Keeps playback on several devices on the local network together — what comes out of the speakers stays within a few milliseconds on a LAN. Clients follow the server's play, pause and seek on their own, find it by its announcements, and stay on its heard position with a tempo trim of a few tenths of a percent instead of taking over their clock, so losing the server changes nothing audible.
 
 ### Audio Matchering — Reference-Based Mastering
 Analyzes a reference track and applies its spectral and dynamic characteristics to your audio for professional mastering results.

@@ -209,7 +209,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
         {
             lock (_rustBackendLock)
             {
-                if (_rustTrack is not null) _rustTrack.Tempo = _tempo;
+                if (_rustTrack is not null) _rustTrack.Tempo = _nativeTempo;
             }
         }
     }

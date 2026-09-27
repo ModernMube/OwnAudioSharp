@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Runtime.InteropServices;
 
 namespace OwnaudioNET.NetworkSync;
 
@@ -15,9 +14,14 @@ public static class NetworkSyncProtocol
     public const int ProtocolVersion = 1;
 
     /// <summary>
-    /// Fixed packet size, every command pads to this.
+    /// Buffer size that always fits a command. The wire packet itself is CommandSize long.
     /// </summary>
     public const int MaxPacketSize = 256;
+
+    /// <summary>
+    /// Bytes a serialized command actually takes on the wire.
+    /// </summary>
+    internal const int CommandSize = 73;
 
     /// <summary>
     /// "OWNA" as a uint, first thing we check on a packet.
@@ -56,7 +60,6 @@ public static class NetworkSyncProtocol
     /// <summary>
     /// The command payload. Plain value type so it never touches the heap.
     /// </summary>
-    [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct Command
     {
         public CommandType Type;
@@ -73,15 +76,15 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Packs a command into buffer (needs to be at least MaxPacketSize), returns bytes written.
+    /// Packs a command into buffer (CommandSize bytes at least), returns bytes written.
     /// </summary>
     /// <param name="cmd"></param>
     /// <param name="buffer"></param>
     /// <returns></returns>
     public static int SerializeCommand(ref Command cmd, Span<byte> buffer)
     {
-        if (buffer.Length < MaxPacketSize)
-            throw new ArgumentException($"Buffer must be at least {MaxPacketSize} bytes", nameof(buffer));
+        if (buffer.Length < CommandSize)
+            throw new ArgumentException($"Buffer must be at least {CommandSize} bytes", nameof(buffer));
 
         int offset = 0;
 
@@ -116,14 +119,14 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Reads a command back out. False if the magic or version don't line up.
+    /// Reads a command back out. False if it's too short or the magic or version don't line up.
     /// </summary>
     /// <param name="buffer"></param>
     /// <param name="cmd"></param>
     /// <returns></returns>
     public static bool DeserializeCommand(ReadOnlySpan<byte> buffer, ref Command cmd)
     {
-        if (buffer.Length < MaxPacketSize)
+        if (buffer.Length < CommandSize)
             return false;
 
         int offset = 0;

@@ -131,7 +131,7 @@ public sealed partial class GroupSource : BaseAudioSource, IMasterClockSource, I
             _tempo = Math.Clamp(value, AudioConstants.MinTempo, AudioConstants.MaxTempo);
             lock (_rustBackendLock)
             {
-                if (_rustTrack is not null) _rustTrack.Tempo = _tempo;
+                if (_rustTrack is not null) _rustTrack.Tempo = _nativeTempo;
             }
         }
     }

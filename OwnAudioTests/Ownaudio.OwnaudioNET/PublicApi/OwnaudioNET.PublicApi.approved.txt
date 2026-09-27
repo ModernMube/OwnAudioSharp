@@ -1776,6 +1776,7 @@ namespace OwnaudioNET
         public static int OutputLatencyFrames { get; }
         public static long TotalInputOverflowFrames { get; }
         public static System.Version Version { get; }
+        public static event System.EventHandler<OwnaudioNET.NetworkSync.CommandReceivedEventArgs>? NetworkSyncCommandReceived;
         public static event System.EventHandler<OwnaudioNET.NetworkSync.ConnectionStateChangedEventArgs>? NetworkSyncConnectionChanged;
         public static bool BroadcastCommand(ref OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command command) { }
         public static Ownaudio.Core.AudioConfig CreateDefaultConfig() { }

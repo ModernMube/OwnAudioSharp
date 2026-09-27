@@ -47,7 +47,7 @@
     <tr><td><code>SampleRate</code></td><td><code>int</code></td><td>Sample rate in Hz.</td></tr>
     <tr><td><code>Channels</code></td><td><code>int</code></td><td>Channel count.</td></tr>
     <tr><td><code>Mode</code></td><td><code>ClockMode</code></td><td><code>Realtime</code>, <code>Offline</code>, <code>NetworkServer</code>, <code>NetworkClient</code>. The network helpers set it; <code>Offline</code> is inert — see <a href="#offline-mode">below</a>.</td></tr>
-    <tr><td><code>IsNetworkControlled</code></td><td><code>bool</code></td><td>True when driven by a remote network server.</td></tr>
+    <tr><td><code>IsNetworkControlled</code></td><td><code>bool</code></td><td>Kept for compatibility. The network sync no longer sets it — a client runs on its own clock.</td></tr>
   </tbody>
 </table></div>
 
@@ -137,17 +137,10 @@ private void OnPositionTimer()
     CurrentPositionSeconds = displayPos;
 }</code></pre></div>
 
-<h2 id="drift-zones">Drift correction, in three zones</h2>
-<p>Local playback does not need drift correction any more. Since 4.0 every track is rendered by the same native session inside one device callback, off one sample counter — they cannot separate, so there is nothing to pull back. What the three zones govern is the <strong>network-controlled</strong> clock: a client following a remote server has a timeline that is not its own, and that is where a source's position gets compared to the clock and nudged.</p>
-<div class="table-wrap"><table>
-  <thead><tr><th>Zone</th><th>Drift Range</th><th>Action</th></tr></thead>
-  <tbody>
-    <tr><td><strong>Green</strong></td><td>&lt; <code>SyncTolerance</code> (5 ms default)</td><td>No correction — tempo goes back to the track's own.</td></tr>
-    <tr><td><strong>Yellow</strong></td><td><code>SyncTolerance</code> … <code>SoftSyncTolerance</code> (5–25 ms)</td><td>Soft sync: tempo nudge, scaled with the drift, up to <code>SoftSyncMaxTempoAdjustment</code> (±2%).</td></tr>
-    <tr><td><strong>Red</strong></td><td>&gt; <code>SoftSyncTolerance</code> (25 ms)</td><td>Hard sync: seek the track to the clock position, converted to content time by its tempo.</td></tr>
-  </tbody>
-</table></div>
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>All three thresholds are per-source and settable: <code>FileSource.SyncTolerance</code>, <code>SoftSyncTolerance</code> and <code>SoftSyncMaxTempoAdjustment</code>. The correction runs on the mixer's control tick and is not surfaced as an event.</p></div>
+<h2 id="drift-zones">Drift correction</h2>
+<p>Local playback does not need drift correction any more. Since 4.0 every track is rendered by the same native session inside one device callback, off one sample counter — they cannot separate, so there is nothing to pull back.</p>
+<p>Between machines it is the <a href="api-network.html">network sync</a> that keeps them together, and it does not touch the clock or seek single tracks: the client trims the tempo of all its timeline tracks by a few tenths of a percent, and seeks the whole mixer only when it is more than 80 ms off. See <a href="api-network.html#how">how it stays together</a>.</p>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>FileSource.SyncTolerance</code>, <code>SoftSyncTolerance</code> and <code>SoftSyncMaxTempoAdjustment</code> are still there so old code compiles, but nothing reads them: the per-source three-zone correction compared a wall-clock position that a tempo nudge could never move, and was replaced by the network sync's own controller.</p></div>
 
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><code>FileSource.SyncDiagnostics</code> still returns a <code>SyncDiagnosticsSnapshot</code>, but in 4.x it only reports the thresholds back: <code>AdaptiveScale</code> is always <code>1.0</code>, <code>RedZoneHitsInWindow</code> always <code>0</code>, so <code>IsRelaxed</code> is never true. There is no adaptive tolerance machinery behind it any more — don't build a load indicator on it. For "is the machine keeping up", read <a href="api-mixer.html#session-load"><code>mixer.SessionLoad</code></a> instead.</p></div>
 

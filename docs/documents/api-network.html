@@ -31,54 +31,77 @@
 <h1 class="page-title">Network Synchronization</h1>
 <p class="page-subtitle">One timeline, several machines, under 5 ms apart. Namespace: <code>OwnaudioNET</code></p>
 
-<p>Same idea as the <a href="api-sync.html">master clock</a>, stretched over a LAN. One device is the server and broadcasts its clock; every client follows it and plays its own files against that timeline. Play, pause, stop and seek all come from the server — the clients just obey.</p>
+<p>One device is the server, the others are clients. Every client plays its <em>own</em> copy of the audio on its own clock, like a standalone player, and follows the server's transport: when the server plays, the client goes in where the server is; when it stops, the client stops where it stands; when it jumps, the client jumps after it. What the network adds is a tiny tempo trim (at most ±0.5%) that keeps the two <em>heard</em> positions together, and — rarely — one seek when they get more than 80 ms apart.</p>
 
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>Clock distribution is UDP broadcast. Create and start an <code>AudioMixer</code> <em>before</em> starting the server or client — it is the mixer's clock that gets shared.</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>The network never writes the client's clock. Losing the server is just a trim of 1.0 — nothing jumps, and with <code>allowOfflinePlayback</code> the music simply plays on. Create and start the <code>AudioMixer</code> <em>before</em> starting the server or client; the timeline tracks it follows are the mixer's <code>FileSource</code> and <code>GroupSource</code> sources.</p></div>
+
+<h2 id="how">How it stays together</h2>
+<ul>
+  <li><strong>Heard position, not rendered.</strong> Both sides compare the song position coming out of the speaker — the rendered position minus the device buffer and driver latency — so two machines with different buffer sizes don't sit a constant 20 ms apart.</li>
+  <li><strong>Clock offset, NTP style.</strong> The client pings twice a second; only the three fastest of the last 20 round trips count, since a slow trip was queued somewhere and queueing is never symmetric. All timestamps are monotonic, never the wall clock.</li>
+  <li><strong>Smoothed positions.</strong> The server sends its position 20 times a second while playing (once a second stopped, at once on a jump). A line through the last 1.5 s of readings hides the device-block steps on both sides.</li>
+  <li><strong>Trim, then seek.</strong> Nothing happens inside 3 ms. Above that the tempo is trimmed in proportion (a gap closes in about 4 s); only two readings in a row over 80 ms cause a seek, followed by 1.5 s of rest.</li>
+</ul>
 
 <h2 id="server">Server Mode</h2>
-<p>The server device broadcasts its <code>MasterClock</code> timeline to all clients. The server controls play, pause, stop, and seek — clients follow automatically.</p>
+<p>The server answers the clients' pings, sends them its heard position, and announces itself once a second on each network card's broadcast address (port + 1) so clients can find it. Control playback on the server as usual — the clients follow.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Prerequisites: Initialize + Start + Create AudioMixer
 await OwnaudioNet.InitializeAsync();
 OwnaudioNet.Start();
 var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
 mixer.Start();
 
-// Start server — broadcasts MasterClock to LAN
-await OwnaudioNet.StartNetworkSyncServerAsync(port: 9876, useLocalTimeOnly: true);
-
-// From this point, control playback normally:
-mixer.Seek(0);
 var track = new FileSource("backing.mp3");
-mixer.AddSource(track);   // attaches to MasterClock — and starts it, the mixer is already running
+mixer.AddSource(track);
 
-// Stop network sync when done
+await OwnaudioNet.StartNetworkSyncServerAsync(port: 9876);
+
+// From this point, control playback normally — clients follow play, pause, stop and seek:
+track.Play();
+mixer.Seek(42.0);
+
 OwnaudioNet.StopNetworkSync();</code></pre></div>
 
 <h2 id="client">Client Mode</h2>
-<p>Clients synchronize their <code>MasterClock</code> to the server's timeline. Each client plays its own audio files, kept in sync by the shared clock.</p>
+<p>The client loads the same song on its side and leaves the transport to the server. It does not need to call <code>Play()</code>.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">await OwnaudioNet.InitializeAsync();
 OwnaudioNet.Start();
 var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
 mixer.Start();
 
-// Connect to server (null = UDP auto-discovery)
-await OwnaudioNet.StartNetworkSyncClientAsync(
-    serverAddress: "192.168.1.100",  // or null for auto-discovery
-    port: 9876,
-    allowOfflinePlayback: true);     // continue if server disconnects
+var clientTrack = new FileSource("backing.mp3");
+mixer.AddSource(clientTrack);
 
-// Load client's own audio — clock is controlled by server
-var clientTrack = new FileSource("client-audio.mp3");
-mixer.AddSource(clientTrack);   // attached to the server-driven clock on registration</code></pre></div>
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: null,             // null = find the server by its announcement, or "192.168.1.100"
+    port: 9876,
+    allowOfflinePlayback: true);     // keep playing if the server is lost</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>The trim needs the Rust-native chain (the default): it rides on the native tracks' tempo, on top of whatever <code>Tempo</code> you set. <code>source.Tempo</code> itself never shows it.</p></div>
 
 <h2 id="stop">Stop Network Sync</h2>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">OwnaudioNet.StopNetworkSync();</code></pre></div>
 
-<h2 id="events">Events</h2>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">OwnaudioNet.NetworkSyncConnectionChanged += (_, e) =>
-{
+<h2 id="events">Events &amp; commands</h2>
+<p>Transport needs no messages. Anything else the clients should do — a tempo change, a song change — the server sends with <code>BroadcastCommand</code>; each command is sent three times and arrives once.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Client
+OwnaudioNet.NetworkSyncConnectionChanged += (_, e) =>
     Console.WriteLine($"Network sync state: {e.OldState} → {e.NewState}");
-};</code></pre></div>
+
+OwnaudioNet.NetworkSyncCommandReceived += (_, e) =>
+{
+    if (e.Command.Type == NetworkSyncProtocol.CommandType.Tempo)
+        clientTrack.Tempo = e.Command.TempoValue;   // raised on a sync thread
+};
+
+// Server
+var tempo = NetworkSyncProtocol.CreateTempoCommand(0, 1.05f, useSmooth: false);
+OwnaudioNet.BroadcastCommand(ref tempo);
+
+// Either side
+var status = OwnaudioNet.GetNetworkSyncStatus();
+Console.WriteLine($"{status.ConnectionState}, one-way {status.AverageLatency:F1} ms, off by {status.SyncDrift:F1} ms");</code></pre></div>
+<p>A following client also writes one <code>[NetSync]</code> log line a minute — average and worst gap, the share within 5 ms, trims, seeks, jitter and round trip.</p>
 
 <h2 id="use-cases">Use Cases</h2>
 <div class="card-grid">
@@ -93,8 +116,8 @@ mixer.AddSource(clientTrack);   // attached to the server-driven clock on regist
 <div class="table-wrap"><table class="prop-table">
   <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>port</code></td><td><code>int</code></td><td><code>9876</code></td><td>UDP port for clock broadcast.</td></tr>
-    <tr><td><code>useLocalTimeOnly</code></td><td><code>bool</code></td><td><code>true</code></td><td>Use local time sync only (no internet NTP required).</td></tr>
+    <tr><td><code>port</code></td><td><code>int</code></td><td><code>9876</code></td><td>UDP port the clients ping; announcements go to port + 1.</td></tr>
+    <tr><td><code>useLocalTimeOnly</code></td><td><code>bool</code></td><td><code>true</code></td><td>Kept for compatibility, no effect — the sync never needs the internet.</td></tr>
   </tbody>
 </table></div>
 
@@ -102,9 +125,9 @@ mixer.AddSource(clientTrack);   // attached to the server-driven clock on regist
 <div class="table-wrap"><table class="prop-table">
   <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>serverAddress</code></td><td><code>string?</code></td><td><code>null</code></td><td>Server IP address. <code>null</code> = UDP broadcast auto-discovery.</td></tr>
-    <tr><td><code>port</code></td><td><code>int</code></td><td><code>9876</code></td><td>UDP port to listen on.</td></tr>
-    <tr><td><code>allowOfflinePlayback</code></td><td><code>bool</code></td><td><code>true</code></td><td>Continue playback if server connection drops.</td></tr>
+    <tr><td><code>serverAddress</code></td><td><code>string?</code></td><td><code>null</code></td><td>Server host or IP address. <code>null</code> = find it by its announcements.</td></tr>
+    <tr><td><code>port</code></td><td><code>int</code></td><td><code>9876</code></td><td>The server's UDP port. The client itself binds a free port.</td></tr>
+    <tr><td><code>allowOfflinePlayback</code></td><td><code>bool</code></td><td><code>true</code></td><td>Keep playing when the server is lost; <code>false</code> pauses.</td></tr>
   </tbody>
 </table></div>
 

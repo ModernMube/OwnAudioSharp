@@ -98,9 +98,9 @@ source.Dispose();</code></pre></div>
   <tbody>
     <tr><td><code>StartOffset</code></td><td><code>double</code></td><td><code>0.0</code></td><td>Timeline start position in seconds for master clock sync.</td></tr>
     <tr><td><code>IsAttachedToClock</code></td><td><code>bool</code></td><td><code>false</code></td><td>Whether attached to a master clock (read-only).</td></tr>
-    <tr><td><code>SyncTolerance</code></td><td><code>double</code></td><td><code>0.005</code></td><td>Green zone threshold: drift below this needs no correction (5ms).</td></tr>
-    <tr><td><code>SoftSyncTolerance</code></td><td><code>double</code></td><td><code>0.025</code></td><td>Yellow zone threshold: triggers gradual tempo correction (25ms).</td></tr>
-    <tr><td><code>SoftSyncMaxTempoAdjustment</code></td><td><code>double</code></td><td><code>0.02</code></td><td>Maximum tempo drift during soft sync correction (2%).</td></tr>
+    <tr><td><code>SyncTolerance</code></td><td><code>double</code></td><td><code>0.005</code></td><td>No effect since the network sync got its own controller; kept so old code compiles. See <a href="api-sync.html#drift-zones">drift correction</a>.</td></tr>
+    <tr><td><code>SoftSyncTolerance</code></td><td><code>double</code></td><td><code>0.025</code></td><td>No effect, kept for compatibility.</td></tr>
+    <tr><td><code>SoftSyncMaxTempoAdjustment</code></td><td><code>double</code></td><td><code>0.02</code></td><td>No effect, kept for compatibility.</td></tr>
   </tbody>
 </table></div>
 
