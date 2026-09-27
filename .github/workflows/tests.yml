@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ "develop_rust_audio", "master" ]
+    branches: [ "develop_rust_audio", "main" ]
   pull_request:
-    branches: [ "master", "develop_rust_audio" ]
+    branches: [ "main", "develop_rust_audio" ]
   workflow_dispatch:
 
 concurrency:
@@ -81,7 +81,7 @@ jobs:
           key: ${{ runner.os }}-cargo-ffi-${{ hashFiles('OwnAudioEngineRust/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-ffi-
 
-      # The committed runtimes/ binary is only refreshed after a push to master, so a PR that adds
+      # The committed runtimes/ binary is only refreshed after a push to main, so a PR that adds
       # an export would test against a library that lacks it. Build the one under test instead.
       - name: Build native engine from this commit
         working-directory: OwnAudioEngineRust

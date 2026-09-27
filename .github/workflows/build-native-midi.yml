@@ -2,13 +2,13 @@ name: Build native MIDI + pack NuGet
 
 on:
   push:
-    branches: [ "develop_rust_audio", "master" ]
+    branches: [ "develop_rust_audio", "main" ]
     tags:     [ "midi-v*.*.*" ]
     paths:
       - "OwnAudio/Midi/**"
       - ".github/workflows/build-native-midi.yml"
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main" ]
     paths:
       - "OwnAudio/Midi/**"
       - ".github/workflows/build-native-midi.yml"

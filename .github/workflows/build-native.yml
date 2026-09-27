@@ -2,10 +2,10 @@ name: Build native + pack NuGet
 
 on:
   push:
-    branches: [ "develop_rust_audio", "master" ]
+    branches: [ "develop_rust_audio", "main" ]
     tags:     [ "v*.*.*" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 # Cancel duplicate runs for the same ref

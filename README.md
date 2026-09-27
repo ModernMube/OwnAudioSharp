@@ -9,7 +9,7 @@
   <a href="https://modernmube.github.io/OwnAudioSharp">
     <img src="https://img.shields.io/badge/Docs-API%20Documentation-darkgreen" alt="Documentation">
   </a>
-  <a href="https://github.com/ModernMube/OwnAudioSharp/tree/master/OwnAudio/Examples">
+  <a href="https://github.com/ModernMube/OwnAudioSharp/tree/main/OwnAudio/Examples">
     <img src="https://img.shields.io/badge/Examples-Sample%20Projects-red" alt="Examples">
   </a>
   <a href="https://www.buymeacoffee.com/ModernMube">
@@ -387,7 +387,7 @@ This project is developed with the following tools:
 
 | | |
 |:--:|:--|
-| ![Claude Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/docs/assets/tools/claude.svg) | **Anthropic** — Claude Code |
-| ![Visual Studio Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/docs/assets/tools/vscode.svg) | **Microsoft** — Visual Studio Code |
-| ![Visual Studio 2022](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/docs/assets/tools/visualstudio.svg) | **Microsoft** — Visual Studio 2022 |
-| ![Rider](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/docs/assets/tools/rider.svg) | **JetBrains** — Rider |
+| ![Claude Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/main/docs/assets/tools/claude.svg) | **Anthropic** — Claude Code |
+| ![Visual Studio Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/main/docs/assets/tools/vscode.svg) | **Microsoft** — Visual Studio Code |
+| ![Visual Studio 2022](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/main/docs/assets/tools/visualstudio.svg) | **Microsoft** — Visual Studio 2022 |
+| ![Rider](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/main/docs/assets/tools/rider.svg) | **JetBrains** — Rider |

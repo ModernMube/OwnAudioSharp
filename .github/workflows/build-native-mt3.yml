@@ -2,13 +2,13 @@ name: Build native MT3 + pack NuGet
 
 on:
   push:
-    branches: [ "develop_rust_audio", "master" ]
+    branches: [ "develop_rust_audio", "main" ]
     tags:     [ "mt3-v*.*.*" ]
     paths:
       - "OwnAudio/Source/Mt3/**"
       - ".github/workflows/build-native-mt3.yml"
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main" ]
     paths:
       - "OwnAudio/Source/Mt3/**"
       - ".github/workflows/build-native-mt3.yml"
