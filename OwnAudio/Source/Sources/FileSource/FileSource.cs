@@ -113,23 +113,27 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     #region Propertyes
 
     /// <summary>
-    /// Green zone threshold in seconds, drift below this needs no correction.
+    /// Green zone threshold in seconds. Nothing reads it any more.
     /// </summary>
+    [Obsolete("Not read any more - the network sync trims the tempo of the whole mixer, see NetworkSyncClient.")]
     public double SyncTolerance { get; set; } = 0.005;
 
     /// <summary>
-    /// Yellow zone threshold in seconds, drift here gets a tempo nudge.
+    /// Yellow zone threshold in seconds. Nothing reads it any more.
     /// </summary>
+    [Obsolete("Not read any more - the network sync trims the tempo of the whole mixer, see NetworkSyncClient.")]
     public double SoftSyncTolerance { get; set; } = 0.025;
 
     /// <summary>
-    /// Max tempo adjustment for soft sync.
+    /// Old soft sync ceiling, unused.
     /// </summary>
+    [Obsolete("Not read any more - the network sync trims the tempo of the whole mixer, see NetworkSyncClient.")]
     public double SoftSyncMaxTempoAdjustment { get; set; } = 0.02;
 
     /// <summary>
-    /// Diagnostic snapshot of the sync state, allocation free.
+    /// Snapshot of the old per-source sync settings, allocation free.
     /// </summary>
+    [Obsolete("Reports the unused tolerances only. NetworkSyncStatus has the live sync numbers.")]
     public SyncDiagnosticsSnapshot SyncDiagnostics => new SyncDiagnosticsSnapshot
     {
         AdaptiveScale                = 1.0,

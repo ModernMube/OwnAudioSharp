@@ -138,8 +138,8 @@ public sealed partial class AudioMixer
 
     /// <summary>
     /// Drives the master clock from the furthest-along playing track in local playback —
-    /// without the MixThread the clock would just sit frozen. Network-controlled clocks are
-    /// left to the synchroniser, DriveRustNativeSyncOnce pulls the tracks to them instead.
+    /// without the MixThread the clock would just sit frozen. A clock the app itself marked
+    /// IsNetworkControlled is left alone; the network sync never sets that, it only trims the tempo.
     /// </summary>
     private void _advanceMasterClockFromTracks()
     {

@@ -12,21 +12,6 @@ namespace OwnaudioNET.Sources;
 /// </summary>
 public sealed partial class GroupSource : IRustNativeChainSource
 {
-    /// <summary>
-    /// Drift inside this needs no correction, seconds.
-    /// </summary>
-    private const double SyncTolerance = 0.005;
-
-    /// <summary>
-    /// Drift up to this gets a tempo nudge, beyond it a hard seek. Seconds.
-    /// </summary>
-    private const double SoftSyncTolerance = 0.025;
-
-    /// <summary>
-    /// Largest tempo nudge the soft sync applies.
-    /// </summary>
-    private const double SoftSyncMaxTempoAdjustment = 0.02;
-
     /// <inheritdoc/>
     AudioTrack? IRustNativeChainSource.RustTrack => RustTrack;
 

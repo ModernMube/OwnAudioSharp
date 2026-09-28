@@ -110,19 +110,6 @@ public class FileSourceSyncTests : IDisposable
         read.Should().Be(512);
     }
 
-    [Fact]
-    public void SyncTolerance_ShouldBeConfigurable()
-    {
-        // Arrange
-        _source = new FileSource(_mockDecoder.Object);
-
-        // Act
-        _source.SyncTolerance = 0.050; // 50ms
-
-        // Assert
-        _source.SyncTolerance.Should().Be(0.050);
-    }
-
     /// <summary>
     /// Verifies that for a source without a native backend (mock decoder), the analysis cursor
     /// exposed by <see cref="FileSource.Position"/> advances by the raw number of decoded frames,

@@ -1906,11 +1906,18 @@ namespace OwnaudioNET.Sources
         public override bool IsEndOfStream { get; }
         public override float PitchShift { get; set; }
         public override double Position { get; }
+        [System.Obsolete("Not read any more - the network sync trims the tempo of the whole mixer, see Netw" +
+            "orkSyncClient.")]
         public double SoftSyncMaxTempoAdjustment { get; set; }
+        [System.Obsolete("Not read any more - the network sync trims the tempo of the whole mixer, see Netw" +
+            "orkSyncClient.")]
         public double SoftSyncTolerance { get; set; }
         public double StartOffset { get; set; }
         public override Ownaudio.AudioStreamInfo StreamInfo { get; }
+        [System.Obsolete("Reports the unused tolerances only. NetworkSyncStatus has the live sync numbers.")]
         public OwnaudioNET.Sources.SyncDiagnosticsSnapshot SyncDiagnostics { get; }
+        [System.Obsolete("Not read any more - the network sync trims the tempo of the whole mixer, see Netw" +
+            "orkSyncClient.")]
         public double SyncTolerance { get; set; }
         public override float Tempo { get; set; }
         public void AttachToClock(OwnaudioNET.Synchronization.MasterClock clock) { }
