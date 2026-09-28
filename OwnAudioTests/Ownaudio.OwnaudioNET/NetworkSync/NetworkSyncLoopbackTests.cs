@@ -139,6 +139,55 @@ public sealed class NetworkSyncLoopbackTests : IDisposable
     }
 
     [Fact]
+    public async Task ThrowingHandler_DoesNotStopTheClient()
+    {
+        await _connect();
+        _waitFor(() => _client!.ConnectionState == NetworkSyncProtocol.ConnectionState.Synced, 3.0).Should().BeTrue();
+
+        int received = 0;
+        _client!.CommandReceived += (_, _) =>
+        {
+            Interlocked.Increment(ref received);
+            throw new InvalidOperationException("app bug");
+        };
+
+        var first = NetworkSyncProtocol.CreateTempoCommand(0, 1.1f, false);
+        _server.EnqueueCommand(ref first).Should().BeTrue();
+        _waitFor(() => received == 1, 2.0).Should().BeTrue();
+
+        var second = NetworkSyncProtocol.CreateTempoCommand(0, 1.2f, false);
+        _server.EnqueueCommand(ref second).Should().BeTrue();
+
+        _waitFor(() => received == 2, 2.0).Should().BeTrue("the network thread survived the first throw");
+        _client.ConnectionState.Should().Be(NetworkSyncProtocol.ConnectionState.Synced);
+    }
+
+    [Fact]
+    public async Task ServerInStartSilence_CountsAsPlaying()
+    {
+        _serverPlayer.SilentFor = 3.0;
+        _serverPlayer.Follow(0.0, true);
+        await _connect();
+
+        _waitFor(() => _clientPlayer.IsPlaying, 2.5).Should().BeTrue("the song runs on the server even before its first sound");
+
+        Thread.Sleep(3000);
+        _worstGap(1.0).Should().BeLessThan(0.015);
+    }
+
+    [Fact]
+    public async Task GoIn_ThatLeavesUsSilent_IsRetriedSlowly()
+    {
+        _clientPlayer.Refuses = true;
+        _serverPlayer.Follow(10.0, true);
+        await _connect();
+
+        Thread.Sleep(4000);
+
+        _clientPlayer.Starts.Should().BeInRange(1, 2, "after a failed go-in the retry waits seconds, not a settle");
+    }
+
+    [Fact]
     public async Task ServerGone_TakesTheTrimOff_AndKeepsPlaying()
     {
         _serverPlayer.Follow(10.0, true);
@@ -187,6 +236,7 @@ public sealed class NetworkSyncLoopbackTests : IDisposable
     /// <summary>
     /// A player on its own crystal: runs at (1 + ppm) × trim, its reported position steps in
     /// 512-frame blocks like a device callback, and the speaker trails it by the latency.
+    /// SilentFor mimics a start-offset silence, Refuses a player with nothing to start.
     /// </summary>
     private sealed class SimPlayer : ISyncTimeline
     {
@@ -198,6 +248,13 @@ public sealed class NetworkSyncLoopbackTests : IDisposable
         private double _anchorPosition;
         private double _anchorAt;
         private float _trim = 1f;
+        private int _starts;
+
+        public double SilentFor { get; set; }
+
+        public bool Refuses { get; set; }
+
+        public int Starts => Volatile.Read(ref _starts);
 
         public SimPlayer(double ppm, double latency)
         {
@@ -234,19 +291,24 @@ public sealed class NetworkSyncLoopbackTests : IDisposable
             lock (_lock)
             {
                 double exact = _at(NetworkClock.Now);
-                position = _playing ? _anchorPosition + Math.Floor((exact - _anchorPosition) / Block) * Block : exact;
-                rendering = _playing;
+                rendering = _playing && exact - _anchorPosition >= SilentFor;
+
+                if (_playing && !rendering) position = _anchorPosition;
+                else position = _playing ? _anchorPosition + Math.Floor((exact - _anchorPosition) / Block) * Block : exact;
+
                 return _playing;
             }
         }
 
         public void Follow(double position, bool play)
         {
+            if (play) Interlocked.Increment(ref _starts);
+
             lock (_lock)
             {
                 _anchorPosition = position;
                 _anchorAt = NetworkClock.Now;
-                _playing = play;
+                _playing = play && !Refuses;
             }
         }
 

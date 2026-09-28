@@ -252,6 +252,12 @@ public sealed class NetworkSyncServer : IDisposable
             int _n;
             try { _n = _sock.ReceiveFrom(_in, SocketFlags.None, _from); }
             catch (SocketException ex) when (ex.SocketErrorCode is SocketError.TimedOut or SocketError.ConnectionReset) { continue; }
+            catch (SocketException ex) when (_isRunning)
+            {
+                Log.Warning($"[SyncServer] Receive failed ({ex.SocketErrorCode}), carrying on");
+                Thread.Sleep(ReceiveTimeoutMs);
+                continue;
+            }
             catch (Exception) { return; }
 
             double _received = NetworkClock.Now;
@@ -316,11 +322,18 @@ public sealed class NetworkSyncServer : IDisposable
         }
 
         Log.Info($"[SyncServer] Client {_new} joined");
-        ClientConnected?.Invoke(this, new ClientConnectedEventArgs(_new));
+
+        try { ClientConnected?.Invoke(this, new ClientConnectedEventArgs(_new)); }
+        catch (Exception ex) { Log.Error("[SyncServer] A ClientConnected handler threw", ex); }
+
         _wake.Set();
         return true;
     }
 
+    /// <summary>
+    /// A start still in its offset silence counts as playing: the clock stands still then,
+    /// so the song time is run on from where the play began.
+    /// </summary>
     private void _sendLoop()
     {
         byte[] _out = new byte[NetworkSyncProtocol.MaxPacketSize];
@@ -337,6 +350,8 @@ public sealed class NetworkSyncServer : IDisposable
         double _nextStoppedSend = 0;
         double _nextAnnounce = 0;
         double _nextSweep = 0;
+        double _silentFrom = double.NaN;
+        double _silentAt = 0;
         int _announces = 0;
         SocketAddress[] _cards = [];
 
@@ -349,7 +364,14 @@ public sealed class NetworkSyncServer : IDisposable
 
             try
             {
-                bool _playing = _player.Read(out double _position, out bool _rendering) && _rendering;
+                bool _playing = _player.Read(out double _position, out bool _rendering);
+                if (_playing && !_rendering)
+                {
+                    if (double.IsNaN(_silentFrom) || Math.Abs(_position - _silentFrom) > 0.001) { _silentFrom = _position; _silentAt = _now; }
+                    _position = _silentFrom + (_now - _silentAt);
+                }
+                else _silentFrom = double.NaN;
+
                 double _heard = _playing ? _position - _player.OutputLatency : _position;
 
                 bool _moved = _playing != _lastPlaying
@@ -490,7 +512,7 @@ public sealed class NetworkSyncServer : IDisposable
                 }
             }
         }
-        catch (NetworkInformationException ex)
+        catch (Exception ex)
         {
             Log.Warning($"[SyncServer] Cannot list the network cards, not announcing: {ex.Message}");
         }
@@ -519,7 +541,9 @@ public sealed class NetworkSyncServer : IDisposable
         foreach (var _endpoint in _gone)
         {
             Log.Warning($"[SyncServer] Client {_endpoint} went silent, dropped");
-            ClientDisconnected?.Invoke(this, new ClientDisconnectedEventArgs(_endpoint));
+
+            try { ClientDisconnected?.Invoke(this, new ClientDisconnectedEventArgs(_endpoint)); }
+            catch (Exception ex) { Log.Error("[SyncServer] A ClientDisconnected handler threw", ex); }
         }
     }
 

@@ -23,6 +23,11 @@ public sealed class NetworkSyncClient : IDisposable
     /// </summary>
     private const double ReseekAboveSeconds = 0.030;
 
+    /// <summary>
+    /// A go-in that left us silent (nothing loaded, all past the end) is retried this slowly.
+    /// </summary>
+    private const double GoInRetrySeconds = 5.0;
+
     private const int ControlTickMs = 50;
     private const int ReceiveTimeoutMs = 250;
     private const int ErrorReportInterval = 100;
@@ -61,6 +66,7 @@ public sealed class NetworkSyncClient : IDisposable
     private double _startLead;
     private double _landingAt = double.NaN;
     private double _nextGoInAt;
+    private bool _wentIn;
     private bool _pausedForLoss;
     private int _controlErrors;
     private double _lastError;
@@ -267,6 +273,12 @@ public sealed class NetworkSyncClient : IDisposable
             int _n;
             try { _n = _sock.ReceiveFrom(_in, SocketFlags.None, _from); }
             catch (SocketException ex) when (ex.SocketErrorCode is SocketError.TimedOut or SocketError.ConnectionReset) { continue; }
+            catch (SocketException ex) when (_isRunning)
+            {
+                Log.Warning($"[SyncClient] Receive failed ({ex.SocketErrorCode}), carrying on");
+                Thread.Sleep(ReceiveTimeoutMs);
+                continue;
+            }
             catch (Exception) { return; }
 
             double _received = NetworkClock.Now;
@@ -408,7 +420,9 @@ public sealed class NetworkSyncClient : IDisposable
 
         _lastCommand = cmd.SequenceNumber;
         _haveCommand = true;
-        CommandReceived?.Invoke(this, new CommandReceivedEventArgs(cmd));
+
+        try { CommandReceived?.Invoke(this, new CommandReceivedEventArgs(cmd)); }
+        catch (Exception ex) { Log.Error($"[SyncClient] A CommandReceived handler threw on {cmd.Type}", ex); }
     }
 
     private void _refreshState()
@@ -489,17 +503,19 @@ public sealed class NetworkSyncClient : IDisposable
             }
 
             _followedEpoch = _serverEpoch;
+            _wentIn = false;
             return;
         }
 
         if (!_playing)
         {
             if (now < _nextGoInAt) return;
-            _goIn(now, _server, _latency);
+            _goIn(now, _server, _latency, _wentIn);
             _followedEpoch = _serverEpoch;
             return;
         }
 
+        _wentIn = false;
         if (!_rendering) return;
 
         double _heard = _position - _latency;
@@ -537,9 +553,9 @@ public sealed class NetworkSyncClient : IDisposable
 
     /// <summary>
     /// The server plays and we don't: start where it will be by the time our sound comes out,
-    /// plus the lead our start usually loses.
+    /// plus the lead our start usually loses. retry means the last go-in didn't get us playing.
     /// </summary>
-    private void _goIn(double now, double server, double latency)
+    private void _goIn(double now, double server, double latency, bool retry)
     {
         double _target = Math.Max(0.0, server + latency + _startLead);
 
@@ -549,9 +565,12 @@ public sealed class NetworkSyncClient : IDisposable
         _ownFit.Reset();
         _timeline.Follow(_target, true);
 
+        _wentIn = true;
         _landingAt = now + SyncController.SettleSeconds;
-        _nextGoInAt = now + SyncController.SettleSeconds;
-        Log.Info($"[SyncClient] Following the server's play from {_target:F3}s (lead {_startLead * 1000:F0} ms)");
+        _nextGoInAt = now + (retry ? GoInRetrySeconds : SyncController.SettleSeconds);
+
+        if (!retry)
+            Log.Info($"[SyncClient] Following the server's play from {_target:F3}s (lead {_startLead * 1000:F0} ms)");
     }
 
     private void _seekTo(double now, double server, double latency)
@@ -583,6 +602,7 @@ public sealed class NetworkSyncClient : IDisposable
         if (_timeline!.Trim != 1f) _timeline.Trim = 1f;
         _controller.Reset();
         _ownFit.Reset();
+        _wentIn = false;
     }
 
     #endregion
@@ -600,7 +620,8 @@ public sealed class NetworkSyncClient : IDisposable
         else
             Log.Info($"[SyncClient] {oldState} -> {newState}");
 
-        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(oldState, newState));
+        try { ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(oldState, newState)); }
+        catch (Exception ex) { Log.Error("[SyncClient] A ConnectionStateChanged handler threw", ex); }
     }
 
     private static IPEndPoint _endpointOf(SocketAddress address)
