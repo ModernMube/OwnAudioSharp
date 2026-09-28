@@ -115,12 +115,14 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
 
         /// <summary>
-        /// The mic hangs on the old mixer as a source, so it goes when the bus changes.
+        /// The mic hangs on the old mixer as a source, so it goes when the bus changes - and a
+        /// measurement running on the old bus is cancelled rather than left with a dead mic.
         /// </summary>
         void IMasterBusAware.AttachMixer(AudioMixer? mixer)
         {
             if (ReferenceEquals(_mixer, mixer)) return;
 
+            CancelMeasurement();
             _micMonitor?.Dispose();
             _micMonitor = null;
             _mixer = mixer;
@@ -351,7 +353,8 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// </summary>
         public void CancelMeasurement()
         {
-            _measurementCancellation?.Cancel();
+            try { _measurementCancellation?.Cancel(); }
+            catch (ObjectDisposedException) { }
         }
         
         #endregion

@@ -100,14 +100,16 @@ namespace OwnaudioNET.Effects.SmartMaster
                 UpdateStatus(status, statusCallback, MeasurementStatus.AnalyzingSpectrum, 0.3f, "Spectrum analysis...");
                 await Task.Delay(TimeSpan.FromSeconds(SettleSeconds), cancellationToken);
 
-                if (await _averageAsync(mic, measured, CaptureSeconds, cancellationToken,
-                        ratio => UpdateStatus(status, statusCallback, MeasurementStatus.AnalyzingSpectrum, 0.3f + 0.55f * ratio, "Measuring room...")) == 0)
+                float? _rms = await _averageAsync(mic, measured, CaptureSeconds, cancellationToken,
+                    ratio => UpdateStatus(status, statusCallback, MeasurementStatus.AnalyzingSpectrum, 0.3f + 0.55f * ratio, "Measuring room..."));
+
+                if (_rms is null)
                 {
                     AddWarning(results, "The mic heard nothing usable - check the input device and its level");
                     _fail(status, statusCallback, results);
                 }
 
-                mic.ReadWindow(measured, out captureDb);
+                captureDb = _rms ?? -100f;
             }
             finally
             {
@@ -181,7 +183,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             await Task.Delay(TimeSpan.FromSeconds(SettleSeconds * 0.6), token);
 
             var _bands = new float[SmartMasterConfig.EqBands];
-            if (await _averageAsync(mic, _bands, ChannelSeconds, token, null) == 0) return -100f;
+            if (await _averageAsync(mic, _bands, ChannelSeconds, token, null) is null) return -100f;
 
             float _level = _bandGroupDb(_bands, RefBandFirst, RefBandLast) - _bandGroupDb(reference, RefBandFirst, RefBandLast);
             Log.Info($"[SmartMaster] Channel {channel} measured: {_level:F1} dB against the reference");
@@ -192,8 +194,8 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// <summary>
         /// Lets the monitor average for a while, then reads it back into bands.
         /// </summary>
-        /// <returns>Windows averaged, 0 when fewer than three came in - too few to trust.</returns>
-        private static async Task<int> _averageAsync(SmartMasterMicMonitor mic, float[] bands, double seconds,
+        /// <returns>RMS of the stretch in dBFS, null when fewer than three windows came in - too few to trust.</returns>
+        private static async Task<float?> _averageAsync(SmartMasterMicMonitor mic, float[] bands, double seconds,
             CancellationToken token, Action<float>? onProgress)
         {
             mic.BeginWindow();
@@ -205,11 +207,11 @@ namespace OwnaudioNET.Effects.SmartMaster
                 onProgress?.Invoke((float)Math.Min(1.0, _clock.Elapsed.TotalSeconds / seconds));
             }
 
-            int _windows = mic.ReadWindow(bands, out _);
-            if (_windows >= 3) return _windows;
+            int _windows = mic.ReadWindow(bands, out float _rmsDb);
+            if (_windows >= 3) return _rmsDb;
 
             Log.Warning($"[SmartMaster] Only {_windows} analysis windows came in from the mic");
-            return 0;
+            return null;
         }
 
         /// <summary>

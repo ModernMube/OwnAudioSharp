@@ -10,11 +10,10 @@ namespace OwnaudioNET.Effects.SmartMaster
     internal sealed partial class SmartMasterMeasurementService
     {
         /// <summary>
-        /// Band levels of the reference run and the rate they were taken at. Nobody writes into
-        /// the array afterwards, so one copy serves every measurement.
+        /// Band levels of the reference run, with the rate they were taken at. One object, so
+        /// two effects on different rates can't pair one's bands with the other's rate.
         /// </summary>
-        private static float[]? _reference;
-        private static int _referenceRate;
+        private static Tuple<int, float[]>? _reference;
 
         /// <summary>
         /// The same noise the speakers get, through the same analyzer. Subtracting it takes the
@@ -22,14 +21,15 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// </summary>
         private float[] _referenceSpectrum()
         {
-            if (_reference != null && _referenceRate == _config.SampleRate) return _reference;
+            var _cached = Volatile.Read(ref _reference);
+            if (_cached != null && _cached.Item1 == _config.SampleRate) return _cached.Item2;
 
             var _buffer = new float[_config.SampleRate * 8];
             new PinkNoise().Render(_buffer, 1, -1);
 
-            _reference = new SmartMasterSpectrumAnalyzer(_config.SampleRate).AnalyzeBuffer(_buffer);
-            _referenceRate = _config.SampleRate;
-            return _reference;
+            float[] _bands = new SmartMasterSpectrumAnalyzer(_config.SampleRate).AnalyzeBuffer(_buffer);
+            Volatile.Write(ref _reference, Tuple.Create(_config.SampleRate, _bands));
+            return _bands;
         }
 
         /// <summary>
