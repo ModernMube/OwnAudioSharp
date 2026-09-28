@@ -197,7 +197,7 @@ public sealed class NetworkSyncLoopbackTests : IDisposable
         _server.Stop();
 
         _waitFor(() => _client!.ConnectionState == NetworkSyncProtocol.ConnectionState.Disconnected, 4.0).Should().BeTrue();
-        _clientPlayer.Trim.Should().Be(1f);
+        _waitFor(() => _clientPlayer.Trim == 1f, 1.0).Should().BeTrue("the next control tick lets go of the trim");
         _clientPlayer.IsPlaying.Should().BeTrue("offline playback is allowed");
     }
 
