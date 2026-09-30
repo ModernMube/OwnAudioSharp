@@ -91,7 +91,7 @@ fn soft_clip_integral(u: f64) -> f64 {
 #[inline]
 fn soft_clip_adaa(u: f64, prev: &mut f64) -> f64 {
     // ADAA is the cheap trick instead of 2x oversampling: average the curve
-    // over the step, aliasing mostly gone, zero FIR latency in the loop. Nice.
+    // over the step, aliasing mostly gone, zero FIR latency in the loop.
     let d = u - *prev;
     let y = if d.abs() > 1.0e-5 {
         (soft_clip_integral(u) - soft_clip_integral(*prev)) / d
@@ -335,7 +335,7 @@ impl OwnDelay {
         }
 
         // The diffusers and the ADAA half sample add their own delay after the read,
-        // so we read that much earlier. Otherwise the echo lands late and grooves suck.
+        // so we read that much earlier, otherwise every echo lands late.
         let offset = modulation - line.compensation - adaa_delay;
         let pos_a = (line.head_a + offset).clamp(2.0, max_read);
         let a = read_hermite(&line.tape, mask, write, pos_a);

@@ -425,6 +425,21 @@ impl OwnDynamicAmp {
         self.meter_limiter = 1.0;
     }
 
+    /// Bypassed, the look-ahead line keeps running so the track stays where the mixer's
+    /// delay compensation put it. The rider keeps its gain, the limiter starts over.
+    fn bypass(&mut self, buffer: &mut [f32], stride: usize) {
+        let (lookahead, mask) = (self.lookahead_frames, self.line_mask);
+        for frame in buffer.chunks_exact_mut(stride) {
+            let w = (self.write_pos & mask) * MAX_CHANNELS;
+            let r = (self.write_pos.wrapping_sub(lookahead) & mask) * MAX_CHANNELS;
+            self.line[w..w + stride].copy_from_slice(frame);
+            frame.copy_from_slice(&self.line[r..r + stride]);
+            self.write_pos = self.write_pos.wrapping_add(1);
+        }
+        self.clear_limiter();
+        self.meter_limiter = 1.0;
+    }
+
     fn end_sub_block(&mut self) {
         self.sub_ring[self.sub_pos] = self.sub_sum / self.sub_len as f64;
         self.sub_pos = (self.sub_pos + 1) % MOMENTARY_SUB_BLOCKS;
@@ -447,7 +462,7 @@ impl OwnDynamicAmp {
         self.meter_momentary = power_to_lufs(momentary);
 
         // Quiet verses, fades and pauses don't get a vote. Otherwise the rider would crank
-        // up every pianissimo and pump the room noise in the gaps. Classic leveler sin.
+        // up every pianissimo and pump the room noise in the gaps.
         let above_freeze = momentary >= self.freeze_power;
         let above_relative = self.ema_weight <= 0.0
             || momentary >= (self.ema_power / self.ema_weight) * self.relative_gate_ratio;
@@ -484,7 +499,11 @@ impl Effect for OwnDynamicAmp {
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
         let stride = channels as usize;
-        if !self.enabled || stride == 0 || stride > MAX_CHANNELS {
+        if stride == 0 || stride > MAX_CHANNELS {
+            return;
+        }
+        if !self.enabled {
+            self.bypass(buffer, stride);
             return;
         }
 
@@ -680,8 +699,10 @@ impl Effect for OwnDynamicAmp {
         self.clear_state();
     }
 
+    /// Always on as far as the chain goes: bypass runs inside `process`, the look-ahead
+    /// delay must not drop out from under the delay compensation.
     fn is_enabled(&self) -> bool {
-        self.enabled
+        true
     }
 
     fn set_enabled(&mut self, enabled: bool) {
@@ -939,12 +960,16 @@ mod tests {
     }
 
     #[test]
-    fn disabled_passes_through_untouched() {
+    fn disabled_is_a_pure_lookahead_delay() {
         let mut amp = OwnDynamicAmp::new(FS);
         amp.set_enabled(false);
+        assert!(amp.is_enabled(), "the chain has to keep driving the line");
         let input = sine(440.0, 0.5, 0.1, 2);
         let mut buf = input.clone();
         run(&mut amp, &mut buf, 2, 512);
-        assert_eq!(buf, input);
+        let lat = amp.latency_samples() as usize * 2;
+        assert!(buf[..lat].iter().all(|&s| s == 0.0));
+        assert_eq!(&buf[lat..], &input[..input.len() - lat]);
+        assert_eq!(amp.get_param(PARAM_ENABLED), Some(0.0));
     }
 }

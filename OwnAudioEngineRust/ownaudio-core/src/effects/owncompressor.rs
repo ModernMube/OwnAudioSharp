@@ -48,6 +48,10 @@ pub const PARAM_AUTO_MAKEUP: u32 = 15;
 /// Param ID 16 — range: maximum gain reduction in dB (0 … 60).
 pub const PARAM_RANGE: u32 = 16;
 
+/// Most interleaved channels the effect takes; the first two are compressed, the rest
+/// only ride the look-ahead line. Wider buffers pass through.
+pub const MAX_CHANNELS: usize = 16;
+
 const MAX_LOOKAHEAD_MS: f32 = 10.0;
 const RMS_WINDOW_MS: f32 = 10.0;
 const AUTO_RELEASE_MEMORY_MS: f32 = 1_000.0;
@@ -163,7 +167,7 @@ impl OwnCompressor {
             inv_ratio_ramp: RampedParam::new(0.25, sample_rate, DEFAULT_SMOOTH_MS),
             makeup_ramp: RampedParam::new(0.0, sample_rate, DEFAULT_SMOOTH_MS),
             mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
-            line: vec![0.0; line_frames * 2],
+            line: vec![0.0; line_frames * MAX_CHANNELS],
             line_mask: line_frames - 1,
             write_pos: 0,
             clock: 0,
@@ -212,22 +216,36 @@ impl OwnCompressor {
         self.makeup_db + auto
     }
 
-    fn clear_state(&mut self) {
-        self.line.fill(0.0);
-        self.write_pos = 0;
-        self.clock = 0;
-        for h in &mut self.hold {
-            h.reset();
-        }
-        for f in &mut self.hpf {
-            f.reset();
-        }
+    fn settle_detector(&mut self) {
+        self.hold.iter_mut().for_each(SlidingMin::reset);
+        self.hpf.iter_mut().for_each(TptSvf::reset);
         self.mean_square = [0.0; 2];
         self.gr_db = [0.0; 2];
         self.gr_memory_db = [0.0; 2];
         self.fb_key = [0.0; 2];
         self.meter_gain = 1.0;
         self.meter_input = 0.0;
+    }
+
+    fn clear_state(&mut self) {
+        self.line.fill(0.0);
+        self.write_pos = 0;
+        self.clock = 0;
+        self.settle_detector();
+    }
+
+    /// Bypassed, the look-ahead line keeps running so the track stays where the mixer's
+    /// delay compensation put it; the detector starts over from unity.
+    fn bypass(&mut self, buffer: &mut [f32], stride: usize) {
+        let (lookahead, mask) = (self.lookahead_frames, self.line_mask);
+        for frame in buffer.chunks_exact_mut(stride) {
+            let w = (self.write_pos & mask) * MAX_CHANNELS;
+            let r = (self.write_pos.wrapping_sub(lookahead) & mask) * MAX_CHANNELS;
+            self.line[w..w + stride].copy_from_slice(frame);
+            frame.copy_from_slice(&self.line[r..r + stride]);
+            self.write_pos = self.write_pos.wrapping_add(1);
+        }
+        self.settle_detector();
     }
 }
 
@@ -242,11 +260,16 @@ impl Effect for OwnCompressor {
         self.inv_ratio_ramp.begin_block();
         self.makeup_ramp.begin_block();
         self.mix_ramp.begin_block();
-        if !self.enabled || channels == 0 {
+
+        let stride = channels as usize;
+        if stride == 0 || stride > MAX_CHANNELS {
+            return;
+        }
+        if !self.enabled {
+            self.bypass(buffer, stride);
             return;
         }
 
-        let stride = channels as usize;
         let stereo = stride >= 2;
         let detectors = if stereo { 2 } else { 1 };
         let lookahead = self.lookahead_frames;
@@ -293,13 +316,17 @@ impl Effect for OwnCompressor {
                 [in_l, in_r]
             };
 
-            // Always write the line, even with zero look-ahead. Otherwise flipping
-            // look-ahead on later replays whatever old junk was sitting in there.
-            let w = self.write_pos & mask;
-            self.line[2 * w] = x[0];
-            self.line[2 * w + 1] = x[1];
-            let r = self.write_pos.wrapping_sub(lookahead) & mask;
-            let delayed = [self.line[2 * r], self.line[2 * r + 1]];
+            // The line holds the raw frame, never the M/S pair, so bypass, a mode switch
+            // or a look-ahead change later on read back exactly what went in.
+            let w = (self.write_pos & mask) * MAX_CHANNELS;
+            let r = (self.write_pos.wrapping_sub(lookahead) & mask) * MAX_CHANNELS;
+            self.line[w..w + stride].copy_from_slice(frame);
+            let dry = [self.line[r], self.line[r + usize::from(stereo)]];
+            let delayed = if mid_side {
+                [0.5 * (dry[0] + dry[1]), 0.5 * (dry[0] - dry[1])]
+            } else {
+                dry
+            };
 
             // Feedback mode listens to last sample's compressed output, that's the
             // old-school vari-mu vibe. Feed-forward just listens to the input.
@@ -335,7 +362,7 @@ impl Effect for OwnCompressor {
                 }
 
                 // Auto release: the longer we've been squashing hard, the lazier the
-                // release gets (up to 4x). Stops the bass from farting and the mix from pumping.
+                // release gets (up to 4x), so sustained bass doesn't pump the mix.
                 let state = self.gr_db[c];
                 let coeff = if target < state {
                     att
@@ -366,20 +393,18 @@ impl Effect for OwnCompressor {
             self.fb_key = compressed;
 
             let wet = [compressed[0] * makeup_lin, compressed[1] * makeup_lin];
-            let (wet_l, wet_r, dry_l, dry_r) = if mid_side {
-                (
-                    wet[0] + wet[1],
-                    wet[0] - wet[1],
-                    delayed[0] + delayed[1],
-                    delayed[0] - delayed[1],
-                )
+            let (wet_l, wet_r) = if mid_side {
+                (wet[0] + wet[1], wet[0] - wet[1])
             } else {
-                (wet[0], wet[1], delayed[0], delayed[1])
+                (wet[0], wet[1])
             };
 
-            frame[0] = dry_l + mix * (wet_l - dry_l);
+            frame[0] = dry[0] + mix * (wet_l - dry[0]);
             if stereo {
-                frame[1] = dry_r + mix * (wet_r - dry_r);
+                frame[1] = dry[1] + mix * (wet_r - dry[1]);
+            }
+            if stride > 2 {
+                frame[2..].copy_from_slice(&self.line[r + 2..r + stride]);
             }
 
             self.write_pos = self.write_pos.wrapping_add(1);
@@ -490,8 +515,10 @@ impl Effect for OwnCompressor {
         self.mix_ramp.reset(self.mix);
     }
 
+    /// Always on as far as the chain goes: bypass runs inside `process`, the look-ahead
+    /// delay must not drop out from under the delay compensation.
     fn is_enabled(&self) -> bool {
-        self.enabled
+        true
     }
 
     fn set_enabled(&mut self, enabled: bool) {
@@ -652,5 +679,32 @@ mod tests {
         let mut buf = vec![0.9f32; 4_800];
         c.process(&mut buf, 1);
         assert!(buf[4_799] < 0.9);
+    }
+
+    #[test]
+    fn bypass_keeps_the_lookahead_delay() {
+        let mut c = OwnCompressor::new(FS);
+        c.set_param(PARAM_LOOKAHEAD, 5.0);
+        c.set_param(PARAM_THRESHOLD, -40.0);
+        c.set_enabled(false);
+        assert!(c.is_enabled(), "the chain has to keep driving the line");
+        let input = square(0.8, 4_800);
+        let mut buf = input.clone();
+        run(&mut c, &mut buf);
+        assert!(buf[..240 * 2].iter().all(|&s| s == 0.0));
+        assert_eq!(&buf[240 * 2..], &input[..input.len() - 240 * 2]);
+        assert_eq!(c.get_param(PARAM_ENABLED), Some(0.0));
+    }
+
+    #[test]
+    fn channels_past_the_stereo_pair_ride_the_lookahead() {
+        let mut c = OwnCompressor::new(FS);
+        c.set_param(PARAM_LOOKAHEAD, 2.0);
+        c.set_param(PARAM_THRESHOLD, 0.0);
+        let mut buf = vec![0.0f32; 1_024 * 6];
+        buf[..6].copy_from_slice(&[0.1, 0.1, 0.2, 0.3, 0.4, 0.5]);
+        c.process(&mut buf, 6);
+        assert_eq!(&buf[96 * 6..97 * 6], &[0.1, 0.1, 0.2, 0.3, 0.4, 0.5]);
+        assert!(buf[..96 * 6].iter().all(|&s| s == 0.0));
     }
 }

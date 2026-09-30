@@ -881,6 +881,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_bypassed_lookahead_effect_keeps_its_track_aligned() {
+        use crate::effects::owncompressor::{OwnCompressor, PARAM_LOOKAHEAD};
+        use crate::effects::PARAM_ENABLED;
+
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let (mut ctl, rx) = command_channel(
+            64,
+            mixer.sample_rate(),
+            mixer.channels(),
+            mixer.max_buffer_size(),
+        );
+        mixer.attach_command_receiver(rx);
+
+        let mut impulse = vec![0.0f32; 512];
+        impulse[0] = 0.25;
+
+        let (a, sa) = ctl.add_track().unwrap();
+        ctl.set_track_source(a, Some(Box::new(VecSource::new(impulse.clone()))))
+            .unwrap();
+        let fx = ctl
+            .add_effect(a, Box::new(OwnCompressor::new(48_000.0)))
+            .unwrap();
+        ctl.set_effect_param(a, fx, PARAM_LOOKAHEAD, 2.0).unwrap();
+        ctl.set_effect_param(a, fx, PARAM_ENABLED, 0.0).unwrap();
+
+        let (b, sb) = ctl.add_track().unwrap();
+        ctl.set_track_source(b, Some(Box::new(VecSource::new(impulse))))
+            .unwrap();
+
+        sa.set_state(TrackState::Playing);
+        sb.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 512];
+        mixer.mix(&mut out);
+
+        assert_eq!(out[0], 0.0, "the bypassed look-ahead still delays track A");
+        assert_eq!(out[96], 0.5, "both impulses still align at 96 frames");
+    }
+
     /// Builds a mono mixer wired to a fresh command channel.
     fn wired() -> (MixerController, MultiTrackMixer) {
         let mixer = MultiTrackMixer::new(48_000.0, 1);
