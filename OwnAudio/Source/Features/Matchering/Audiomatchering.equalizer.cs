@@ -302,7 +302,7 @@ namespace OwnaudioNET.Features.Matchering
             NativeMastering.CompensateLatency(audioData, totalSamples, channels, toneAndDynamics);
 
             float shapedLufs = MeasureLoudness(audioData, sampleRate, channels).IntegratedLufs;
-            OwnDynamicAmpSettings leveler = _startingFrom(planned, shapedLufs);
+            OwnDynamicAmpSettings leveler = _startingFrom(planned, shapedLufs, new Levels(sourceSpectrum).Lufs);
 
             using StandaloneEffect ownDynamicAmp = NativeMastering.OwnDynamicAmp(sampleRate, channels, leveler);
 

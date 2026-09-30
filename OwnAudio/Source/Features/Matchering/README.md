@@ -348,7 +348,7 @@ Both settings come off the loudness readings of source and target.
 | Knee | 12 dB at gentle ratios, narrowing to 4 dB as the ratio rises. |
 | Attack / release | Attack 30 ms, faster with the excess (down to 5 ms); release from the source's loudness range (80…400 ms), with auto release on. |
 | Look-ahead | 2 ms, so a slow attack still catches the transient. |
-| Channel mode / link | Mid/side for a stereo source; the link drops from 0.8 toward 0.5 when the source is wider than the target, so its side is held on its own. |
+| Channel mode / link | Mid/side for a stereo source (side above −30 dB against the mid); the link drops from 0.8 toward 0.5 when the source is wider than the target, so its side is held on its own. |
 | Key high-pass | 20…150 Hz, higher the more of the source's energy sits under 80 Hz. |
 
 **OwnDynamicAmp** (`_levelerSettings`) — works on integrated loudness and loudness range:
@@ -358,7 +358,7 @@ Both settings come off the loudness readings of source and target.
 | Target | Target's integrated LUFS, or the preset's `DynamicAmp.TargetLevel`. |
 | Window / rates / tolerance | Source with more loudness range than the target: 3…12 s window, faster rates and a 0.5…1.5 dB tolerance, so the rider takes the extra range out. Otherwise a 10…30 s window and 1 dB tolerance that only sets the level. |
 | Relative gate | Target's loudness range + 4 LU (8…20), so the quiet parts the target keeps are kept. |
-| Freeze threshold | Under the source's noise floor (−70…−40 LUFS), so fades and pauses never pump up. |
+| Freeze threshold | Under the source's noise floor (−70…−40 LUFS), so fades and pauses never pump up. Moved with the level the rider actually gets: the pre-gain, the cut-only shift and what the EQ and compressor left. |
 | Ceiling | Target's true peak, held between −3 and −1 dBTP. |
 | Initial gain / boost / cut | The loudness difference (plus the cut-only shift or the render's pre-gain), with 6 dB of room either way. |
 

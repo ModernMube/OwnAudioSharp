@@ -37,7 +37,7 @@ namespace OwnaudioNET.Features.Matchering
                     TruePeak = stats.TruePeakDbtp;
                     Floor = stats.NoiseFloorLufs;
                     SideToMid = stats.SideToMidDb;
-                    Stereo = stats.SideToMidDb > MonoSideToMidDb;
+                    Stereo = stats.SideToMidDb > StereoSideToMidDb;
                 }
                 else
                 {
@@ -57,6 +57,12 @@ namespace OwnaudioNET.Features.Matchering
         /// Loudness range assumed when a spectrum carries no measurement, a typical pop master.
         /// </summary>
         private const float EstimatedRangeLu = 6f;
+
+        /// <summary>
+        /// Side under this much against the mid counts as mono - a faint decorrelation is no
+        /// reason for mid/side processing.
+        /// </summary>
+        private const float StereoSideToMidDb = -30f;
 
         #endregion
 
@@ -251,7 +257,7 @@ namespace OwnaudioNET.Features.Matchering
 
         /// <summary>
         /// The same settings with the gain the render took off in front of the chain added back
-        /// onto the start and the boost headroom.
+        /// onto the start and the boost headroom. The freeze threshold moves down with the audio.
         /// </summary>
         private static OwnDynamicAmpSettings _withPreGain(OwnDynamicAmpSettings settings, float preGainDb)
         {
@@ -260,15 +266,18 @@ namespace OwnaudioNET.Features.Matchering
             return settings with
             {
                 InitialGainDb = initial,
-                MaxBoostDb = Math.Clamp(Math.Max(settings.MaxBoostDb, initial + 6f), 0f, 30f)
+                MaxBoostDb = Math.Clamp(Math.Max(settings.MaxBoostDb, initial + 6f), 0f, 30f),
+                FreezeThresholdLufs = _shiftFreeze(settings.FreezeThresholdLufs, preGainDb)
             };
         }
 
         /// <summary>
-        /// The same settings starting from the gain that takes audio measured at `measuredLufs`
-        /// to the target, with the boost and cut room around it.
+        /// The same settings starting from the gain that takes audio measured at measuredLufs
+        /// to the target, with the boost and cut room around it. sourceLufs is the level the
+        /// settings were planned on, the freeze threshold follows the difference.
         /// </summary>
-        private static OwnDynamicAmpSettings _startingFrom(OwnDynamicAmpSettings settings, float measuredLufs)
+        private static OwnDynamicAmpSettings _startingFrom(OwnDynamicAmpSettings settings, float measuredLufs,
+            float sourceLufs)
         {
             float initial = Math.Clamp(settings.TargetLoudness - measuredLufs, -30f, 30f);
 
@@ -276,9 +285,13 @@ namespace OwnaudioNET.Features.Matchering
             {
                 InitialGainDb = initial,
                 MaxBoostDb = Math.Clamp(Math.Max(settings.MaxBoostDb, initial + 6f), 0f, 30f),
-                MaxCutDb = Math.Clamp(Math.Max(settings.MaxCutDb, 6f - initial), 0f, 30f)
+                MaxCutDb = Math.Clamp(Math.Max(settings.MaxCutDb, 6f - initial), 0f, 30f),
+                FreezeThresholdLufs = _shiftFreeze(settings.FreezeThresholdLufs, measuredLufs - sourceLufs)
             };
         }
+
+        private static float _shiftFreeze(float freezeLufs, float offsetDb) =>
+            Math.Clamp(freezeLufs + offsetDb, -90f, -30f);
 
         #endregion
 

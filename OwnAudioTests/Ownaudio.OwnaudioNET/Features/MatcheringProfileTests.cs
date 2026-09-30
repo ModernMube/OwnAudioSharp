@@ -427,7 +427,8 @@ namespace Ownaudio.Test.OwnaudioNET.Features
 
         /// <summary>
         /// The rider goes for the target's integrated loudness, starts at the difference, and
-        /// on a cut-only curve gives the shift back on top of it.
+        /// on a cut-only curve gives the shift back on top of it - the freeze threshold goes
+        /// down with the audio.
         /// </summary>
         [Fact]
         public void LevelerStartsAtTheLoudnessDifference()
@@ -448,6 +449,9 @@ namespace Ownaudio.Test.OwnaudioNET.Features
 
             Assert.Equal(9f + cutOnly.CutOnlyShiftDb, cutOnly.Leveler.InitialGainDb, 3);
             Assert.True(cutOnly.Leveler.MaxBoostDb >= cutOnly.Leveler.InitialGainDb);
+
+            Assert.Equal(-40f, centred.Leveler.FreezeThresholdLufs, 3);
+            Assert.Equal(-40f - cutOnly.CutOnlyShiftDb, cutOnly.Leveler.FreezeThresholdLufs, 3);
         }
 
         /// <summary>
@@ -500,11 +504,14 @@ namespace Ownaudio.Test.OwnaudioNET.Features
                 WithLoudness(SpectrumFrom(Flat(-30f)), lufs: -14f, truePeak: -1f, range: 6f, sideToMid: -4f), target, 48000).Compressor;
             var mono = analyzer.CalculateProfile(
                 WithLoudness(SpectrumFrom(Flat(-30f)), lufs: -14f, truePeak: -1f, range: 6f, sideToMid: -60f), target, 48000).Compressor;
+            var nearMono = analyzer.CalculateProfile(
+                WithLoudness(SpectrumFrom(Flat(-30f)), lufs: -14f, truePeak: -1f, range: 6f, sideToMid: -45f), target, 48000).Compressor;
 
             Assert.Equal(OwnCompressorChannelMode.MidSide, wide.ChannelMode);
             Assert.True(wide.StereoLink < 0.8f);
             Assert.Equal(OwnCompressorChannelMode.LeftRight, mono.ChannelMode);
             Assert.Equal(1f, mono.StereoLink);
+            Assert.Equal(OwnCompressorChannelMode.LeftRight, nearMono.ChannelMode);
         }
 
         [Fact]
