@@ -185,7 +185,13 @@ foreach (var n in notes.Where(n =&gt; !n.IsDrum))
 
 <div class="code-block"><div class="code-header"><span>C# — Analyze spectrum</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var analyzer = new AudioAnalyzer();
 
-AudioSpectrum spectrum = analyzer.AnalyzeAudioFile("track.wav");</code></pre></div>
+AudioSpectrum spectrum = analyzer.AnalyzeAudioFile("track.wav");
+
+// Measured the way OwnDynamicAmp measures: BS.1770 LUFS, loudness range, 4x true peak
+LoudnessInfo loudness = spectrum.LoudnessStats!;
+Console.WriteLine($"{loudness.IntegratedLufs:F1} LUFS, LRA {loudness.LoudnessRangeLu:F1} LU, {loudness.TruePeakDbtp:F1} dBTP");</code></pre></div>
+
+<p>The render chain is the 30-band EQ, then <code>OwnCompressor</code>, then <code>OwnDynamicAmp</code>. The compressor takes the mix's peak-to-loudness ratio to the reference's and its range stops it there; the rider starts on the measured loudness difference, rides to the reference's integrated LUFS, takes out any extra loudness range, and its true-peak limiter holds the ceiling — no separate limiter follows it.</p>
 
 <div class="code-block"><div class="code-header"><span>C# — EQ match to reference</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">analyzer.ProcessEQMatching(
     sourceFile: "my-mix.wav",
@@ -239,7 +245,7 @@ AudioSpectrum preset = analyzer.GetPresetTargetSpectrum(PlaybackSystem.ClubPA);
 
 MatcheringProfile profile = analyzer.CalculateProfile(mix, reference, sampleRate: 48000);
 
-// Against a preset there is an overload that also brings the preset's own AGC block
+// Against a preset there is an overload that also brings the preset's own loudness target
 MatcheringProfile presetProfile = analyzer.CalculateProfile(mix, PlaybackSystem.ClubPA, sampleRate: 48000);
 
 // The profile is 30 third-octave bands, so it needs the 30-band EQ —
@@ -250,9 +256,12 @@ var eq = new Equalizer30BandEffect(sampleRate: 48000f);
 for (int band = 0; band &lt; 30; band++)
     eq.SetBandGain(band, eq.GetBandFrequency(band), profile.QFactors[band], profile.BandGainsDb[band]);
 
-compressor.Threshold = profile.CompThresholdDb;   // the property is dB
-compressor.Ratio     = profile.CompRatio;
-dynamicAmp.TargetRmsLevelDb = profile.TargetLoudness;</code></pre></div>
+// Every OwnCompressor and OwnDynamicAmp parameter the match settled on
+var compressor = new OwnCompressorEffect();
+var leveler    = new OwnDynamicAmpEffect();
+
+profile.Compressor.ApplyTo(compressor);
+profile.Leveler.ApplyTo(leveler);</code></pre></div>
 
 <div class="table-wrap"><table class="prop-table">
   <thead><tr><th>Member</th><th>Meaning</th></tr></thead>
@@ -260,9 +269,12 @@ dynamicAmp.TargetRmsLevelDb = profile.TargetLoudness;</code></pre></div>
     <tr><td><code>WantedCurveDb[30]</code></td><td>The curve we want to hear, dB. This is the one worth drawing.</td></tr>
     <tr><td><code>BandGainsDb[30]</code></td><td>What the filter bank has to be <em>set to</em> for that curve to come out of it. A 1/3-octave bell bleeds into its neighbours, so setting each band to its wanted value overshoots by 60–120%; these gains come from solving the bank's response matrix.</td></tr>
     <tr><td><code>QFactors[30]</code></td><td>The Q the solution assumed per band.</td></tr>
-    <tr><td><code>CompThresholdDb</code>, <code>CompRatio</code></td><td>Compressor settings. The threshold is in dB, which is what <code>CompressorEffect.Threshold</code> takes — only the constructor argument is linear, and that is what <code>CompressorEffect.DbToLinear</code> is for.</td></tr>
-    <tr><td><code>TargetLoudness</code>, <code>MaxGain</code></td><td>AGC target and gain ceiling for <code>DynamicAmpEffect</code>.</td></tr>
-    <tr><td><code>SourceLoudness</code>, <code>SourceCrestDb</code>, <code>TargetCrestDb</code></td><td>Measured values, for a status readout.</td></tr>
+    <tr><td><code>Compressor</code></td><td><code>OwnCompressorSettings</code>: threshold, ratio, knee, attack, auto release, look-ahead, mid/side and stereo link, key high-pass and range. <code>ApplyTo(OwnCompressorEffect)</code> sets a live effect.</td></tr>
+    <tr><td><code>Leveler</code></td><td><code>OwnDynamicAmpSettings</code>: LUFS target, window, rates, tolerance, gates, true-peak ceiling and the initial gain. <code>ApplyTo(OwnDynamicAmpEffect)</code> sets a live effect.</td></tr>
+    <tr><td><code>CompThresholdDb</code>, <code>CompRatio</code></td><td>The same as <code>Compressor.ThresholdDb</code> / <code>Ratio</code>, kept for existing callers.</td></tr>
+    <tr><td><code>TargetLoudness</code></td><td>The rider's target, LUFS.</td></tr>
+    <tr><td><code>MaxGain</code>, <code>AmpAttackSeconds</code>, <code>AmpReleaseSeconds</code></td><td>Settings for the older <code>DynamicAmpEffect</code>.</td></tr>
+    <tr><td><code>SourceLoudness</code>, <code>SourcePeakToLoudnessDb</code>, <code>TargetPeakToLoudnessDb</code>, <code>SourceCrestDb</code>, <code>TargetCrestDb</code></td><td>Measured values, for a status readout. Loudness is LUFS.</td></tr>
     <tr><td><code>CutOnlyShiftDb</code></td><td>How far the curve got pushed down; 0 when <code>cutOnly</code> was off.</td></tr>
   </tbody>
 </table></div>

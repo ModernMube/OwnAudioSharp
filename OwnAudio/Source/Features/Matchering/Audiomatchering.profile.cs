@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using OwnaudioNET.Effects;
 
 namespace OwnaudioNET.Features.Matchering
 {
@@ -42,6 +43,14 @@ namespace OwnaudioNET.Features.Matchering
             if (channels < 1) throw new ArgumentOutOfRangeException(nameof(channels));
             if (sampleRate < 1) throw new ArgumentOutOfRangeException(nameof(sampleRate));
 
+            AudioSpectrum spectrum = _analyzeChannels(interleaved, sampleRate, channels);
+            spectrum.LoudnessStats = MeasureLoudness(interleaved, sampleRate, channels);
+
+            return spectrum;
+        }
+
+        private AudioSpectrum _analyzeChannels(float[] interleaved, int sampleRate, int channels)
+        {
             if (channels == 1) return _analyzeMono(interleaved, sampleRate);
 
             int perChannel = interleaved.Length / channels;
@@ -108,25 +117,30 @@ namespace OwnaudioNET.Features.Matchering
             float[] bandGains = _deconvolveToBandGains(wanted, qFactors, sampleRate);
 
             DynamicAmpSettings amp = preset?.DynamicAmp ?? _ampSettings(source, target);
-            var comp = _compSettings(source, target);
+            OwnCompressorSettings compressor = _compressorSettings(source, target, preset);
+            OwnDynamicAmpSettings leveler = _withPreGain(_levelerSettings(source, target, compressor, preset), -shift);
 
             if (preset is not null)
-                Log.Info($"AGC from the {preset.Name} preset: {amp.TargetLevel:F1}dB target, max {amp.MaxGain:F2}x");
+                Log.Info($"AGC from the {preset.Name} preset: {amp.TargetLevel:F1} LUFS target, max {amp.MaxGain:F2}x");
 
             return new MatcheringProfile
             {
                 WantedCurveDb = wanted,
                 BandGainsDb = bandGains,
                 QFactors = qFactors,
-                CompThresholdDb = comp.Threshold,
-                CompRatio = comp.Ratio,
-                TargetLoudness = amp.TargetLevel,
+                Compressor = compressor,
+                Leveler = leveler,
+                CompThresholdDb = compressor.ThresholdDb,
+                CompRatio = compressor.Ratio,
+                TargetLoudness = leveler.TargetLoudness,
                 MaxGain = amp.MaxGain,
                 AmpAttackSeconds = amp.AttackTime,
                 AmpReleaseSeconds = amp.ReleaseTime,
-                SourceLoudness = source.Loudness,
+                SourceLoudness = new Levels(source).Lufs,
                 SourceCrestDb = _crestDb(source),
                 TargetCrestDb = _crestDb(target),
+                SourcePeakToLoudnessDb = new Levels(source).PeakToLoudness,
+                TargetPeakToLoudnessDb = new Levels(target).PeakToLoudness,
                 CutOnlyShiftDb = shift
             };
         }
@@ -210,7 +224,15 @@ namespace OwnaudioNET.Features.Matchering
                 RMSLevel = spectrum.RMSLevel,
                 PeakLevel = spectrum.PeakLevel,
                 DynamicRange = spectrum.DynamicRange,
-                Loudness = spectrum.Loudness
+                Loudness = spectrum.Loudness,
+                LoudnessStats = spectrum.LoudnessStats is null ? null : new LoudnessInfo
+                {
+                    IntegratedLufs = spectrum.LoudnessStats.IntegratedLufs,
+                    LoudnessRangeLu = spectrum.LoudnessStats.LoudnessRangeLu,
+                    TruePeakDbtp = spectrum.LoudnessStats.TruePeakDbtp,
+                    NoiseFloorLufs = spectrum.LoudnessStats.NoiseFloorLufs,
+                    SideToMidDb = spectrum.LoudnessStats.SideToMidDb
+                }
             };
         }
 
@@ -238,14 +260,29 @@ namespace OwnaudioNET.Features.Matchering
         public float[] QFactors { get; init; } = new float[30];
 
         /// <summary>
-        /// Threshold in dB, which is what the native compressor takes.
+        /// Every OwnCompressor parameter the match settled on. <see cref="OwnCompressorSettings.ApplyTo"/>
+        /// sets a live effect to it.
+        /// </summary>
+        public OwnCompressorSettings Compressor { get; init; } = new OwnCompressorSettings();
+
+        /// <summary>
+        /// Every OwnDynamicAmp parameter the match settled on, the true-peak ceiling included.
+        /// On a cut-only profile the initial gain already gives the shift back.
+        /// </summary>
+        public OwnDynamicAmpSettings Leveler { get; init; } = new OwnDynamicAmpSettings();
+
+        /// <summary>
+        /// Threshold in dB, the same as <see cref="Compressor"/>'s.
         /// </summary>
         public float CompThresholdDb { get; init; }
 
+        /// <summary>
+        /// Ratio, the same as <see cref="Compressor"/>'s.
+        /// </summary>
         public float CompRatio { get; init; }
 
         /// <summary>
-        /// Loudness the AGC should chase, dBFS.
+        /// Loudness the rider should chase, LUFS.
         /// </summary>
         public float TargetLoudness { get; init; }
 
@@ -264,15 +301,238 @@ namespace OwnaudioNET.Features.Matchering
         /// </summary>
         public float AmpReleaseSeconds { get; init; } = 0.5f;
 
+        /// <summary>
+        /// Integrated loudness of the source, LUFS.
+        /// </summary>
         public float SourceLoudness { get; init; }
 
+        /// <summary>
+        /// Sample peak to RMS of the source, dB.
+        /// </summary>
         public float SourceCrestDb { get; init; }
 
+        /// <summary>
+        /// Sample peak to RMS of the target, dB.
+        /// </summary>
         public float TargetCrestDb { get; init; }
+
+        /// <summary>
+        /// True peak to integrated loudness of the source, dB.
+        /// </summary>
+        public float SourcePeakToLoudnessDb { get; init; }
+
+        /// <summary>
+        /// True peak to integrated loudness of the target, dB. The compressor takes the source there.
+        /// </summary>
+        public float TargetPeakToLoudnessDb { get; init; }
 
         /// <summary>
         /// How far the curve got pushed down, dB. Zero when cutOnly was off.
         /// </summary>
         public float CutOnlyShiftDb { get; init; }
+    }
+
+    /// <summary>
+    /// OwnCompressor setup of a match, in the effect's own units. The offline render and a
+    /// live chain are set from the same numbers.
+    /// </summary>
+    public sealed record OwnCompressorSettings
+    {
+        /// <summary>
+        /// Threshold, dBFS.
+        /// </summary>
+        public float ThresholdDb { get; init; } = -18f;
+
+        /// <summary>
+        /// Ratio, x:1.
+        /// </summary>
+        public float Ratio { get; init; } = 2f;
+
+        /// <summary>
+        /// Knee width, dB. Wider for the gentle ratios, so the glue never has an edge.
+        /// </summary>
+        public float KneeDb { get; init; } = 8f;
+
+        /// <summary>
+        /// Attack, ms. Faster the more peak the source has over the target.
+        /// </summary>
+        public float AttackMs { get; init; } = 20f;
+
+        /// <summary>
+        /// Release, ms - the fastest one, with auto release stretching it on sustained material.
+        /// </summary>
+        public float ReleaseMs { get; init; } = 150f;
+
+        /// <summary>
+        /// Programme dependent release.
+        /// </summary>
+        public bool AutoRelease { get; init; } = true;
+
+        /// <summary>
+        /// Look-ahead, ms. The gain is down by the time the transient arrives, so the attack can
+        /// stay slow enough to keep the punch.
+        /// </summary>
+        public float LookaheadMs { get; init; } = 2f;
+
+        /// <summary>
+        /// Level detector.
+        /// </summary>
+        public OwnCompressorDetector Detector { get; init; } = OwnCompressorDetector.Peak;
+
+        /// <summary>
+        /// Left/right or mid/side. Mid/side whenever the source is stereo.
+        /// </summary>
+        public OwnCompressorChannelMode ChannelMode { get; init; } = OwnCompressorChannelMode.LeftRight;
+
+        /// <summary>
+        /// Stereo link. Lower when the source is wider than the target, so the side is held on its own.
+        /// </summary>
+        public float StereoLink { get; init; } = 1f;
+
+        /// <summary>
+        /// Key high-pass, Hz. Higher the more low end the source carries.
+        /// </summary>
+        public float SidechainHighPassHz { get; init; }
+
+        /// <summary>
+        /// Makeup, dB. Zero: the rider behind the compressor sets the level.
+        /// </summary>
+        public float MakeupDb { get; init; }
+
+        /// <summary>
+        /// Most gain reduction allowed, dB - the peak to loudness excess plus a little.
+        /// </summary>
+        public float RangeDb { get; init; } = 6f;
+
+        /// <summary>
+        /// Sets a live compressor to these values.
+        /// </summary>
+        /// <param name="compressor">The effect to set.</param>
+        public void ApplyTo(OwnCompressorEffect compressor)
+        {
+            if (compressor is null) throw new ArgumentNullException(nameof(compressor));
+
+            compressor.Mix = 1f;
+            compressor.Threshold = ThresholdDb;
+            compressor.Ratio = Ratio;
+            compressor.Knee = KneeDb;
+            compressor.Attack = AttackMs;
+            compressor.Release = ReleaseMs;
+            compressor.AutoRelease = AutoRelease;
+            compressor.Lookahead = LookaheadMs;
+            compressor.Detector = Detector;
+            compressor.Topology = OwnCompressorTopology.FeedForward;
+            compressor.ChannelMode = ChannelMode;
+            compressor.StereoLink = StereoLink;
+            compressor.SidechainHighPass = SidechainHighPassHz;
+            compressor.Makeup = MakeupDb;
+            compressor.AutoMakeup = false;
+            compressor.Range = RangeDb;
+        }
+    }
+
+    /// <summary>
+    /// OwnDynamicAmp setup of a match, in the effect's own units.
+    /// </summary>
+    public sealed record OwnDynamicAmpSettings
+    {
+        /// <summary>
+        /// Programme loudness to chase, LUFS.
+        /// </summary>
+        public float TargetLoudness { get; init; } = -14f;
+
+        /// <summary>
+        /// Memory of the loudness estimate, seconds. Short where the source's loudness range has
+        /// to come down to the target's, long where only the level has to move.
+        /// </summary>
+        public float WindowSeconds { get; init; } = 8f;
+
+        /// <summary>
+        /// Most the rider may lift, dB.
+        /// </summary>
+        public float MaxBoostDb { get; init; } = 12f;
+
+        /// <summary>
+        /// Most the rider may pull down, dB.
+        /// </summary>
+        public float MaxCutDb { get; init; } = 12f;
+
+        /// <summary>
+        /// Fastest upward movement, dB per second.
+        /// </summary>
+        public float RiseRateDbPerSec { get; init; } = 1.5f;
+
+        /// <summary>
+        /// Fastest downward movement, dB per second.
+        /// </summary>
+        public float FallRateDbPerSec { get; init; } = 3f;
+
+        /// <summary>
+        /// Dead band around the target, dB.
+        /// </summary>
+        public float ToleranceDb { get; init; } = 1f;
+
+        /// <summary>
+        /// Rounding of the gain curve, ms.
+        /// </summary>
+        public float SmoothingMs { get; init; } = 300f;
+
+        /// <summary>
+        /// Relative gate, LU under the programme loudness. Follows the target's loudness range,
+        /// so the quiet parts the target keeps are kept here too.
+        /// </summary>
+        public float RelativeGateLu { get; init; } = -10f;
+
+        /// <summary>
+        /// Absolute freeze threshold, LUFS. Under the source's quiet parts, so fades and pauses
+        /// never pump up.
+        /// </summary>
+        public float FreezeThresholdLufs { get; init; } = -55f;
+
+        /// <summary>
+        /// True-peak ceiling, dBTP. The target's own true peak, held between -3 and -1.
+        /// </summary>
+        public float CeilingDbtp { get; init; } = -1f;
+
+        /// <summary>
+        /// Limiter look-ahead, ms.
+        /// </summary>
+        public float LookaheadMs { get; init; } = 5f;
+
+        /// <summary>
+        /// Limiter release, ms.
+        /// </summary>
+        public float LimiterReleaseMs { get; init; } = 150f;
+
+        /// <summary>
+        /// Where the rider starts, dB: the loudness difference the match measured.
+        /// </summary>
+        public float InitialGainDb { get; init; }
+
+        /// <summary>
+        /// Sets a live rider to these values.
+        /// </summary>
+        /// <param name="leveler">The effect to set.</param>
+        public void ApplyTo(OwnDynamicAmpEffect leveler)
+        {
+            if (leveler is null) throw new ArgumentNullException(nameof(leveler));
+
+            leveler.Mix = 1f;
+            leveler.TargetLoudness = TargetLoudness;
+            leveler.Window = WindowSeconds;
+            leveler.MaxBoost = MaxBoostDb;
+            leveler.MaxCut = MaxCutDb;
+            leveler.RiseRate = RiseRateDbPerSec;
+            leveler.FallRate = FallRateDbPerSec;
+            leveler.Tolerance = ToleranceDb;
+            leveler.Smoothing = SmoothingMs;
+            leveler.RelativeGate = RelativeGateLu;
+            leveler.FreezeThreshold = FreezeThresholdLufs;
+            leveler.Ceiling = CeilingDbtp;
+            leveler.LimiterEnabled = true;
+            leveler.Lookahead = LookaheadMs;
+            leveler.LimiterRelease = LimiterReleaseMs;
+            leveler.InitialGain = InitialGainDb;
+        }
     }
 }

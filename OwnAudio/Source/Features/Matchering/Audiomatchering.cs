@@ -152,7 +152,7 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// The match itself. With a preset in hand the AGC numbers come off the preset rather
+        /// The match itself. With a preset in hand the rider's target comes off the preset rather
         /// than off the measurement - the curve and the compressor are still measured.
         /// </summary>
         private void _matchToTarget(string sourceFile, string targetFile, string outputFile, PlaybackPreset? preset)
@@ -165,15 +165,8 @@ namespace OwnaudioNET.Features.Matchering
             Log.Info("Analyzing target audio (segmented)...");
             AudioSpectrum targetSpectrum = AnalyzeAudioFile(targetFile);
 
-            float[] eqAdjustments = _calcEqAdjustments(sourceSpectrum, targetSpectrum);
-            DynamicAmpSettings ampSettings = preset?.DynamicAmp ?? _ampSettings(sourceSpectrum, targetSpectrum);
-            var compSettings = _compSettings(sourceSpectrum, targetSpectrum);
-
-            if (preset is not null)
-                Log.Info($"AGC from the {preset.Name} preset: {ampSettings.TargetLevel:F1}dB target, max {ampSettings.MaxGain:F2}x");
-
             Log.Info("Processing audio with segmented-based EQ...");
-            _applyEqProcessing(sourceFile, outputFile, eqAdjustments, ampSettings, compSettings, sourceSpectrum, targetSpectrum);
+            _applyEqProcessing(sourceFile, outputFile, sourceSpectrum, targetSpectrum, preset);
         }
 
         #endregion

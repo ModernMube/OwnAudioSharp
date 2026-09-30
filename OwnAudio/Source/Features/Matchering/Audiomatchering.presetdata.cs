@@ -1,3 +1,4 @@
+using OwnaudioNET.Effects;
 using System.Collections.Generic;
 
 namespace OwnaudioNET.Features.Matchering
@@ -47,6 +48,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.2f,
                     ReleaseTime = 0.8f,
                     MaxGain = 3f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -18f, Ratio = 1.8f, KneeDb = 8f,
+                    AttackMs = 15f, ReleaseMs = 80f, AutoRelease = true, LookaheadMs = 2f,
+                    Detector = OwnCompressorDetector.Peak,
+                    ChannelMode = OwnCompressorChannelMode.MidSide, StereoLink = 0.8f,
+                    SidechainHighPassHz = 60f, MakeupDb = 1.5f, RangeDb = 6f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -16f, WindowSeconds = 12f,
+                    RiseRateDbPerSec = 1f, FallRateDbPerSec = 2f, ToleranceDb = 1.5f, SmoothingMs = 600f,
+                    RelativeGateLu = -10f,
+                    CeilingDbtp = -1f, LookaheadMs = 5f, LimiterReleaseMs = 150f
                 }
             },
 
@@ -76,6 +92,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.15f,
                     ReleaseTime = 0.6f,
                     MaxGain = 2.5f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -16f, Ratio = 2.5f, KneeDb = 4f,
+                    AttackMs = 5f, ReleaseMs = 40f, AutoRelease = false, LookaheadMs = 1f,
+                    Detector = OwnCompressorDetector.Peak,
+                    ChannelMode = OwnCompressorChannelMode.LeftRight, StereoLink = 1f,
+                    SidechainHighPassHz = 100f, MakeupDb = 2f, RangeDb = 8f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -11f, WindowSeconds = 4f,
+                    RiseRateDbPerSec = 3f, FallRateDbPerSec = 6f, ToleranceDb = 0.5f, SmoothingMs = 200f,
+                    RelativeGateLu = -12f,
+                    CeilingDbtp = -0.5f, LookaheadMs = 5f, LimiterReleaseMs = 80f
                 }
             },
 
@@ -105,6 +136,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.4f,
                     ReleaseTime = 1.5f,
                     MaxGain = 2f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -24f, Ratio = 1.2f, KneeDb = 12f,
+                    AttackMs = 30f, ReleaseMs = 200f, AutoRelease = true, LookaheadMs = 2f,
+                    Detector = OwnCompressorDetector.Rms,
+                    ChannelMode = OwnCompressorChannelMode.MidSide, StereoLink = 0.8f,
+                    SidechainHighPassHz = 30f, MakeupDb = 0.5f, RangeDb = 3f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -18f, WindowSeconds = 30f,
+                    RiseRateDbPerSec = 0.5f, FallRateDbPerSec = 1f, ToleranceDb = 2f, SmoothingMs = 1500f,
+                    RelativeGateLu = -8f,
+                    CeilingDbtp = -1f, LookaheadMs = 5f, LimiterReleaseMs = 250f
                 }
             },
 
@@ -134,6 +180,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.5f,
                     ReleaseTime = 2f,
                     MaxGain = 1.5f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -28f, Ratio = 1.1f, KneeDb = 12f,
+                    AttackMs = 60f, ReleaseMs = 250f, AutoRelease = true, LookaheadMs = 2f,
+                    Detector = OwnCompressorDetector.Rms,
+                    ChannelMode = OwnCompressorChannelMode.MidSide, StereoLink = 0.9f,
+                    SidechainHighPassHz = 20f, MakeupDb = 0f, RangeDb = 2f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -20f, WindowSeconds = 30f,
+                    RiseRateDbPerSec = 0.3f, FallRateDbPerSec = 0.6f, ToleranceDb = 2f, SmoothingMs = 2000f,
+                    RelativeGateLu = -6f,
+                    CeilingDbtp = -1f, LookaheadMs = 5f, LimiterReleaseMs = 300f
                 }
             },
 
@@ -163,6 +224,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.25f,
                     ReleaseTime = 1f,
                     MaxGain = 2.5f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -22f, Ratio = 1.8f, KneeDb = 8f,
+                    AttackMs = 5f, ReleaseMs = 80f, AutoRelease = true, LookaheadMs = 2f,
+                    Detector = OwnCompressorDetector.Peak,
+                    ChannelMode = OwnCompressorChannelMode.MidSide, StereoLink = 0.7f,
+                    SidechainHighPassHz = 50f, MakeupDb = 2f, RangeDb = 6f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -14f, WindowSeconds = 10f,
+                    RiseRateDbPerSec = 1.5f, FallRateDbPerSec = 3f, ToleranceDb = 1f, SmoothingMs = 400f,
+                    RelativeGateLu = -10f,
+                    CeilingDbtp = -1f, LookaheadMs = 5f, LimiterReleaseMs = 150f
                 }
             },
 
@@ -192,6 +268,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.2f,
                     ReleaseTime = 0.7f,
                     MaxGain = 3f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -20f, Ratio = 2.5f, KneeDb = 6f,
+                    AttackMs = 2f, ReleaseMs = 40f, AutoRelease = true, LookaheadMs = 2f,
+                    Detector = OwnCompressorDetector.Peak,
+                    ChannelMode = OwnCompressorChannelMode.MidSide, StereoLink = 0.7f,
+                    SidechainHighPassHz = 80f, MakeupDb = 3f, RangeDb = 8f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -13f, WindowSeconds = 6f,
+                    RiseRateDbPerSec = 2f, FallRateDbPerSec = 4f, ToleranceDb = 1f, SmoothingMs = 300f,
+                    RelativeGateLu = -14f,
+                    CeilingDbtp = -1f, LookaheadMs = 5f, LimiterReleaseMs = 120f
                 }
             },
 
@@ -221,6 +312,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.15f,
                     ReleaseTime = 0.5f,
                     MaxGain = 3f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -18f, Ratio = 2.8f, KneeDb = 6f,
+                    AttackMs = 3f, ReleaseMs = 60f, AutoRelease = true, LookaheadMs = 2f,
+                    Detector = OwnCompressorDetector.Rms,
+                    ChannelMode = OwnCompressorChannelMode.LeftRight, StereoLink = 1f,
+                    SidechainHighPassHz = 60f, MakeupDb = 4f, RangeDb = 10f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -11f, WindowSeconds = 3f,
+                    RiseRateDbPerSec = 3f, FallRateDbPerSec = 6f, ToleranceDb = 0.5f, SmoothingMs = 250f,
+                    RelativeGateLu = -20f,
+                    CeilingDbtp = -1f, LookaheadMs = 5f, LimiterReleaseMs = 100f
                 }
             },
 
@@ -250,6 +356,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.2f,
                     ReleaseTime = 0.9f,
                     MaxGain = 2.5f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -20f, Ratio = 3f, KneeDb = 6f,
+                    AttackMs = 1f, ReleaseMs = 30f, AutoRelease = true, LookaheadMs = 3f,
+                    Detector = OwnCompressorDetector.Rms,
+                    ChannelMode = OwnCompressorChannelMode.LeftRight, StereoLink = 1f,
+                    SidechainHighPassHz = 120f, MakeupDb = 3f, RangeDb = 10f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -14f, WindowSeconds = 3f,
+                    RiseRateDbPerSec = 4f, FallRateDbPerSec = 8f, ToleranceDb = 0.5f, SmoothingMs = 200f,
+                    RelativeGateLu = -20f,
+                    CeilingDbtp = -2f, LookaheadMs = 5f, LimiterReleaseMs = 100f
                 }
             },
 
@@ -279,6 +400,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.1f,
                     ReleaseTime = 0.3f,
                     MaxGain = 4f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -14f, Ratio = 4.5f, KneeDb = 3f,
+                    AttackMs = 0.5f, ReleaseMs = 20f, AutoRelease = true, LookaheadMs = 5f,
+                    Detector = OwnCompressorDetector.Peak,
+                    ChannelMode = OwnCompressorChannelMode.LeftRight, StereoLink = 1f,
+                    SidechainHighPassHz = 80f, MakeupDb = 6f, RangeDb = 14f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -10f, WindowSeconds = 2f,
+                    RiseRateDbPerSec = 6f, FallRateDbPerSec = 12f, ToleranceDb = 0.3f, SmoothingMs = 100f,
+                    RelativeGateLu = -24f,
+                    CeilingDbtp = -1f, LookaheadMs = 5f, LimiterReleaseMs = 50f
                 }
             },
 
@@ -308,6 +444,21 @@ namespace OwnaudioNET.Features.Matchering
                     AttackTime = 0.1f,
                     ReleaseTime = 0.4f,
                     MaxGain = 4f
+                },
+                Compressor = new OwnCompressorSettings
+                {
+                    ThresholdDb = -16f, Ratio = 3.5f, KneeDb = 4f,
+                    AttackMs = 1f, ReleaseMs = 25f, AutoRelease = true, LookaheadMs = 3f,
+                    Detector = OwnCompressorDetector.Peak,
+                    ChannelMode = OwnCompressorChannelMode.MidSide, StereoLink = 0.6f,
+                    SidechainHighPassHz = 150f, MakeupDb = 5f, RangeDb = 12f
+                },
+                Leveler = new OwnDynamicAmpSettings
+                {
+                    TargetLoudness = -11f, WindowSeconds = 3f,
+                    RiseRateDbPerSec = 4f, FallRateDbPerSec = 8f, ToleranceDb = 0.5f, SmoothingMs = 150f,
+                    RelativeGateLu = -20f,
+                    CeilingDbtp = -1f, LookaheadMs = 5f, LimiterReleaseMs = 60f
                 }
             }
         };
@@ -400,13 +551,28 @@ namespace OwnaudioNET.Features.Matchering
         public float DynamicRange { get; set; }
 
         /// <summary>
-        /// Compressor settings for this system.
+        /// Compressor settings for this system, the older five-field form of <see cref="Compressor"/>.
         /// </summary>
         public CompressionSettings Compression { get; set; } = new CompressionSettings();
 
         /// <summary>
-        /// AGC settings for this system.
+        /// AGC settings for this system, the older <see cref="DynamicAmpEffect"/> form.
         /// </summary>
         public DynamicAmpSettings DynamicAmp { get; set; } = new DynamicAmpSettings();
+
+        /// <summary>
+        /// The system's OwnCompressor. The whole setup compresses the base sample when the preset
+        /// is baked; on a match its knee, timing, look-ahead, detector and key high-pass replace
+        /// the measured ones, while threshold, ratio, range and the stereo handling stay measured.
+        /// </summary>
+        public OwnCompressorSettings Compressor { get; set; } = new OwnCompressorSettings();
+
+        /// <summary>
+        /// The system's OwnDynamicAmp. On a match its target, window, rates, tolerance, gates,
+        /// true-peak ceiling and limiter timing replace the measured ones; the start gain, the
+        /// boost and cut room and the freeze threshold stay measured. The ceiling also caps the
+        /// baked base sample.
+        /// </summary>
+        public OwnDynamicAmpSettings Leveler { get; set; } = new OwnDynamicAmpSettings();
     }
 }

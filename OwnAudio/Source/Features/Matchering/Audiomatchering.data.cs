@@ -33,6 +33,51 @@ namespace OwnaudioNET.Features.Matchering
         /// Loudness in dBFS.
         /// </summary>
         public float Loudness { get; set; }
+
+        /// <summary>
+        /// BS.1770 readings of the whole track - what the OwnDynamicAmp and OwnCompressor
+        /// settings are derived from. Null when the spectrum was built by hand; the match
+        /// then estimates them from the RMS and peak above.
+        /// </summary>
+        public LoudnessInfo? LoudnessStats { get; set; }
+    }
+
+    /// <summary>
+    /// Loudness readings of a whole track, measured the way OwnDynamicAmp measures:
+    /// K-weighted, gated, with a 4x true peak.
+    /// </summary>
+    public class LoudnessInfo
+    {
+        /// <summary>
+        /// Gated integrated loudness, LUFS.
+        /// </summary>
+        public float IntegratedLufs { get; set; }
+
+        /// <summary>
+        /// Loudness range (EBU Tech 3342), LU. How much the song moves between its quiet and
+        /// loud parts - the macro dynamics the rider works on.
+        /// </summary>
+        public float LoudnessRangeLu { get; set; }
+
+        /// <summary>
+        /// 4x oversampled true peak, dBTP.
+        /// </summary>
+        public float TruePeakDbtp { get; set; }
+
+        /// <summary>
+        /// 10th percentile of the momentary loudness, LUFS. Fades, pauses, room noise.
+        /// </summary>
+        public float NoiseFloorLufs { get; set; }
+
+        /// <summary>
+        /// Side energy against mid energy, dB. -60 for mono.
+        /// </summary>
+        public float SideToMidDb { get; set; }
+
+        /// <summary>
+        /// Peak to loudness ratio, dB - the crest the compressor works on.
+        /// </summary>
+        public float PeakToLoudnessDb => TruePeakDbtp - IntegratedLufs;
     }
 
     /// <summary>

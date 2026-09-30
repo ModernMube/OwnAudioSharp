@@ -3,8 +3,9 @@
 Reference-based audio mastering for OwnAudioSharp. The module analyzes the
 spectral and dynamic character of a *target* track and reshapes a *source* track
 to match it — or applies a built-in playback-system preset. Everything is driven
-by a 30-band ISO spectrum analysis plus an EQ → compressor → dynamic-amp →
-limiter mastering chain.
+by a 30-band ISO spectrum analysis, a BS.1770 loudness analysis, and a
+30-band EQ → OwnCompressor → OwnDynamicAmp mastering chain whose last stage is
+the rider's own true-peak limiter.
 
 Namespace root: `OwnaudioNET.Features.Matchering`
 Entry class: `AudioAnalyzer` (one `partial class` split across the files below).
@@ -17,7 +18,9 @@ Entry class: `AudioAnalyzer` (one `partial class` split across the files below).
 | --- | --- |
 | [Audiomatchering.cs](Audiomatchering.cs) | Public API, segmented FFT spectrum analysis, windowing, outlier filtering, weighted averaging. |
 | [Audiomatchering.equalizer.cs](Audiomatchering.equalizer.cs) | EQ delta calculation, spectral smoothing, and the full direct-processing mastering chain. |
-| [Audiomatchering.dynamics.cs](Audiomatchering.dynamics.cs) | Crest-factor-based dynamic-amp and compressor settings. |
+| [Audiomatchering.loudness.cs](Audiomatchering.loudness.cs) | `MeasureLoudness`: integrated LUFS, loudness range, true peak, noise floor, side/mid — measured the way OwnDynamicAmp measures. |
+| [Audiomatchering.dynamics.cs](Audiomatchering.dynamics.cs) | OwnCompressor and OwnDynamicAmp settings from the loudness readings. |
+| [Audiomatchering.chain.cs](Audiomatchering.chain.cs) | The native effects of the render, addressed by param id, plus the block renderer and latency compensation. |
 | [Audiomatchering.qfactors.cs](Audiomatchering.qfactors.cs) | Per-band Q-factor optimization for the 30-band EQ. |
 | [Audiomatchering.preset.cs](Audiomatchering.preset.cs) | Playback-system preset processing (single + batch), embedded base-sample. |
 | [Audiomatchering.profile.cs](Audiomatchering.profile.cs) | Buffer analysis, `MatcheringProfile` (settings instead of a rendered file), in-memory preset targets. |
@@ -36,19 +39,21 @@ target file  →   │ AnalyzeAudioFile → AudioSpectrum (target) │
                                     │
               ┌─────────────────────┼──────────────────────┐
               ▼                     ▼                      ▼
-   CalculateDirectEQ       CalculateDynamicAmp     CalculateCompressor
-     Adjustments[30]           Settings                Settings
+     _calcEqAdjustments    _compressorSettings      _levelerSettings
+       curve[30]           (peak to loudness)     (LUFS, loudness range)
               │                     │                      │
               └─────────────────────┼──────────────────────┘
                                     ▼
-                        ApplyDirectEQProcessing
-        30-Band EQ → Compressor → Dynamic Amp → Limiter  →  output .wav
+                          _applyEqProcessing
+     30-Band EQ → OwnCompressor ─(measure LUFS)→ OwnDynamicAmp  →  output .wav
 ```
 
 Spectrum analysis itself is **segmented**: the audio is cut into overlapping
 ~10 s segments, each analyzed independently, statistically filtered for
 outliers, then combined by weighted average. This is far more robust than a
-single whole-file FFT for real music.
+single whole-file FFT for real music. Next to it, every analysis measures the
+whole track's loudness the way the OwnDynamicAmp does (`AudioSpectrum.LoudnessStats`),
+and the dynamics settings are derived from those readings.
 
 ---
 
@@ -67,8 +72,8 @@ than one segment (~10 s).
 
 ### `ProcessEQMatching(string sourceFile, string targetFile, string outputFile)`
 
-The core matching operation. Analyzes both files, computes EQ / dynamics /
-compressor settings, and renders the processed source to `outputFile`.
+The core matching operation. Analyzes both files, computes the EQ curve and the
+OwnCompressor / OwnDynamicAmp settings, and renders the processed source to `outputFile`.
 
 ```csharp
 var analyzer = new AudioAnalyzer();
@@ -81,11 +86,13 @@ Preset-based mastering. Instead of an external reference it:
 
 1. Extracts the **embedded base sample** (`OwnaudioNET.basesample.bin`).
 2. Bakes the whole preset into that base sample — the declared EQ curve, the
-   preset's own compressor (unless `eqOnlyMode`), then the level pushed to the
-   preset's `TargetLoudness` behind a limiter. The result is a *rendered example*
-   of what the preset is supposed to sound like.
-3. Matches the source to that baked base, with the AGC block taken from the
-   preset's `DynamicAmp` rather than from the measurement.
+   preset's own `Compressor` setup on an OwnCompressor (unless `eqOnlyMode`), then
+   the level pushed to the preset's `TargetLoudness` in LUFS behind the OwnDynamicAmp's
+   true-peak limiter at the preset's `Leveler.CeilingDbtp`. The result is a
+   *rendered example* of what the preset is supposed to sound like.
+3. Matches the source to that baked base, with the system's OwnCompressor and
+   OwnDynamicAmp character (target, window, ceiling, timing — see Presets) taken from
+   the preset rather than from the measurement.
 
 The EQ curve is fed through `_deconvolveToBandGains` before it is applied, so the
 declared response is what the target actually *measures*. Setting each band to its
@@ -139,9 +146,15 @@ MatcheringProfile profile = analyzer.CalculateProfile(mix, reference, 48000);
 for (int band = 0; band < 30; band++)
     eq.SetBandGain(band, Centre(band), profile.QFactors[band], profile.BandGainsDb[band]);
 
-compressor.Threshold = profile.CompThresholdDb;   // the property is dB
-compressor.Ratio = profile.CompRatio;
+var compressor = new OwnCompressorEffect();
+var leveler = new OwnDynamicAmpEffect();
+
+profile.Compressor.ApplyTo(compressor);   // every parameter, knee to range
+profile.Leveler.ApplyTo(leveler);         // LUFS target, window, gates, true-peak ceiling
 ```
+
+Chain them in that order — EQ, OwnCompressor, OwnDynamicAmp. The rider's
+true-peak limiter is the last stage, so no separate limiter is needed.
 
 **`fixedQ`** — the Q the deconvolution assumes on every band. It defaults to
 `AudioAnalyzer.NativeBandQ` (4.318474), the native 30-band equalizer's own default,
@@ -153,7 +166,8 @@ the filter — the render sets frequency, Q and gain on every band.
 lands on 0 dB and everything else goes negative. The offline chain buys its headroom
 with a pre-gain stage; a real-time chain built from native effects has no gain stage,
 so the level comes off the EQ instead and the gain rider behind it brings it
-back to `TargetLoudness`. Since `_calcEqAdjustments` has already removed the broadband
+back to `TargetLoudness` — `Leveler.InitialGainDb` already carries the shift, so
+the rider starts there instead of slewing up to it. Since `_calcEqAdjustments` has already removed the broadband
 offset, this shift is a pure level change and leaves the tonal shape alone. The shift
 stops short if it would push the deepest cut past the ±9 dB clamp — a curve that hits
 the rail is no longer the curve that was measured. `CutOnlyShiftDb` reports what was
@@ -166,10 +180,14 @@ actually applied.
 | `WantedCurveDb[30]` | The curve we want to hear, dB. The one worth drawing. |
 | `BandGainsDb[30]` | What the filter bank has to be *set to* for that curve to come out (deconvolved). |
 | `QFactors[30]` | The Q the deconvolution assumed per band. |
-| `CompThresholdDb`, `CompRatio` | Compressor settings. The threshold is dB, which is what the native compressor takes. |
-| `TargetLoudness`, `MaxGain` | AGC target and gain ceiling for the gain rider. |
-| `AmpAttackSeconds`, `AmpReleaseSeconds` | AGC timing. Comes off the preset on the preset overload, otherwise the 0.1 / 0.5 default. |
-| `SourceLoudness`, `SourceCrestDb`, `TargetCrestDb` | Measured values, for a status readout. |
+| `Compressor` | `OwnCompressorSettings` — every OwnCompressor parameter. `ApplyTo(OwnCompressorEffect)` sets a live effect. |
+| `Leveler` | `OwnDynamicAmpSettings` — every OwnDynamicAmp parameter. `ApplyTo(OwnDynamicAmpEffect)` sets a live effect. |
+| `CompThresholdDb`, `CompRatio` | The same as `Compressor.ThresholdDb` / `Ratio`, kept for existing callers. |
+| `TargetLoudness` | The rider's target, LUFS (the same as `Leveler.TargetLoudness`). |
+| `MaxGain`, `AmpAttackSeconds`, `AmpReleaseSeconds` | Settings for the older `DynamicAmpEffect`. Come off the preset on the preset overload, otherwise the 6× / 0.1 / 0.5 default. |
+| `SourceLoudness` | Integrated loudness of the source, LUFS. |
+| `SourceCrestDb`, `TargetCrestDb` | Sample peak to RMS, dB. |
+| `SourcePeakToLoudnessDb`, `TargetPeakToLoudnessDb` | True peak to integrated loudness, dB — what the compressor matches. |
 | `CutOnlyShiftDb` | How far the curve got pushed down; 0 when `cutOnly` was off. |
 
 No audio in it, so it serializes into a project file as is.
@@ -182,16 +200,26 @@ preset compressor, loudness normalization — but entirely in memory, ending in
 `AnalyzeAudioBuffer` instead of two temp wavs. Cached per `(system, eqOnlyMode)`
 and handed out as a copy, since `AudioSpectrum` has public setters.
 
-The returned spectrum carries the preset's loudness (±1 dB of `TargetLoudness`) and
-its crest, so the compressor settings `CalculateProfile` derives from the source /
-target crest difference are the preset's, not the base sample's.
+The returned spectrum carries the preset's integrated loudness (±1.5 LU of
+`TargetLoudness`) and its peak to loudness ratio in `LoudnessStats`, so the
+compressor settings `CalculateProfile` derives from the source / target difference
+are the preset's, not the base sample's.
 
 ### `CalculateProfile(AudioSpectrum source, PlaybackSystem system, int sampleRate, …) → MatcheringProfile`
 
-The preset overload. Builds the target itself and stamps `TargetLoudness`,
-`MaxGain`, `AmpAttackSeconds` and `AmpReleaseSeconds` from the preset's own
-`DynamicAmp` block — the curve and the compressor stay measured, so a preset
-still behaves like matchering rather than like a fixed EQ.
+The preset overload. Builds the target itself, stamps the system's OwnCompressor
+and OwnDynamicAmp character from the preset's `Compressor` and `Leveler` blocks
+(see [Presets](#presets-audiomatchering-presetdatacs)), and fills `MaxGain`,
+`AmpAttackSeconds` and `AmpReleaseSeconds` from its `DynamicAmp` block. The curve,
+the compressor's threshold, ratio and range and the rider's start gain stay
+measured, so a preset still behaves like matchering rather than like a fixed EQ.
+
+### `MeasureLoudness(float[] interleaved, int sampleRate, int channels) → LoudnessInfo`
+
+The loudness half of the analysis on its own. `AnalyzeAudioBuffer` and
+`AnalyzeAudioFile` call it and put the result in `AudioSpectrum.LoudnessStats`.
+A spectrum built by hand without it still works: the match then estimates the
+loudness from `Loudness` and `PeakLevel`.
 
 ```csharp
 MatcheringProfile profile = analyzer.CalculateProfile(mix, PlaybackSystem.ClubPA, 48000);
@@ -244,6 +272,20 @@ that are outliers in more than 30% of bands are discarded.
 **Combination** — `CalculateWeightedAverageSpectrum` produces the final
 `AudioSpectrum` (peak is taken as a max, not averaged).
 
+### Loudness ([Audiomatchering.loudness.cs](Audiomatchering.loudness.cs))
+
+Measured on the whole interleaved buffer, with the same maths the OwnDynamicAmp
+runs, so a number derived from it is a number the rider reads back the same way:
+
+| Reading | How |
+| --- | --- |
+| `IntegratedLufs` | BS.1770-4 K-weighting (the rider's own coefficients, rebuilt per sample rate), 400 ms blocks every 100 ms, −70 LUFS absolute and −10 LU relative gate. |
+| `LoudnessRangeLu` | EBU Tech 3342: 3 s short-term blocks, −70 LUFS / −20 LU gates, 95th minus 10th percentile. |
+| `TruePeakDbtp` | 4× oversampled through the rider limiter's windowed sinc kernel. |
+| `NoiseFloorLufs` | 10th percentile of the non-silent momentary blocks — fades, pauses, room noise. |
+| `SideToMidDb` | Side energy against mid energy (−60 for mono). |
+| `PeakToLoudnessDb` | `TruePeakDbtp − IntegratedLufs`, the crest the compressor works on. |
+
 ---
 
 ## EQ matching ([Audiomatchering.equalizer.cs](Audiomatchering.equalizer.cs))
@@ -275,25 +317,50 @@ Rendered chunk-by-chunk (512-frame buffers) in this fixed order:
 | # | Effect | Role |
 | --- | --- | --- |
 | 1 | `EffectType.Equalizer30` | Shape frequency response — frequency, Q and gain per band. |
-| 2 | `EffectType.Compressor` | Stabilize dynamics (settings from crest-factor analysis). |
-| 3 | `EffectType.DynamicAmp` | AGC toward the target loudness (gain capped ~3×, gentle). |
-| 4 | `EffectType.Limiter` | True-peak safety (−0.5 dB threshold, −0.2 dB ceiling). |
+| 2 | `EffectType.OwnCompressor` | Take the source's peak to loudness ratio to the target's — no further, the range stops it. |
+| 3 | `EffectType.OwnDynamicAmp` | Ride the level to the target's integrated LUFS, take out the extra loudness range, hold the true-peak ceiling. |
 
 Before the chain, **smart headroom** pre-gain is applied: the source is
-attenuated proportionally to the largest boosts (clamped to −12…0 dB) and the gain
-rider compensates back, avoiding intersample clipping from EQ boosts. It starts from
-the inverse of the pre-gain rather than slewing there, which is what the rider's
-`initialGain` seed is for.
+attenuated proportionally to the largest boosts (clamped to −12…0 dB) and the
+compressor threshold moves down with it. The render runs in two passes: EQ and
+OwnCompressor first, then the result's integrated loudness is measured and the
+OwnDynamicAmp starts on exactly the gain that takes it to the target (its
+`InitialGain`), so the head of the master is not spent slewing and the tolerance
+window never leaves the level short. Both passes are latency compensated — every
+look-ahead of the chain is pushed out of the tail and the audio slid back into
+place.
 Output is written as 24-bit WAV via `OwnaudioNET.Recording.WaveFile.Create`.
 
 ---
 
 ## Dynamics ([Audiomatchering.dynamics.cs](Audiomatchering.dynamics.cs))
 
-Both `CalculateDynamicAmpSettings` and `CalculateCompressorSettings` compare the
-**crest factor** (peak-to-RMS ratio) of source vs. target. A source with more
-crest than the target gets a higher compression ratio to match; results are
-clamped to musical ranges (ratio 1–10, threshold −30…−2 dB).
+Both settings come off the loudness readings of source and target.
+
+**OwnCompressor** (`_compressorSettings`) — works on the peak to loudness ratio
+(PLR). With `excess = PLR(source) − PLR(target)`:
+
+| Parameter | Derivation |
+| --- | --- |
+| Threshold | Source LUFS + 0.35 × PLR (3…8 dB), so only the peaks cross it. A source already denser than the target (excess ≤ 1 dB): true peak − 4 dB. |
+| Ratio | Takes the excess (at most 85% of the overshoot) off the true peak; 1.5:1 on a denser source. Clamped 1.2…6. |
+| Range | Excess + 2 dB (2 dB on a denser source) — the compressor can never squash further than the match asks. |
+| Knee | 12 dB at gentle ratios, narrowing to 4 dB as the ratio rises. |
+| Attack / release | Attack 30 ms, faster with the excess (down to 5 ms); release from the source's loudness range (80…400 ms), with auto release on. |
+| Look-ahead | 2 ms, so a slow attack still catches the transient. |
+| Channel mode / link | Mid/side for a stereo source; the link drops from 0.8 toward 0.5 when the source is wider than the target, so its side is held on its own. |
+| Key high-pass | 20…150 Hz, higher the more of the source's energy sits under 80 Hz. |
+
+**OwnDynamicAmp** (`_levelerSettings`) — works on integrated loudness and loudness range:
+
+| Parameter | Derivation |
+| --- | --- |
+| Target | Target's integrated LUFS, or the preset's `DynamicAmp.TargetLevel`. |
+| Window / rates / tolerance | Source with more loudness range than the target: 3…12 s window, faster rates and a 0.5…1.5 dB tolerance, so the rider takes the extra range out. Otherwise a 10…30 s window and 1 dB tolerance that only sets the level. |
+| Relative gate | Target's loudness range + 4 LU (8…20), so the quiet parts the target keeps are kept. |
+| Freeze threshold | Under the source's noise floor (−70…−40 LUFS), so fades and pauses never pump up. |
+| Ceiling | Target's true peak, held between −3 and −1 dBTP. |
+| Initial gain / boost / cut | The loudness difference (plus the cut-only shift or the render's pre-gain), with 6 dB of room either way. |
 
 ---
 
@@ -325,9 +392,34 @@ settings):
 
 All of it is live. `FrequencyResponse` is applied at full strength (clamped only by
 the ±9 dB `MaxBandCorrectionDb` rail, which no preset reaches) through the
-deconvolution, `Compression` drives the compressor on the baked base sample,
-`TargetLoudness` is where that sample is normalized to, and `DynamicAmp` is stamped
-onto the profile by the preset overload. `_presetQFactors` picks the Q values the
+deconvolution, `Compressor` (an `OwnCompressorSettings`) compresses the baked base
+sample, `TargetLoudness` (LUFS) is where that sample is normalized to under
+`Leveler.CeilingDbtp`, and the preset overload stamps the system's character onto
+the profile:
+
+| Taken from the preset | Stays measured |
+| --- | --- |
+| OwnCompressor knee, attack, release, auto release, look-ahead, detector, key high-pass | Threshold, ratio, range, channel mode, stereo link — properties of the mix |
+| OwnDynamicAmp target, window, rise / fall rates, tolerance, smoothing, relative gate, ceiling, limiter timing | Initial gain, boost / cut room, freeze threshold — properties of the source's level |
+
+The systems in short:
+
+| System | OwnCompressor | OwnDynamicAmp |
+| --- | --- | --- |
+| `ConcertPA` | 1.8:1, 8 dB knee, M/S, key HPF 60 Hz | −16 LUFS, 12 s window, −1 dBTP |
+| `ClubPA` | 2.5:1, 5 ms attack, fixed release, L/R, key HPF 100 Hz | −11 LUFS, 4 s window, 0.5 dB tolerance, −0.5 dBTP |
+| `HiFiSpeakers` | 1.2:1, 12 dB knee, RMS, 3 dB range | −18 LUFS, 30 s window, gate −8 LU (keeps the quiet parts) |
+| `StudioMonitors` | 1.1:1, RMS, 2 dB range | −20 LUFS, 30 s window, gate −6 LU |
+| `Headphones` | 1.8:1, M/S link 0.7 (width held) | −14 LUFS, 10 s window |
+| `Earbuds` | 2.5:1, 2 ms attack, key HPF 80 Hz | −13 LUFS, 6 s window |
+| `CarStereo` | 2.8:1, RMS, 10 dB range | −11 LUFS, 3 s window, gate −20 LU (quiet parts lifted over road noise) |
+| `Television` | 3:1, RMS, key HPF 120 Hz | −14 LUFS, 3 s window, −2 dBTP |
+| `RadioBroadcast` | 4.5:1, 0.5 ms attack, 5 ms look-ahead, 14 dB range | −10 LUFS, 2 s window, gate −24 LU |
+| `Smartphone` | 3.5:1, M/S link 0.6, key HPF 150 Hz | −11 LUFS, 3 s window |
+
+The older `Compression` and `DynamicAmp` blocks stay, carrying the same threshold,
+ratio, timing, makeup and target, for callers still on `CompressorEffect` /
+`DynamicAmpEffect`. `_presetQFactors` picks the Q values the
 bake solves against.
 
 `DynamicRange` is the one field that stays advisory: it is a ceiling the system can
@@ -341,7 +433,9 @@ the base sample's own crest.
 
 | Class | Purpose |
 | --- | --- |
-| `AudioSpectrum` | 30-band spectrum + RMS, peak, dynamic range, loudness. |
+| `AudioSpectrum` | 30-band spectrum + RMS, peak, dynamic range, loudness, and the `LoudnessStats` of the whole track. |
+| `LoudnessInfo` | Integrated LUFS, loudness range, true peak, noise floor, side/mid, peak to loudness ratio. |
+| `OwnCompressorSettings` / `OwnDynamicAmpSettings` | The matched effect setups, with `ApplyTo` for a live effect. Records, so they serialize and copy with `with`. |
 | `DynamicsInfo` | RMS, peak, dynamic range, loudness for one segment. |
 | `AudioSegment` | Segment samples + timing, energy, sample rate. |
 | `SegmentAnalysis` | Per-segment spectrum + dynamics + weight + outlier score. |

@@ -121,60 +121,59 @@ namespace OwnaudioNET.Features.Matchering
             using StandaloneEffect presetEQ = NativeMastering.Equalizer30(
                 sampleRate, channels, _freqBands, qFactors, bandGains);
 
-            using StandaloneEffect? compressor = eqOnlyMode ? null : NativeMastering.Compressor(
-                sampleRate, channels,
-                thresholdDb: preset.Compression.Threshold,
-                ratio: preset.Compression.Ratio,
-                attackMs: preset.Compression.AttackTime,
-                releaseMs: preset.Compression.ReleaseTime,
-                makeupDb: preset.Compression.MakeupGain);
+            OwnCompressorSettings presetCompressor = preset.Compressor;
+
+            using StandaloneEffect? compressor = eqOnlyMode ? null : NativeMastering.OwnCompressor(
+                sampleRate, channels, presetCompressor);
 
             Log.Info($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} chain to base sample...");
 
             if (compressor is not null)
-                Log.Info($"Preset compressor: {preset.Compression.Threshold:F1}dB, {preset.Compression.Ratio:F1}:1, " +
-                         $"{preset.Compression.AttackTime:F0}/{preset.Compression.ReleaseTime:F0}ms, makeup {preset.Compression.MakeupGain:F1}dB");
+                Log.Info($"Preset OwnCompressor: {presetCompressor.ThresholdDb:F1}dB, {presetCompressor.Ratio:F1}:1, knee {presetCompressor.KneeDb:F0}dB, " +
+                         $"{presetCompressor.AttackMs:F1}/{presetCompressor.ReleaseMs:F0}ms, range {presetCompressor.RangeDb:F0}dB, makeup {presetCompressor.MakeupDb:F1}dB, " +
+                         $"{presetCompressor.ChannelMode}, key HPF {presetCompressor.SidechainHighPassHz:F0}Hz");
 
+            StandaloneEffect[] chain = compressor is null ? new[] { presetEQ } : new[] { presetEQ, compressor };
             int totalSamples = (audioData.Length / channels) * channels;
 
-            NativeMastering.Render(audioData, channels,
-                compressor is null ? new[] { presetEQ } : new[] { presetEQ, compressor });
+            NativeMastering.Render(audioData, channels, chain);
+            NativeMastering.CompensateLatency(audioData, totalSamples, channels, chain);
 
             _normalizeToPreset(audioData, totalSamples, channels, sampleRate, preset);
         }
 
         /// <summary>
-        /// Pulls the baked sample up to the preset's target loudness and lets a limiter hold
-        /// the peaks - the way a loud master is actually made. The crest we measure afterwards
-        /// is then the preset's, which is what drives the compressor settings downstream.
+        /// Pulls the baked sample up to the preset's integrated loudness and lets the rider's
+        /// true-peak limiter hold the peaks at the preset's own ceiling - the way a loud master is
+        /// actually made, and in the units the rider will chase later. Two rounds, since the
+        /// limiter takes some of the loudness back on the loud presets. The peak to loudness ratio measured afterwards is
+        /// the preset's, which is what drives the compressor settings downstream.
         /// </summary>
         private void _normalizeToPreset(float[] audioData, int totalSamples, int channels,
             int sampleRate, PlaybackPreset preset)
         {
-            float wantedRms = MathF.Pow(10f, preset.TargetLoudness / 20f);
-            float gain = wantedRms / Math.Max(_calcRms(audioData), 1e-10f);
+            for (int pass = 0; pass < PresetLoudnessPasses; pass++)
+            {
+                float measured = MeasureLoudness(audioData, sampleRate, channels).IntegratedLufs;
+                float gain = MathF.Pow(10f, (preset.TargetLoudness - measured) / 20f);
 
-            for (int i = 0; i < audioData.Length; i++) audioData[i] *= gain;
+                for (int i = 0; i < audioData.Length; i++) audioData[i] *= gain;
 
-            Log.Info($"Level pushed by {20 * MathF.Log10(gain):+0.0;-0.0}dB toward {preset.TargetLoudness:F1}dBFS");
+                Log.Info($"Level pushed by {20 * MathF.Log10(gain):+0.0;-0.0}dB toward {preset.TargetLoudness:F1} LUFS");
 
-            using StandaloneEffect limiter = NativeMastering.Limiter(
-                sampleRate, channels,
-                thresholdDb: -0.5f, ceilingDb: -0.2f, releaseMs: 60f, lookaheadMs: 5f);
+                using StandaloneEffect limiter = NativeMastering.TruePeakLimiter(sampleRate, channels, preset.Leveler.CeilingDbtp);
+                var limiterChain = new[] { limiter };
 
-            NativeMastering.Render(audioData, channels, new[] { limiter });
-            NativeMastering.CompensateLatency(audioData, totalSamples, channels, limiter);
+                NativeMastering.Render(audioData, channels, limiterChain);
+                NativeMastering.CompensateLatency(audioData, totalSamples, channels, limiterChain);
+            }
 
-            float peak = 0f;
-            for (int i = 0; i < audioData.Length; i++) peak = Math.Max(peak, Math.Abs(audioData[i]));
-
-            float trim = Math.Min(wantedRms / Math.Max(_calcRms(audioData), 1e-10f), 0.99f / Math.Max(peak, 1e-10f));
-            for (int i = 0; i < audioData.Length; i++) audioData[i] *= trim;
-
-            float achieved = _calcRms(audioData);
-            Log.Info($"Baked base sample: {20 * MathF.Log10(achieved):F1}dBFS RMS, crest {20 * MathF.Log10(peak * trim / achieved):F1}dB " +
-                     $"(preset asks {preset.TargetLoudness:F1}dBFS, {preset.DynamicRange:F1}dB)");
+            LoudnessInfo achieved = MeasureLoudness(audioData, sampleRate, channels);
+            Log.Info($"Baked base sample: {achieved.IntegratedLufs:F1} LUFS, {achieved.TruePeakDbtp:F1} dBTP, " +
+                     $"PLR {achieved.PeakToLoudnessDb:F1}dB (preset asks {preset.TargetLoudness:F1} LUFS, {preset.DynamicRange:F1}dB)");
         }
+
+        private const int PresetLoudnessPasses = 2;
 
         /// <summary>
         /// Dumps the embedded basesample blob out to a wav we can open.

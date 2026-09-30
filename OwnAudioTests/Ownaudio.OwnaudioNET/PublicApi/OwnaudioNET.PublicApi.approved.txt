@@ -1348,6 +1348,7 @@ namespace OwnaudioNET.Features.Matchering
         public OwnaudioNET.Features.Matchering.MatcheringProfile CalculateProfile(OwnaudioNET.Features.Matchering.AudioSpectrum source, OwnaudioNET.Features.Matchering.AudioSpectrum target, int sampleRate, float fixedQ = 4.318474, bool cutOnly = true) { }
         public OwnaudioNET.Features.Matchering.MatcheringProfile CalculateProfile(OwnaudioNET.Features.Matchering.AudioSpectrum source, OwnaudioNET.Features.Matchering.PlaybackSystem system, int sampleRate, float fixedQ = 4.318474, bool cutOnly = true, bool eqOnlyMode = false) { }
         public OwnaudioNET.Features.Matchering.AudioSpectrum GetPresetTargetSpectrum(OwnaudioNET.Features.Matchering.PlaybackSystem system, bool eqOnlyMode = false) { }
+        public OwnaudioNET.Features.Matchering.LoudnessInfo MeasureLoudness(float[] interleaved, int sampleRate, int channels) { }
         public void ProcessEQMatching(string sourceFile, string targetFile, string outputFile) { }
         public void ProcessWithEnhancedPreset(string sourceFile, string outputFile, OwnaudioNET.Features.Matchering.PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = false) { }
         public static System.Collections.Generic.Dictionary<OwnaudioNET.Features.Matchering.PlaybackSystem, OwnaudioNET.Features.Matchering.PlaybackPreset> GetAvailablePresets() { }
@@ -1371,6 +1372,7 @@ namespace OwnaudioNET.Features.Matchering
         public float DynamicRange { get; set; }
         public float[] FrequencyBands { get; set; }
         public float Loudness { get; set; }
+        public OwnaudioNET.Features.Matchering.LoudnessInfo? LoudnessStats { get; set; }
         public float PeakLevel { get; set; }
         public float RMSLevel { get; set; }
     }
@@ -1399,6 +1401,16 @@ namespace OwnaudioNET.Features.Matchering
         public float Peak { get; set; }
         public float RMS { get; set; }
     }
+    public class LoudnessInfo
+    {
+        public LoudnessInfo() { }
+        public float IntegratedLufs { get; set; }
+        public float LoudnessRangeLu { get; set; }
+        public float NoiseFloorLufs { get; set; }
+        public float PeakToLoudnessDb { get; }
+        public float SideToMidDb { get; set; }
+        public float TruePeakDbtp { get; set; }
+    }
     public sealed class MatcheringProfile
     {
         public MatcheringProfile() { }
@@ -1407,23 +1419,66 @@ namespace OwnaudioNET.Features.Matchering
         public float[] BandGainsDb { get; init; }
         public float CompRatio { get; init; }
         public float CompThresholdDb { get; init; }
+        public OwnaudioNET.Features.Matchering.OwnCompressorSettings Compressor { get; init; }
         public float CutOnlyShiftDb { get; init; }
+        public OwnaudioNET.Features.Matchering.OwnDynamicAmpSettings Leveler { get; init; }
         public float MaxGain { get; init; }
         public float[] QFactors { get; init; }
         public float SourceCrestDb { get; init; }
         public float SourceLoudness { get; init; }
+        public float SourcePeakToLoudnessDb { get; init; }
         public float TargetCrestDb { get; init; }
         public float TargetLoudness { get; init; }
+        public float TargetPeakToLoudnessDb { get; init; }
         public float[] WantedCurveDb { get; init; }
+    }
+    public sealed class OwnCompressorSettings : System.IEquatable<OwnaudioNET.Features.Matchering.OwnCompressorSettings>
+    {
+        public OwnCompressorSettings() { }
+        public float AttackMs { get; init; }
+        public bool AutoRelease { get; init; }
+        public OwnaudioNET.Effects.OwnCompressorChannelMode ChannelMode { get; init; }
+        public OwnaudioNET.Effects.OwnCompressorDetector Detector { get; init; }
+        public float KneeDb { get; init; }
+        public float LookaheadMs { get; init; }
+        public float MakeupDb { get; init; }
+        public float RangeDb { get; init; }
+        public float Ratio { get; init; }
+        public float ReleaseMs { get; init; }
+        public float SidechainHighPassHz { get; init; }
+        public float StereoLink { get; init; }
+        public float ThresholdDb { get; init; }
+        public void ApplyTo(OwnaudioNET.Effects.OwnCompressorEffect compressor) { }
+    }
+    public sealed class OwnDynamicAmpSettings : System.IEquatable<OwnaudioNET.Features.Matchering.OwnDynamicAmpSettings>
+    {
+        public OwnDynamicAmpSettings() { }
+        public float CeilingDbtp { get; init; }
+        public float FallRateDbPerSec { get; init; }
+        public float FreezeThresholdLufs { get; init; }
+        public float InitialGainDb { get; init; }
+        public float LimiterReleaseMs { get; init; }
+        public float LookaheadMs { get; init; }
+        public float MaxBoostDb { get; init; }
+        public float MaxCutDb { get; init; }
+        public float RelativeGateLu { get; init; }
+        public float RiseRateDbPerSec { get; init; }
+        public float SmoothingMs { get; init; }
+        public float TargetLoudness { get; init; }
+        public float ToleranceDb { get; init; }
+        public float WindowSeconds { get; init; }
+        public void ApplyTo(OwnaudioNET.Effects.OwnDynamicAmpEffect leveler) { }
     }
     public class PlaybackPreset
     {
         public PlaybackPreset() { }
         public OwnaudioNET.Features.Matchering.CompressionSettings Compression { get; set; }
+        public OwnaudioNET.Features.Matchering.OwnCompressorSettings Compressor { get; set; }
         public string Description { get; set; }
         public OwnaudioNET.Features.Matchering.DynamicAmpSettings DynamicAmp { get; set; }
         public float DynamicRange { get; set; }
         public float[] FrequencyResponse { get; set; }
+        public OwnaudioNET.Features.Matchering.OwnDynamicAmpSettings Leveler { get; set; }
         public string Name { get; set; }
         public float TargetLoudness { get; set; }
     }

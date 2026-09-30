@@ -264,6 +264,13 @@ var eq = new Equalizer30BandEffect(sampleRate: 48000f);
 
 for (int band = 0; band < 30; band++)
     eq.SetBandGain(band, eq.GetBandFrequency(band), profile.QFactors[band], profile.BandGainsDb[band]);
+
+// Dynamics: the OwnCompressor takes the mix's peak-to-loudness ratio to the target's,
+// the OwnDynamicAmp rides it to the target LUFS under a true-peak ceiling.
+var compressor = new OwnCompressorEffect();
+var leveler = new OwnDynamicAmpEffect();
+profile.Compressor.ApplyTo(compressor);
+profile.Leveler.ApplyTo(leveler);
 ```
 
 `BandGainsDb` is what the filter bank has to be *set to*, not the curve you asked for — the two differ because a 1/3-octave bell bleeds into its neighbours. Analysis is seconds of work on a full song, so run it off the UI thread.
