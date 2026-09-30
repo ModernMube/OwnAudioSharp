@@ -3,6 +3,90 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.9-preview.4 — 2026-09-30
+
+### Added
+
+- **`OwnCompressorEffect` — a log-domain compressor.** Soft knee up to 24 dB, look-ahead up to
+  10 ms, programme dependent auto release, peak or RMS detection, feed-forward or feedback
+  topology, stereo link, mid/side processing, a sidechain high-pass that keeps the low end from
+  driving the gain reduction, a range that caps the deepest reduction, auto makeup and a parallel
+  mix whose dry path is delayed by the look-ahead so blending never comb filters. Nine presets
+  through `OwnCompressorPreset`, from `Vocal` and `Bus` to `Mastering` and `Parallel`.
+- **`OwnDelayEffect` — a tape style stereo delay.** In-loop ADAA saturation, diffusion and
+  low/high cut, so every repeat darkens and smears like tape; glide or crossfade on a time change,
+  wow, ping-pong, ducking, width and freeze. Times follow the tempo through `OwnDelayNoteValue`,
+  straight, dotted or triplet. Nine presets through `OwnDelayPreset`.
+- **`OwnDynamicAmpEffect` — a loudness based level rider.** The grown-up twin of
+  `DynamicAmpEffect`: it measures BS.1770 loudness (K-weighting, LUFS), follows a gated programme
+  estimate over a window of 0.4–60 s, leaves material inside its tolerance alone and moves the
+  gain with rate limited, smoothed curves. Passages under the relative gate and silence under the
+  freeze threshold never move the gain, so a pianissimo stays one and room noise is never pumped
+  up. A 4× true-peak look-ahead limiter holds the ceiling in dBTP. `ProgramLoudness`,
+  `MomentaryLoudness`, `CurrentGainDb` and `LimiterGainReductionDb` read it back; seven presets
+  through `OwnDynamicAmpPreset`, from `Speech` and `Broadcast` to `Mastering`.
+- **All three run in the Rust engine** as `EffectType.OwnCompressor`, `OwnDelay` and
+  `OwnDynamicAmp`; the C# classes are parameter models mirrored onto the native twins, the same
+  way as every other effect.
+- **Delay compensation follows a look-ahead change.** An effect can now name the parameter its
+  latency depends on, so moving the look-ahead of a compressor or rider that is already on the
+  mixer re-aligns the tracks instead of leaving them at the old offset.
+- **`AudioAnalyzer.MeasureLoudness` and `AudioSpectrum.LoudnessStats`.** Every matchering analysis
+  now measures the whole track the way `OwnDynamicAmpEffect` hears it — the rider's own
+  K-weighting coefficients at any sample rate, gated integrated loudness, EBU Tech 3342 loudness
+  range, the limiter's 4× true peak, the noise floor and the side/mid balance — and a
+  `LoudnessInfo` carries them, `PeakToLoudnessDb` included.
+- **`MatcheringProfile.Compressor` and `MatcheringProfile.Leveler`.** The full
+  `OwnCompressorSettings` and `OwnDynamicAmpSettings` a match settled on, with `ApplyTo` to set a
+  live `OwnCompressorEffect` / `OwnDynamicAmpEffect` in one call. Both are records, so they
+  serialize and copy with `with`. `SourcePeakToLoudnessDb` and `TargetPeakToLoudnessDb` report
+  what the compressor worked from.
+- **`PlaybackPreset.Compressor` and `PlaybackPreset.Leveler`.** Every playback system has its own
+  OwnCompressor and OwnDynamicAmp setup — the club's fast attack and 100 Hz key high-pass, the
+  studio's 30 s window that keeps the quiet parts, the car's and the radio's riders that level
+  them, the TV's −2 dBTP ceiling.
+
+### Changed
+
+- **Matchering builds its dynamics on `OwnCompressor` and `OwnDynamicAmp`.** The compressor
+  takes the source's peak to loudness ratio to the target's; its range stops it there, so it can
+  never squash further than the match asks, and knee, attack, release, look-ahead, mid/side link
+  and key high-pass follow the material. The rider chases the target's integrated LUFS, sizes its
+  window, rates, tolerance and gates from the two loudness ranges, and holds the target's true
+  peak as its ceiling.
+- **The offline render is EQ → OwnCompressor → OwnDynamicAmp.** The separate compressor, dynamic
+  amp and limiter are gone; the rider's true-peak limiter is the last stage. The render runs in
+  two passes: what the EQ and the compressor leave is measured, and the rider starts on exactly
+  the gain the target needs instead of slewing there. Latency compensation now covers every
+  look-ahead in the chain.
+- **Against a preset, the system's character wins where it belongs to the system.** The
+  preset's knee, timing, look-ahead, detector and key high-pass, and its rider window, rates,
+  tolerance, gates, ceiling and limiter timing replace the derived ones; threshold, ratio, range,
+  stereo handling and the rider's start gain stay measured. The baked preset target is
+  compressed by the preset's `Compressor` and normalized to its `TargetLoudness` in LUFS under
+  its own ceiling.
+- **Matchering loudness is LUFS.** `MatcheringProfile.TargetLoudness` and `SourceLoudness` are
+  integrated LUFS now, not RMS dBFS. `CompThresholdDb`, `CompRatio`, `MaxGain`,
+  `AmpAttackSeconds`, `AmpReleaseSeconds` and the presets' `Compression` / `DynamicAmp` blocks
+  stay and carry the same numbers, for code still on `CompressorEffect` / `DynamicAmpEffect`.
+
+### Fixed
+
+- **Network sync threads no longer die on an exception.** A throwing application event handler
+  only logs now, an unexpected socket error on receive logs and carries on instead of silently
+  ending the thread, and a failure listing the network cards skips that announcement.
+- **A client follows a server that starts in silence.** A server start still inside its offset
+  silence counts as playing and the song time runs on from where play began, so clients go in
+  before the first sound; a go-in that leaves the client silent is retried every 5 s.
+- **SmartMaster cancels a running room measurement when it leaves the mixer**, before the
+  microphone goes away. `CancelMeasurement` no longer throws when it races the measurement's end.
+
+### Deprecated
+
+- **`SyncTolerance`, `SoftSyncTolerance`, `SoftSyncMaxTempoAdjustment` and `SyncDiagnostics`.**
+  Nothing reads them since the network sync trims the tempo of the whole mixer. They stay so old
+  code compiles; `NetworkSyncStatus` has the live sync numbers.
+
 ## 4.0.8 — 2026-09-20
 
 The preview line closes here — nothing has landed since `4.0.8-preview.13` but the CI job that
