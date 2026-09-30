@@ -412,6 +412,122 @@ namespace OwnaudioNET.Effects
         Bass = 6,
         Screamer = 7,
     }
+    public enum OwnCompressorChannelMode
+    {
+        LeftRight = 0,
+        MidSide = 1,
+    }
+    public enum OwnCompressorDetector
+    {
+        Peak = 0,
+        Rms = 1,
+    }
+    public sealed class OwnCompressorEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public OwnCompressorEffect() { }
+        public OwnCompressorEffect(OwnaudioNET.Effects.OwnCompressorPreset preset) { }
+        public float Attack { get; set; }
+        public bool AutoMakeup { get; set; }
+        public bool AutoRelease { get; set; }
+        public OwnaudioNET.Effects.OwnCompressorChannelMode ChannelMode { get; set; }
+        public OwnaudioNET.Effects.OwnCompressorDetector Detector { get; set; }
+        public float GainReductionDb { get; }
+        public float InputLevel { get; }
+        public float Knee { get; set; }
+        public int LatencySamples { get; }
+        public float Lookahead { get; set; }
+        public float Makeup { get; set; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public float Range { get; set; }
+        public float Ratio { get; set; }
+        public float Release { get; set; }
+        public float SidechainHighPass { get; set; }
+        public float StereoLink { get; set; }
+        public float Threshold { get; set; }
+        public OwnaudioNET.Effects.OwnCompressorTopology Topology { get; set; }
+        public void SetPreset(OwnaudioNET.Effects.OwnCompressorPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum OwnCompressorPreset
+    {
+        Default = 0,
+        Vocal = 1,
+        Bus = 2,
+        Drums = 3,
+        Bass = 4,
+        Mastering = 5,
+        Parallel = 6,
+        Classic = 7,
+        Podcast = 8,
+    }
+    public enum OwnCompressorTopology
+    {
+        FeedForward = 0,
+        Feedback = 1,
+    }
+    public sealed class OwnDelayEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public OwnDelayEffect() { }
+        public OwnDelayEffect(OwnaudioNET.Effects.OwnDelayPreset preset) { }
+        public float CrossFeedback { get; set; }
+        public float Diffusion { get; set; }
+        public float Drive { get; set; }
+        public float DuckAmount { get; set; }
+        public float DuckAttack { get; set; }
+        public float DuckGain { get; }
+        public float DuckRelease { get; set; }
+        public float DuckThreshold { get; set; }
+        public float Feedback { get; set; }
+        public bool Freeze { get; set; }
+        public float Glide { get; set; }
+        public float HighCut { get; set; }
+        public float LowCut { get; set; }
+        public float Mix { get; set; }
+        public float ModDepth { get; set; }
+        public float ModRate { get; set; }
+        public string Name { get; set; }
+        public float TimeLeft { get; set; }
+        public OwnaudioNET.Effects.OwnDelayTimeMode TimeMode { get; set; }
+        public float TimeRight { get; set; }
+        public float Width { get; set; }
+        public void SetPreset(OwnaudioNET.Effects.OwnDelayPreset preset) { }
+        public void SyncToTempo(double bpm, OwnaudioNET.Effects.OwnDelayNoteValue left, OwnaudioNET.Effects.OwnDelayNoteValue right) { }
+        public override string ToString() { }
+        public static float NoteToMilliseconds(double bpm, OwnaudioNET.Effects.OwnDelayNoteValue note) { }
+    }
+    public enum OwnDelayNoteValue
+    {
+        Whole = 0,
+        Half = 1,
+        Quarter = 2,
+        Eighth = 3,
+        Sixteenth = 4,
+        DottedHalf = 5,
+        DottedQuarter = 6,
+        DottedEighth = 7,
+        DottedSixteenth = 8,
+        TripletQuarter = 9,
+        TripletEighth = 10,
+        TripletSixteenth = 11,
+    }
+    public enum OwnDelayPreset
+    {
+        Default = 0,
+        Slapback = 1,
+        PingPong = 2,
+        TapeEcho = 3,
+        DubEcho = 4,
+        Ambient = 5,
+        DuckedVocal = 6,
+        LoFi = 7,
+        Doubler = 8,
+    }
+    public enum OwnDelayTimeMode
+    {
+        Glide = 0,
+        Crossfade = 1,
+    }
     public sealed class OwnReverbEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public OwnReverbEffect() { }

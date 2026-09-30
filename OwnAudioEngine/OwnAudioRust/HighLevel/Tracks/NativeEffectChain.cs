@@ -250,6 +250,8 @@ public abstract class NativeEffectChain
             [typeof(DynamicAmpEffect)]  = EffectType.DynamicAmp,
             [typeof(Equalizer30Effect)] = EffectType.Equalizer30,
             [typeof(OwnReverbEffect)]   = EffectType.OwnReverb,
+            [typeof(OwnCompressorEffect)] = EffectType.OwnCompressor,
+            [typeof(OwnDelayEffect)]    = EffectType.OwnDelay,
         };
 
     private object _createWrapper(EffectType effectType, EffectHandle handle)
@@ -275,6 +277,8 @@ public abstract class NativeEffectChain
             EffectType.Equalizer30 => new Equalizer30Effect(handle, _mixerHandle),
             EffectType.SmartMaster => new NativeSmartMasterEffect(),
             EffectType.OwnReverb   => new OwnReverbEffect(handle, _mixerHandle),
+            EffectType.OwnCompressor => new OwnCompressorEffect(handle, _mixerHandle),
+            EffectType.OwnDelay    => new OwnDelayEffect(handle, _mixerHandle),
             _ => throw new ArgumentOutOfRangeException(nameof(effectType)),
         };
     }

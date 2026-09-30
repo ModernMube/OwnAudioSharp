@@ -73,4 +73,14 @@ public enum EffectType : uint
     /// 16 line FDN reverb, diffusion + damping + modulation, with a built in ducker.
     /// </summary>
     OwnReverb = 19,
+
+    /// <summary>
+    /// Log-domain compressor: look-ahead, soft knee, auto release, stereo link, mid/side.
+    /// </summary>
+    OwnCompressor = 20,
+
+    /// <summary>
+    /// Tape style stereo delay: in-loop diffusion, filtering and ADAA saturation.
+    /// </summary>
+    OwnDelay = 21,
 }

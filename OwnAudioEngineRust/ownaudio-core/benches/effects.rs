@@ -8,8 +8,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, Enhancer, Equalizer,
-    Equalizer30, Flanger, Gate, Limiter, Overdrive, OwnReverb, Phaser, PitchShift, Reverb, Rotary,
-    SmartMaster,
+    Equalizer30, Flanger, Gate, Limiter, Overdrive, OwnCompressor, OwnDelay, OwnReverb, Phaser,
+    PitchShift, Reverb, Rotary, SmartMaster,
 };
 
 const SAMPLE_RATE: f32 = 48_000.0;
@@ -57,6 +57,8 @@ fn effects() -> Vec<(&'static str, Box<dyn Effect>)> {
         ("phaser", Box::new(Phaser::new(SAMPLE_RATE))),
         ("pitch_shift", Box::new(PitchShift::new(SAMPLE_RATE))),
         ("ownreverb", Box::new(OwnReverb::new(SAMPLE_RATE))),
+        ("owncompressor", Box::new(OwnCompressor::new(SAMPLE_RATE))),
+        ("owndelay", Box::new(OwnDelay::new(SAMPLE_RATE))),
         ("reverb", Box::new(Reverb::new(SAMPLE_RATE))),
         ("rotary", Box::new(Rotary::new(SAMPLE_RATE))),
         ("smartmaster", Box::new(SmartMaster::new(SAMPLE_RATE))),

@@ -113,6 +113,18 @@ public class DspContractTests
                     (float)_num(_p, "releaseMs", 50.0),
                     (float)_num(_p, "lookaheadMs", 5.0));
 
+            case "owncompressor":
+            {
+                var _fx = new OwnCompressorEffect();
+                _fx.Threshold = (float)_num(_p, "thresholdDb", -18.0);
+                _fx.Ratio = (float)_num(_p, "ratio", 4.0);
+                _fx.Knee = (float)_num(_p, "kneeDb", 6.0);
+                _fx.Attack = (float)_num(_p, "attackMs", 10.0);
+                _fx.Release = (float)_num(_p, "releaseMs", 100.0);
+                _fx.Makeup = (float)_num(_p, "makeupDb", 0.0);
+                return _fx;
+            }
+
             case "compressor":
             {
                 var _fx = new CompressorEffect(CompressorPreset.Default, rate);

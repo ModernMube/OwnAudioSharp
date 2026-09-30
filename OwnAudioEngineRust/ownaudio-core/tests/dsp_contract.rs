@@ -128,6 +128,18 @@ fn build(entry: &Value, rate: f32) -> Box<dyn Effect> {
             Box::new(fx)
         }
 
+        "owncompressor" => {
+            use ownaudio_core::effects::owncompressor::*;
+            let mut fx = OwnCompressor::new(rate);
+            fx.set_param(PARAM_THRESHOLD, param(p, "thresholdDb", -18.0));
+            fx.set_param(PARAM_RATIO, param(p, "ratio", 4.0));
+            fx.set_param(PARAM_KNEE, param(p, "kneeDb", 6.0));
+            fx.set_param(PARAM_ATTACK, param(p, "attackMs", 10.0));
+            fx.set_param(PARAM_RELEASE, param(p, "releaseMs", 100.0));
+            fx.set_param(PARAM_MAKEUP, param(p, "makeupDb", 0.0));
+            Box::new(fx)
+        }
+
         "compressor" => {
             use ownaudio_core::effects::compressor::*;
             let mut fx = Compressor::new(rate);

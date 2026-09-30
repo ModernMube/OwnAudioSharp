@@ -131,6 +131,23 @@
         { "freqHz": 250.0, "inputDb": -20.0, "measure": "gainDb", "expect": 0.0, "tolerance": 0.1 },
         { "freqHz": 2000.0, "inputDb": -20.0, "measure": "gainDb", "expect": 0.0, "tolerance": 0.1 }
       ]
+    },
+    {
+      "effect": "owncompressor",
+      "params": { "thresholdDb": -18.0, "ratio": 4.0, "kneeDb": 0.0, "attackMs": 1.0, "releaseMs": 200.0 },
+      "cases": [
+        { "freqHz": 1000.0, "inputDb": -24.0, "measure": "peakDb", "expect": -24.0, "tolerance": 0.05, "note": "under the threshold the gain is exactly unity" },
+        { "freqHz": 1000.0, "inputDb": -6.0, "measure": "peakDb", "expect": -15.0, "tolerance": 0.3, "note": "12 dB over at 4:1 leaves 3 dB over the threshold" },
+        { "freqHz": 1000.0, "inputDb": 0.0, "measure": "peakDb", "expect": -13.5, "tolerance": 0.3 }
+      ]
+    },
+    {
+      "effect": "owncompressor",
+      "params": { "thresholdDb": -18.0, "ratio": 4.0, "kneeDb": 12.0, "attackMs": 1.0, "releaseMs": 200.0 },
+      "cases": [
+        { "freqHz": 1000.0, "inputDb": -18.0, "measure": "peakDb", "expect": -19.125, "tolerance": 0.3, "note": "at the threshold the quadratic knee takes (1/R - 1)(W/2)^2 / 2W = 1.125 dB" },
+        { "freqHz": 1000.0, "inputDb": -25.0, "measure": "peakDb", "expect": -25.0, "tolerance": 0.05, "note": "below the knee the gain is exactly unity" }
+      ]
     }
   ]
 }

@@ -40,6 +40,8 @@ internal static class RustEffectAdapters
         {
             [typeof(ME.ReverbEffect)]           = new Adapter(EffectType.Reverb, _mirrorReverb),
             [typeof(ME.OwnReverbEffect)]        = new Adapter(EffectType.OwnReverb, _mirrorOwnReverb),
+            [typeof(ME.OwnCompressorEffect)]    = new Adapter(EffectType.OwnCompressor, _mirrorOwnCompressor),
+            [typeof(ME.OwnDelayEffect)]         = new Adapter(EffectType.OwnDelay, _mirrorOwnDelay),
             [typeof(ME.EqualizerEffect)]        = new Adapter(EffectType.Equalizer, _mirrorEqualizer),
             [typeof(ME.Equalizer30BandEffect)]  = new Adapter(EffectType.Equalizer30, _mirrorEqualizer30),
             [typeof(ME.CompressorEffect)]       = new Adapter(EffectType.Compressor, _mirrorCompressor),
@@ -118,6 +120,49 @@ internal static class RustEffectAdapters
         sink(14, r.DuckAttack);
         sink(15, r.DuckRelease);
         sink(16, r.Freeze ? 1f : 0f);
+    }
+
+    private static void _mirrorOwnCompressor(IEffectProcessor e, ParamSink sink)
+    {
+        var c = (ME.OwnCompressorEffect)e;
+        sink(2, c.Threshold);
+        sink(3, c.Ratio);
+        sink(4, c.Knee);
+        sink(5, c.Attack);
+        sink(6, c.Release);
+        sink(7, c.AutoRelease ? 1f : 0f);
+        sink(8, c.Lookahead);
+        sink(9, (float)c.Detector);
+        sink(10, (float)c.Topology);
+        sink(11, c.StereoLink);
+        sink(12, (float)c.ChannelMode);
+        sink(13, c.SidechainHighPass);
+        sink(14, c.Makeup);
+        sink(15, c.AutoMakeup ? 1f : 0f);
+        sink(16, c.Range);
+    }
+
+    private static void _mirrorOwnDelay(IEffectProcessor e, ParamSink sink)
+    {
+        var d = (ME.OwnDelayEffect)e;
+        sink(2, d.TimeLeft);
+        sink(3, d.TimeRight);
+        sink(4, d.Feedback);
+        sink(5, d.CrossFeedback);
+        sink(6, (float)d.TimeMode);
+        sink(7, d.Glide);
+        sink(8, d.Drive);
+        sink(9, d.LowCut);
+        sink(10, d.HighCut);
+        sink(11, d.Diffusion);
+        sink(12, d.ModRate);
+        sink(13, d.ModDepth);
+        sink(14, d.DuckAmount);
+        sink(15, d.DuckThreshold);
+        sink(16, d.DuckAttack);
+        sink(17, d.DuckRelease);
+        sink(18, d.Width);
+        sink(19, d.Freeze ? 1f : 0f);
     }
 
     private static void _mirrorEqualizer(IEffectProcessor e, ParamSink sink)

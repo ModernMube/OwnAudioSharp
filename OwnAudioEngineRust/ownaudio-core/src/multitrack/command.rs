@@ -32,7 +32,7 @@
 use rtrb::{Consumer, Producer, RingBuffer};
 use std::sync::Arc;
 
-use crate::effects::{Effect, EffectEntry};
+use crate::effects::{Effect, EffectEntry, LatencyParam};
 use crate::ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};
 
 use super::fx_tap::{fx_tap, FxTap, FxTapReader};
@@ -182,6 +182,8 @@ struct EffectShadow {
     /// controller can recompute plugin delay compensation when effects change
     /// without reaching into the audio thread.
     latency: u32,
+    /// How a parameter moves `latency`, grabbed from the effect at add time.
+    latency_param: Option<LatencyParam>,
 }
 
 impl EffectShadow {
@@ -455,6 +457,7 @@ impl MixerController {
             }
         }
         let latency = effect.latency_samples();
+        let latency_param = effect.latency_param();
 
         self.enqueue(MixerCommand::AddEffect {
             track_id,
@@ -467,6 +470,7 @@ impl MixerController {
             track_id,
             params,
             latency,
+            latency_param,
         });
         self.recompute_pdc();
         Ok(effect_id)
@@ -558,12 +562,25 @@ impl MixerController {
         param_id: u32,
         value: f32,
     ) -> Result<bool, CommandError> {
+        let mut latency_moved = false;
         let known = match self
             .effect_shadows
             .iter_mut()
             .find(|s| s.effect_id == effect_id)
         {
-            Some(shadow) => shadow.set(param_id, value),
+            Some(shadow) => {
+                // Look-ahead knob moved? Then the effect's latency moved too and every
+                // other track has to be re-lined up, or the drums start flamming.
+                let known = shadow.set(param_id, value);
+                if let Some(lp) = shadow.latency_param.filter(|lp| lp.param_id == param_id) {
+                    let frames = lp.frames_for(value);
+                    if known && value.is_finite() && frames != shadow.latency {
+                        shadow.latency = frames;
+                        latency_moved = true;
+                    }
+                }
+                known
+            }
             None => false,
         };
 
@@ -577,6 +594,9 @@ impl MixerController {
             param_id,
             value,
         })?;
+        if latency_moved {
+            self.recompute_pdc();
+        }
         Ok(true)
     }
 
@@ -817,6 +837,48 @@ mod tests {
         // frame 0 — B was not left un-delayed.
         assert_eq!(out[0], 0.0, "no un-compensated impulse at frame 0");
         assert_eq!(out[L], 2.0, "both tracks' impulses align at frame L");
+    }
+
+    #[test]
+    fn pdc_follows_a_lookahead_change_after_the_effect_was_added() {
+        use crate::effects::owncompressor::{OwnCompressor, PARAM_LOOKAHEAD, PARAM_THRESHOLD};
+
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let (mut ctl, rx) = command_channel(
+            64,
+            mixer.sample_rate(),
+            mixer.channels(),
+            mixer.max_buffer_size(),
+        );
+        mixer.attach_command_receiver(rx);
+
+        let mut impulse = vec![0.0f32; 512];
+        impulse[0] = 0.25;
+
+        let (a, sa) = ctl.add_track().unwrap();
+        ctl.set_track_source(a, Some(Box::new(VecSource::new(impulse.clone()))))
+            .unwrap();
+        let fx = ctl
+            .add_effect(a, Box::new(OwnCompressor::new(48_000.0)))
+            .unwrap();
+        ctl.set_effect_param(a, fx, PARAM_THRESHOLD, 0.0).unwrap();
+        ctl.set_effect_param(a, fx, PARAM_LOOKAHEAD, 2.0).unwrap();
+
+        let (b, sb) = ctl.add_track().unwrap();
+        ctl.set_track_source(b, Some(Box::new(VecSource::new(impulse))))
+            .unwrap();
+
+        sa.set_state(TrackState::Playing);
+        sb.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 512];
+        mixer.mix(&mut out);
+
+        assert_eq!(out[0], 0.0, "track B must be delayed by the new look-ahead");
+        assert_eq!(
+            out[96], 0.5,
+            "both impulses align at the 2 ms look-ahead (96 frames)"
+        );
     }
 
     /// Builds a mono mixer wired to a fresh command channel.

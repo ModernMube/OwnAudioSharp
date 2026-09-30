@@ -13,6 +13,9 @@ pub mod flanger;
 pub mod gate;
 pub mod limiter;
 pub mod overdrive;
+pub mod owncompressor;
+pub mod owndelay;
+pub mod owndsp;
 pub mod ownreverb;
 pub mod phaser;
 pub mod pitch_shift;
@@ -34,6 +37,8 @@ pub use flanger::Flanger;
 pub use gate::Gate;
 pub use limiter::Limiter;
 pub use overdrive::Overdrive;
+pub use owncompressor::OwnCompressor;
+pub use owndelay::OwnDelay;
 pub use ownreverb::OwnReverb;
 pub use phaser::Phaser;
 pub use pitch_shift::PitchShift;
@@ -98,6 +103,12 @@ pub enum EffectType {
     /// Feedback-delay-network reverb with diffusion, damping, modulation and a
     /// sidechain ducker (see [`ownreverb::OwnReverb`]).
     OwnReverb = 19,
+    /// Log-domain compressor with look-ahead, soft knee, auto release, stereo
+    /// link and mid/side (see [`owncompressor::OwnCompressor`]).
+    OwnCompressor = 20,
+    /// Tape-style stereo delay with in-loop diffusion, filtering and ADAA
+    /// saturation (see [`owndelay::OwnDelay`]).
+    OwnDelay = 21,
 }
 
 impl TryFrom<u32> for EffectType {
@@ -125,8 +136,36 @@ impl TryFrom<u32> for EffectType {
             17 => Ok(Self::Vst),
             18 => Ok(Self::SmartMaster),
             19 => Ok(Self::OwnReverb),
+            20 => Ok(Self::OwnCompressor),
+            21 => Ok(Self::OwnDelay),
             _ => Err(()),
         }
+    }
+}
+
+// Latency descriptor
+
+/// How one parameter (like a look-ahead time) sets an effect's latency.
+/// The controller keeps it so delay compensation follows that parameter later on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LatencyParam {
+    /// Parameter whose value sets the latency.
+    pub param_id: u32,
+    /// Latency frames per unit of the parameter value (frames per ms for a time).
+    pub frames_per_unit: f32,
+    /// Smallest value `set_param` accepts for the parameter.
+    pub min_value: f32,
+    /// Largest value `set_param` accepts for the parameter.
+    pub max_value: f32,
+    /// Latency ceiling in frames (the capacity of the effect's delay line).
+    pub max_frames: u32,
+}
+
+impl LatencyParam {
+    /// Latency in frames for a value, clamped like the effect does. Both sides use it.
+    pub fn frames_for(&self, value: f32) -> u32 {
+        let v = value.clamp(self.min_value, self.max_value);
+        ((v * self.frames_per_unit).round() as u32).min(self.max_frames)
     }
 }
 
@@ -181,6 +220,11 @@ pub trait Effect: Send {
     /// never changes the alignment. Zero-latency effects use the default.
     fn latency_samples(&self) -> u32 {
         0
+    }
+
+    /// The parameter that moves [`latency_samples`](Self::latency_samples), if any.
+    fn latency_param(&self) -> Option<LatencyParam> {
+        None
     }
 }
 

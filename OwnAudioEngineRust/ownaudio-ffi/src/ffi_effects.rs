@@ -4,8 +4,8 @@ use std::os::raw::c_void;
 
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, EffectType, Enhancer,
-    Equalizer, Equalizer30, Flanger, Gate, Limiter, Overdrive, OwnReverb, Phaser, PitchShift,
-    Reverb, Rotary, SmartMaster, VstEffect, VstProcessFn,
+    Equalizer, Equalizer30, Flanger, Gate, Limiter, Overdrive, OwnCompressor, OwnDelay, OwnReverb,
+    Phaser, PitchShift, Reverb, Rotary, SmartMaster, VstEffect, VstProcessFn,
 };
 use ownaudio_core::multitrack::MASTER_EFFECT_TARGET;
 
@@ -40,6 +40,8 @@ pub(crate) fn create_effect(effect_type_raw: u32, sample_rate: f32) -> Option<Bo
         EffectType::Equalizer30 => Box::new(Equalizer30::new(sample_rate)),
         EffectType::SmartMaster => Box::new(SmartMaster::new(sample_rate)),
         EffectType::OwnReverb => Box::new(OwnReverb::new(sample_rate)),
+        EffectType::OwnCompressor => Box::new(OwnCompressor::new(sample_rate)),
+        EffectType::OwnDelay => Box::new(OwnDelay::new(sample_rate)),
         // A VST bridge needs a plugin handle + process pointer, so it cannot be
         // built from a type tag alone — it is created via the dedicated
         // `ownaudio_v1_track_add_vst_effect` / master entry points instead.
