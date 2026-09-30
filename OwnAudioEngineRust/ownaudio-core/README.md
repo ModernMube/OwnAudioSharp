@@ -36,7 +36,7 @@ Cross-platform audio I/O library for OwnAudioSharp, built on [`cpal`](https://gi
 - **Format conversion** — bidirectional i16/u16/f32 with interleave/deinterleave utilities
 - **Lock-free ring buffer** — SPSC, safe to use between audio callback and application threads
 - **High-quality resampler** — sinc-based SRC via `rubato`
-- **21 built-in audio effects** — reverb, OwnReverb (16-line FDN), OwnCompressor, OwnDelay (tape), OwnDynamicAmp (LUFS), OwnDynamicAmp (LUFS rider), compressor, EQ (10 or 30 band), delay, chorus, etc.
+- **21 built-in audio effects** — reverb, OwnReverb (16-line FDN), OwnCompressor, OwnDelay (tape), OwnDynamicAmp (LUFS rider), compressor, EQ (10 or 30 band), delay, chorus, etc.
 - **Multi-track mixer** — per-track gain, mute, solo, tempo/pitch, effect chains, transport clock
 - **Group sources** — several files on one track timeline, sharing its stretch, effects and fader
 - **Zero-allocation audio path** — all buffers pre-allocated; no heap activity in callbacks

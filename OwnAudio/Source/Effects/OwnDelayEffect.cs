@@ -77,29 +77,53 @@ namespace OwnaudioNET.Effects
     /// </summary>
     public enum OwnDelayNoteValue
     {
-        /// <summary>1/1</summary>
+        /// <summary>
+        /// 1/1
+        /// </summary>
         Whole,
-        /// <summary>1/2</summary>
+        /// <summary>
+        /// 1/2
+        /// </summary>
         Half,
-        /// <summary>1/4</summary>
+        /// <summary>
+        /// 1/4
+        /// </summary>
         Quarter,
-        /// <summary>1/8</summary>
+        /// <summary>
+        /// 1/8
+        /// </summary>
         Eighth,
-        /// <summary>1/16</summary>
+        /// <summary>
+        /// 1/16
+        /// </summary>
         Sixteenth,
-        /// <summary>Dotted 1/2</summary>
+        /// <summary>
+        /// Dotted 1/2
+        /// </summary>
         DottedHalf,
-        /// <summary>Dotted 1/4</summary>
+        /// <summary>
+        /// Dotted 1/4
+        /// </summary>
         DottedQuarter,
-        /// <summary>Dotted 1/8</summary>
+        /// <summary>
+        /// Dotted 1/8
+        /// </summary>
         DottedEighth,
-        /// <summary>Dotted 1/16</summary>
+        /// <summary>
+        /// Dotted 1/16
+        /// </summary>
         DottedSixteenth,
-        /// <summary>1/4 triplet</summary>
+        /// <summary>
+        /// 1/4 triplet
+        /// </summary>
         TripletQuarter,
-        /// <summary>1/8 triplet</summary>
+        /// <summary>
+        /// 1/8 triplet
+        /// </summary>
         TripletEighth,
-        /// <summary>1/16 triplet</summary>
+        /// <summary>
+        /// 1/16 triplet
+        /// </summary>
         TripletSixteenth
     }
 

@@ -64,119 +64,153 @@ public sealed class OwnDynamicAmpEffect : IDisposable
     /// </summary>
     public EffectType EffectType => EffectType.OwnDynamicAmp;
 
-    /// <summary>Bypass switch.</summary>
+    /// <summary>
+    /// Bypass switch.
+    /// </summary>
     public bool IsEnabled
     {
         get => _isEnabled;
         set { _isEnabled = value; _setParam(ParamEnabled, value ? 1f : 0f); }
     }
 
-    /// <summary>Kept for symmetry, the rider always runs fully wet.</summary>
+    /// <summary>
+    /// Kept for symmetry, the rider always runs fully wet.
+    /// </summary>
     public float Mix
     {
         get => _mix;
         set { _mix = value; _setParam(ParamMix, value); }
     }
 
-    /// <summary>Target programme loudness in LUFS, -40 - -5.</summary>
+    /// <summary>
+    /// Target programme loudness in LUFS, -40 - -5.
+    /// </summary>
     public float TargetLoudness
     {
         get => _targetLoudness;
         set { _targetLoudness = value; _setParam(ParamTargetLoudness, value); }
     }
 
-    /// <summary>Loudness memory in seconds, 0.4 - 60.</summary>
+    /// <summary>
+    /// Loudness memory in seconds, 0.4 - 60.
+    /// </summary>
     public float Window
     {
         get => _window;
         set { _window = value; _setParam(ParamWindow, value); }
     }
 
-    /// <summary>Maximum boost in dB, 0 - 30.</summary>
+    /// <summary>
+    /// Maximum boost in dB, 0 - 30.
+    /// </summary>
     public float MaxBoost
     {
         get => _maxBoost;
         set { _maxBoost = value; _setParam(ParamMaxBoost, value); }
     }
 
-    /// <summary>Maximum cut in dB, 0 - 30.</summary>
+    /// <summary>
+    /// Maximum cut in dB, 0 - 30.
+    /// </summary>
     public float MaxCut
     {
         get => _maxCut;
         set { _maxCut = value; _setParam(ParamMaxCut, value); }
     }
 
-    /// <summary>Fastest upward movement in dB/s, 0.1 - 20.</summary>
+    /// <summary>
+    /// Fastest upward movement in dB/s, 0.1 - 20.
+    /// </summary>
     public float RiseRate
     {
         get => _riseRate;
         set { _riseRate = value; _setParam(ParamRiseRate, value); }
     }
 
-    /// <summary>Fastest downward movement in dB/s, 0.1 - 40.</summary>
+    /// <summary>
+    /// Fastest downward movement in dB/s, 0.1 - 40.
+    /// </summary>
     public float FallRate
     {
         get => _fallRate;
         set { _fallRate = value; _setParam(ParamFallRate, value); }
     }
 
-    /// <summary>Dead band around the target in dB, 0 - 6.</summary>
+    /// <summary>
+    /// Dead band around the target in dB, 0 - 6.
+    /// </summary>
     public float Tolerance
     {
         get => _tolerance;
         set { _tolerance = value; _setParam(ParamTolerance, value); }
     }
 
-    /// <summary>Gain curve smoothing in ms, 10 - 5000.</summary>
+    /// <summary>
+    /// Gain curve smoothing in ms, 10 - 5000.
+    /// </summary>
     public float Smoothing
     {
         get => _smoothing;
         set { _smoothing = value; _setParam(ParamSmoothing, value); }
     }
 
-    /// <summary>Relative gate in LU below the programme loudness, -40 - -1.</summary>
+    /// <summary>
+    /// Relative gate in LU below the programme loudness, -40 - -1.
+    /// </summary>
     public float RelativeGate
     {
         get => _relativeGate;
         set { _relativeGate = value; _setParam(ParamRelativeGate, value); }
     }
 
-    /// <summary>Absolute freeze threshold in LUFS, -90 - -30.</summary>
+    /// <summary>
+    /// Absolute freeze threshold in LUFS, -90 - -30.
+    /// </summary>
     public float FreezeThreshold
     {
         get => _freezeThreshold;
         set { _freezeThreshold = value; _setParam(ParamFreezeThreshold, value); }
     }
 
-    /// <summary>True-peak ceiling in dBTP, -20 - 0.</summary>
+    /// <summary>
+    /// True-peak ceiling in dBTP, -20 - 0.
+    /// </summary>
     public float Ceiling
     {
         get => _ceiling;
         set { _ceiling = value; _setParam(ParamCeiling, value); }
     }
 
-    /// <summary>True-peak safety limiter on/off.</summary>
+    /// <summary>
+    /// True-peak safety limiter on/off.
+    /// </summary>
     public bool LimiterEnabled
     {
         get => _limiterEnabled;
         set { _limiterEnabled = value; _setParam(ParamLimiter, value ? 1f : 0f); }
     }
 
-    /// <summary>Look-ahead in ms, 1 - 10. This is also the effect's latency.</summary>
+    /// <summary>
+    /// Look-ahead in ms, 1 - 10. This is also the effect's latency.
+    /// </summary>
     public float Lookahead
     {
         get => _lookahead;
         set { _lookahead = value; _setParam(ParamLookahead, value); }
     }
 
-    /// <summary>Limiter release in ms, 10 - 2000.</summary>
+    /// <summary>
+    /// Limiter release in ms, 10 - 2000.
+    /// </summary>
     public float LimiterRelease
     {
         get => _limiterRelease;
         set { _limiterRelease = value; _setParam(ParamLimiterRelease, value); }
     }
 
-    /// <summary>Gain the rider starts from and returns to on reset, dB, -30 - +30.</summary>
+    /// <summary>
+    /// Gain the rider starts from and returns to on reset, dB, -30 - +30.
+    /// </summary>
     public float InitialGain
     {
         get => _initialGain;

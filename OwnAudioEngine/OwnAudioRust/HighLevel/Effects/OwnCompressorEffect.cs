@@ -63,119 +63,153 @@ public sealed class OwnCompressorEffect : IDisposable
     /// </summary>
     public EffectType EffectType => EffectType.OwnCompressor;
 
-    /// <summary>Bypass switch.</summary>
+    /// <summary>
+    /// Bypass switch.
+    /// </summary>
     public bool IsEnabled
     {
         get => _isEnabled;
         set { _isEnabled = value; _setParam(ParamEnabled, value ? 1f : 0f); }
     }
 
-    /// <summary>Parallel mix, 0.0 - 1.0.</summary>
+    /// <summary>
+    /// Parallel mix, 0.0 - 1.0.
+    /// </summary>
     public float Mix
     {
         get => _mix;
         set { _mix = value; _setParam(ParamMix, value); }
     }
 
-    /// <summary>Threshold in dBFS, -60 - 0.</summary>
+    /// <summary>
+    /// Threshold in dBFS, -60 - 0.
+    /// </summary>
     public float Threshold
     {
         get => _threshold;
         set { _threshold = value; _setParam(ParamThreshold, value); }
     }
 
-    /// <summary>Ratio, 1 - 100.</summary>
+    /// <summary>
+    /// Ratio, 1 - 100.
+    /// </summary>
     public float Ratio
     {
         get => _ratio;
         set { _ratio = value; _setParam(ParamRatio, value); }
     }
 
-    /// <summary>Knee width in dB, 0 - 24.</summary>
+    /// <summary>
+    /// Knee width in dB, 0 - 24.
+    /// </summary>
     public float Knee
     {
         get => _knee;
         set { _knee = value; _setParam(ParamKnee, value); }
     }
 
-    /// <summary>Attack in ms (t90), 0.01 - 300.</summary>
+    /// <summary>
+    /// Attack in ms (t90), 0.01 - 300.
+    /// </summary>
     public float Attack
     {
         get => _attack;
         set { _attack = value; _setParam(ParamAttack, value); }
     }
 
-    /// <summary>Release in ms (t90), 5 - 5000.</summary>
+    /// <summary>
+    /// Release in ms (t90), 5 - 5000.
+    /// </summary>
     public float Release
     {
         get => _release;
         set { _release = value; _setParam(ParamRelease, value); }
     }
 
-    /// <summary>Programme dependent release.</summary>
+    /// <summary>
+    /// Programme dependent release.
+    /// </summary>
     public bool AutoRelease
     {
         get => _autoRelease;
         set { _autoRelease = value; _setParam(ParamAutoRelease, value ? 1f : 0f); }
     }
 
-    /// <summary>Look-ahead in ms, 0 - 10. This is also the effect's latency.</summary>
+    /// <summary>
+    /// Look-ahead in ms, 0 - 10. This is also the effect's latency.
+    /// </summary>
     public float Lookahead
     {
         get => _lookahead;
         set { _lookahead = value; _setParam(ParamLookahead, value); }
     }
 
-    /// <summary>RMS instead of peak detection.</summary>
+    /// <summary>
+    /// RMS instead of peak detection.
+    /// </summary>
     public bool RmsDetector
     {
         get => _rmsDetector;
         set { _rmsDetector = value; _setParam(ParamRmsDetector, value ? 1f : 0f); }
     }
 
-    /// <summary>Feedback instead of feed-forward detection.</summary>
+    /// <summary>
+    /// Feedback instead of feed-forward detection.
+    /// </summary>
     public bool FeedbackTopology
     {
         get => _feedbackTopology;
         set { _feedbackTopology = value; _setParam(ParamFeedbackTopology, value ? 1f : 0f); }
     }
 
-    /// <summary>Stereo link, 0.0 - 1.0.</summary>
+    /// <summary>
+    /// Stereo link, 0.0 - 1.0.
+    /// </summary>
     public float StereoLink
     {
         get => _stereoLink;
         set { _stereoLink = value; _setParam(ParamStereoLink, value); }
     }
 
-    /// <summary>Mid/side instead of left/right processing.</summary>
+    /// <summary>
+    /// Mid/side instead of left/right processing.
+    /// </summary>
     public bool MidSide
     {
         get => _midSide;
         set { _midSide = value; _setParam(ParamMidSide, value ? 1f : 0f); }
     }
 
-    /// <summary>Sidechain high-pass in Hz, 0 (off) or 20 - 500.</summary>
+    /// <summary>
+    /// Sidechain high-pass in Hz, 0 (off) or 20 - 500.
+    /// </summary>
     public float SidechainHighPass
     {
         get => _sidechainHighPass;
         set { _sidechainHighPass = value; _setParam(ParamSidechainHighPass, value); }
     }
 
-    /// <summary>Makeup gain in dB, -24 - +24.</summary>
+    /// <summary>
+    /// Makeup gain in dB, -24 - +24.
+    /// </summary>
     public float Makeup
     {
         get => _makeup;
         set { _makeup = value; _setParam(ParamMakeup, value); }
     }
 
-    /// <summary>Automatic makeup gain.</summary>
+    /// <summary>
+    /// Automatic makeup gain.
+    /// </summary>
     public bool AutoMakeup
     {
         get => _autoMakeup;
         set { _autoMakeup = value; _setParam(ParamAutoMakeup, value ? 1f : 0f); }
     }
 
-    /// <summary>Maximum gain reduction in dB, 0 - 60.</summary>
+    /// <summary>
+    /// Maximum gain reduction in dB, 0 - 60.
+    /// </summary>
     public float Range
     {
         get => _range;

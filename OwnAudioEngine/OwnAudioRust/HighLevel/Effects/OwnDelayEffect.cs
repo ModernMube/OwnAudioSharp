@@ -69,140 +69,180 @@ public sealed class OwnDelayEffect : IDisposable
     /// </summary>
     public EffectType EffectType => EffectType.OwnDelay;
 
-    /// <summary>Bypass switch.</summary>
+    /// <summary>
+    /// Bypass switch.
+    /// </summary>
     public bool IsEnabled
     {
         get => _isEnabled;
         set { _isEnabled = value; _setParam(ParamEnabled, value ? 1f : 0f); }
     }
 
-    /// <summary>Dry/wet, 0.0 - 1.0.</summary>
+    /// <summary>
+    /// Dry/wet, 0.0 - 1.0.
+    /// </summary>
     public float Mix
     {
         get => _mix;
         set { _mix = value; _setParam(ParamMix, value); }
     }
 
-    /// <summary>Left delay time in ms, 15 - 4000.</summary>
+    /// <summary>
+    /// Left delay time in ms, 15 - 4000.
+    /// </summary>
     public float TimeLeft
     {
         get => _timeLeft;
         set { _timeLeft = value; _setParam(ParamTimeLeft, value); }
     }
 
-    /// <summary>Right delay time in ms, 15 - 4000.</summary>
+    /// <summary>
+    /// Right delay time in ms, 15 - 4000.
+    /// </summary>
     public float TimeRight
     {
         get => _timeRight;
         set { _timeRight = value; _setParam(ParamTimeRight, value); }
     }
 
-    /// <summary>Feedback, 0.0 - 1.0.</summary>
+    /// <summary>
+    /// Feedback, 0.0 - 1.0.
+    /// </summary>
     public float Feedback
     {
         get => _feedback;
         set { _feedback = value; _setParam(ParamFeedback, value); }
     }
 
-    /// <summary>Cross feedback, 0.0 - 1.0.</summary>
+    /// <summary>
+    /// Cross feedback, 0.0 - 1.0.
+    /// </summary>
     public float CrossFeedback
     {
         get => _crossFeedback;
         set { _crossFeedback = value; _setParam(ParamCrossFeedback, value); }
     }
 
-    /// <summary>Crossfade instead of tape glide on time changes.</summary>
+    /// <summary>
+    /// Crossfade instead of tape glide on time changes.
+    /// </summary>
     public bool CrossfadeTimeMode
     {
         get => _crossfadeTimeMode;
         set { _crossfadeTimeMode = value; _setParam(ParamCrossfadeTimeMode, value ? 1f : 0f); }
     }
 
-    /// <summary>Glide time constant in ms, 5 - 2000.</summary>
+    /// <summary>
+    /// Glide time constant in ms, 5 - 2000.
+    /// </summary>
     public float Glide
     {
         get => _glide;
         set { _glide = value; _setParam(ParamGlide, value); }
     }
 
-    /// <summary>Saturation drive in dB, 0 - 24.</summary>
+    /// <summary>
+    /// Saturation drive in dB, 0 - 24.
+    /// </summary>
     public float Drive
     {
         get => _drive;
         set { _drive = value; _setParam(ParamDrive, value); }
     }
 
-    /// <summary>In-loop low cut in Hz, 20 - 2000.</summary>
+    /// <summary>
+    /// In-loop low cut in Hz, 20 - 2000.
+    /// </summary>
     public float LowCut
     {
         get => _lowCut;
         set { _lowCut = value; _setParam(ParamLowCut, value); }
     }
 
-    /// <summary>In-loop high cut in Hz, 500 - 20000.</summary>
+    /// <summary>
+    /// In-loop high cut in Hz, 500 - 20000.
+    /// </summary>
     public float HighCut
     {
         get => _highCut;
         set { _highCut = value; _setParam(ParamHighCut, value); }
     }
 
-    /// <summary>Diffusion, 0.0 - 1.0.</summary>
+    /// <summary>
+    /// Diffusion, 0.0 - 1.0.
+    /// </summary>
     public float Diffusion
     {
         get => _diffusion;
         set { _diffusion = value; _setParam(ParamDiffusion, value); }
     }
 
-    /// <summary>Wow rate in Hz, 0.05 - 10.</summary>
+    /// <summary>
+    /// Wow rate in Hz, 0.05 - 10.
+    /// </summary>
     public float ModRate
     {
         get => _modRate;
         set { _modRate = value; _setParam(ParamModRate, value); }
     }
 
-    /// <summary>Wow depth in ms, 0 - 5.</summary>
+    /// <summary>
+    /// Wow depth in ms, 0 - 5.
+    /// </summary>
     public float ModDepth
     {
         get => _modDepth;
         set { _modDepth = value; _setParam(ParamModDepth, value); }
     }
 
-    /// <summary>Ducking amount, 0.0 - 1.0.</summary>
+    /// <summary>
+    /// Ducking amount, 0.0 - 1.0.
+    /// </summary>
     public float DuckAmount
     {
         get => _duckAmount;
         set { _duckAmount = value; _setParam(ParamDuckAmount, value); }
     }
 
-    /// <summary>Ducking threshold in dBFS, -60 - 0.</summary>
+    /// <summary>
+    /// Ducking threshold in dBFS, -60 - 0.
+    /// </summary>
     public float DuckThreshold
     {
         get => _duckThreshold;
         set { _duckThreshold = value; _setParam(ParamDuckThreshold, value); }
     }
 
-    /// <summary>Ducker attack in ms, 0.5 - 200.</summary>
+    /// <summary>
+    /// Ducker attack in ms, 0.5 - 200.
+    /// </summary>
     public float DuckAttack
     {
         get => _duckAttack;
         set { _duckAttack = value; _setParam(ParamDuckAttack, value); }
     }
 
-    /// <summary>Ducker release in ms, 10 - 2000.</summary>
+    /// <summary>
+    /// Ducker release in ms, 10 - 2000.
+    /// </summary>
     public float DuckRelease
     {
         get => _duckRelease;
         set { _duckRelease = value; _setParam(ParamDuckRelease, value); }
     }
 
-    /// <summary>Wet stereo width, 0.0 - 2.0.</summary>
+    /// <summary>
+    /// Wet stereo width, 0.0 - 2.0.
+    /// </summary>
     public float Width
     {
         get => _width;
         set { _width = value; _setParam(ParamWidth, value); }
     }
 
-    /// <summary>Holds the loop forever.</summary>
+    /// <summary>
+    /// Holds the loop forever.
+    /// </summary>
     public bool Freeze
     {
         get => _freeze;
