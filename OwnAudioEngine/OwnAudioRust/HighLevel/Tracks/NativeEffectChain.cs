@@ -252,6 +252,7 @@ public abstract class NativeEffectChain
             [typeof(OwnReverbEffect)]   = EffectType.OwnReverb,
             [typeof(OwnCompressorEffect)] = EffectType.OwnCompressor,
             [typeof(OwnDelayEffect)]    = EffectType.OwnDelay,
+            [typeof(OwnDynamicAmpEffect)] = EffectType.OwnDynamicAmp,
         };
 
     private object _createWrapper(EffectType effectType, EffectHandle handle)
@@ -279,6 +280,7 @@ public abstract class NativeEffectChain
             EffectType.OwnReverb   => new OwnReverbEffect(handle, _mixerHandle),
             EffectType.OwnCompressor => new OwnCompressorEffect(handle, _mixerHandle),
             EffectType.OwnDelay    => new OwnDelayEffect(handle, _mixerHandle),
+            EffectType.OwnDynamicAmp => new OwnDynamicAmpEffect(handle, _mixerHandle),
             _ => throw new ArgumentOutOfRangeException(nameof(effectType)),
         };
     }

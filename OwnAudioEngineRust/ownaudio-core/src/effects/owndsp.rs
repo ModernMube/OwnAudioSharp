@@ -1,4 +1,4 @@
-//! Shared DSP bits for the Own* effects (OwnCompressor, OwnDelay).
+//! Shared DSP bits for the Own* effects (OwnCompressor, OwnDelay, OwnDynamicAmp).
 //! Hot path stuff never allocates; buffers are sized in the constructors.
 
 use crate::denormal;

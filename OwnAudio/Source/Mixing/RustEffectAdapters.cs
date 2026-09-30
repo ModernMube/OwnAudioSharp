@@ -42,6 +42,7 @@ internal static class RustEffectAdapters
             [typeof(ME.OwnReverbEffect)]        = new Adapter(EffectType.OwnReverb, _mirrorOwnReverb),
             [typeof(ME.OwnCompressorEffect)]    = new Adapter(EffectType.OwnCompressor, _mirrorOwnCompressor),
             [typeof(ME.OwnDelayEffect)]         = new Adapter(EffectType.OwnDelay, _mirrorOwnDelay),
+            [typeof(ME.OwnDynamicAmpEffect)]    = new Adapter(EffectType.OwnDynamicAmp, _mirrorOwnDynamicAmp),
             [typeof(ME.EqualizerEffect)]        = new Adapter(EffectType.Equalizer, _mirrorEqualizer),
             [typeof(ME.Equalizer30BandEffect)]  = new Adapter(EffectType.Equalizer30, _mirrorEqualizer30),
             [typeof(ME.CompressorEffect)]       = new Adapter(EffectType.Compressor, _mirrorCompressor),
@@ -163,6 +164,26 @@ internal static class RustEffectAdapters
         sink(17, d.DuckRelease);
         sink(18, d.Width);
         sink(19, d.Freeze ? 1f : 0f);
+    }
+
+    private static void _mirrorOwnDynamicAmp(IEffectProcessor e, ParamSink sink)
+    {
+        var d = (ME.OwnDynamicAmpEffect)e;
+        sink(2, d.TargetLoudness);
+        sink(3, d.Window);
+        sink(4, d.MaxBoost);
+        sink(5, d.MaxCut);
+        sink(6, d.RiseRate);
+        sink(7, d.FallRate);
+        sink(8, d.Tolerance);
+        sink(9, d.Smoothing);
+        sink(10, d.RelativeGate);
+        sink(11, d.FreezeThreshold);
+        sink(12, d.Ceiling);
+        sink(13, d.LimiterEnabled ? 1f : 0f);
+        sink(14, d.Lookahead);
+        sink(15, d.LimiterRelease);
+        sink(16, d.InitialGain);
     }
 
     private static void _mirrorEqualizer(IEffectProcessor e, ParamSink sink)

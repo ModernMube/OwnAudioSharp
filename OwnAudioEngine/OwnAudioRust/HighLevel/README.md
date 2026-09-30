@@ -370,7 +370,7 @@ public enum EffectType
     Reverb, Equalizer, Equalizer30, Compressor, Limiter,
     Delay, Chorus, Distortion, Overdrive, Flanger, Phaser,
     Rotary, AutoGain, Enhancer, Gate, PitchShift, DynamicAmp,
-    OwnReverb, OwnCompressor, OwnDelay,
+    OwnReverb, OwnCompressor, OwnDelay, OwnDynamicAmp,
 }
 ```
 
@@ -405,6 +405,7 @@ public enum EffectType
 | **`OwnReverbEffect`** | `PreDelay`, `Decay`, `Size`, `Damping`, `LowDamping`, `Diffusion`, `ModRate`, `ModDepth`, `Width`, `EarlyLevel`, `LateLevel`, `DuckDepth`, `DuckAttack`, `DuckRelease`, `Freeze` (16-line FDN reverb) |
 | **`OwnCompressorEffect`** | `Threshold`, `Ratio`, `Knee`, `Attack`, `Release`, `AutoRelease`, `Lookahead`, `RmsDetector`, `FeedbackTopology`, `StereoLink`, `MidSide`, `SidechainHighPass`, `Makeup`, `AutoMakeup`, `Range` (log-domain compressor; look-ahead is its latency) |
 | **`OwnDelayEffect`** | `TimeLeft`, `TimeRight`, `Feedback`, `CrossFeedback`, `CrossfadeTimeMode`, `Glide`, `Drive`, `LowCut`, `HighCut`, `Diffusion`, `ModRate`, `ModDepth`, `DuckAmount`, `DuckThreshold`, `DuckAttack`, `DuckRelease`, `Width`, `Freeze` (tape style stereo delay) |
+| **`OwnDynamicAmpEffect`** | `TargetLoudness`, `Window`, `MaxBoost`, `MaxCut`, `RiseRate`, `FallRate`, `Tolerance`, `Smoothing`, `RelativeGate`, `FreezeThreshold`, `Ceiling`, `LimiterEnabled`, `Lookahead`, `LimiterRelease`, `InitialGain` (BS.1770 loudness rider with a true-peak look-ahead limiter; the look-ahead is its latency) |
 
 Every one of them also carries `IsEnabled`, and all but the compressor, limiter and
 auto-gain carry `Mix`.

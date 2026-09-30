@@ -36,7 +36,7 @@ Cross-platform audio I/O library for OwnAudioSharp, built on [`cpal`](https://gi
 - **Format conversion** — bidirectional i16/u16/f32 with interleave/deinterleave utilities
 - **Lock-free ring buffer** — SPSC, safe to use between audio callback and application threads
 - **High-quality resampler** — sinc-based SRC via `rubato`
-- **20 built-in audio effects** — reverb, OwnReverb (16-line FDN), OwnCompressor, OwnDelay (tape), compressor, EQ (10 or 30 band), delay, chorus, etc.
+- **21 built-in audio effects** — reverb, OwnReverb (16-line FDN), OwnCompressor, OwnDelay (tape), OwnDynamicAmp (LUFS), OwnDynamicAmp (LUFS rider), compressor, EQ (10 or 30 band), delay, chorus, etc.
 - **Multi-track mixer** — per-track gain, mute, solo, tempo/pitch, effect chains, transport clock
 - **Group sources** — several files on one track timeline, sharing its stretch, effects and fader
 - **Zero-allocation audio path** — all buffers pre-allocated; no heap activity in callbacks
@@ -338,6 +338,7 @@ pub enum EffectType {
     OwnReverb    = 19,  // 16-line FDN reverb
     OwnCompressor = 20, // log-domain compressor with look-ahead
     OwnDelay     = 21,  // tape style stereo delay
+    OwnDynamicAmp = 22, // BS.1770 loudness rider + true-peak limiter
 }
 ```
 
@@ -392,6 +393,13 @@ latency; `latency_param()` lets the mixer re-align the tracks when it changes.
 feedback, time mode (`0` glide / `1` crossfade), glide (ms), drive (dB), low cut (Hz), high cut
 (Hz), diffusion, modulation rate (Hz), modulation depth (ms), duck amount, duck threshold (dBFS),
 duck attack (ms), duck release (ms), width, freeze (`0.0` / `1.0`).
+
+**OwnDynamicAmp:** Parameter IDs 2–16, in order: target loudness (LUFS), window (s), max boost
+(dB), max cut (dB), rise rate (dB/s), fall rate (dB/s), tolerance (dB), smoothing (ms), relative
+gate (LU), freeze threshold (LUFS), ceiling (dBTP), limiter (`0.0` / `1.0`), look-ahead (ms),
+limiter release (ms), initial gain (dB). Meters: 1000 leveler gain, 1001 input peak, 1002
+programme loudness (LUFS), 1003 momentary loudness (LUFS), 1004 limiter gain. Look-ahead is the
+effect's latency, reported through `latency_param()`.
 
 ### EffectChain
 

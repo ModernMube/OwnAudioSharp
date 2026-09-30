@@ -6,7 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Effects &amp; VST3 — OwnAudioSharp</title>
-  <meta name="description" content="The 18 built-in DSP effects, the SmartMaster chain, VST3 plugin hosting and the before/after effect tap in OwnAudioSharp.">
+  <meta name="description" content="The 19 built-in DSP effects, the SmartMaster chain, VST3 plugin hosting and the before/after effect tap in OwnAudioSharp.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -29,7 +29,7 @@
 
 <p class="section-eyebrow">Step 4 of 8</p>
 <h1 class="page-title">Effects &amp; VST3</h1>
-<p class="page-subtitle">Shaping the sound — 18 built-ins, an adaptive mastering chain, any VST3 plugin, and a tap to see what they did. Namespace: <code>OwnaudioNET.Effects</code></p>
+<p class="page-subtitle">Shaping the sound — 19 built-ins, an adaptive mastering chain, any VST3 plugin, and a tap to see what they did. Namespace: <code>OwnaudioNET.Effects</code></p>
 
 <p>Every effect, built-in or plugin, is an <code>IEffectProcessor</code>, and they all go in one of two places:</p>
 
@@ -179,8 +179,35 @@ delay.SetPreset(OwnDelayPreset.TapeEcho);</code></pre></div>
 <p><strong>Presets:</strong> <code>Default</code>, <code>Slapback</code>, <code>PingPong</code>, <code>TapeEcho</code>, <code>DubEcho</code>, <code>Ambient</code>, <code>DuckedVocal</code>, <code>LoFi</code>, <code>Doubler</code></p>
 <div class="callout callout-info"><div class="callout-icon">💡</div><p><code>Feedback + CrossFeedback</code> is capped at 1, so the loop cannot run away however hard you push both. <code>Freeze</code> mutes the input, pins the loop gain at exactly 1 and bypasses the filters, so the held sound does not decay or darken.</p></div>
 
+<h2 id="owndynamicamp">OwnDynamicAmpEffect</h2>
+<p>The professional twin of <code>DynamicAmpEffect</code>. It measures perceived loudness (ITU-R BS.1770 K-weighting, LUFS) and rides the gain toward a long-term, gated estimate of the programme loudness. Passages far below that estimate and anything under the freeze threshold do not move the gain, material inside the tolerance window is left untouched, and every gain movement is rate limited and smoothed, so the level lands on the target while the dynamics of the music stay intact. A true-peak (4x oversampled) look-ahead limiter keeps the output under the ceiling.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var rider = new OwnDynamicAmpEffect
+{
+    TargetLoudness  = -14f,   // LUFS, -40 to -5 (-14 streaming, -23 EBU R128)
+    Window          = 8f,     // s, 0.4 to 60, memory of the loudness estimate
+    MaxBoost        = 12f,    // dB, 0 to 30
+    MaxCut          = 12f,    // dB, 0 to 30
+    RiseRate        = 1.5f,   // dB/s, 0.1 to 20
+    FallRate        = 3f,     // dB/s, 0.1 to 40
+    Tolerance       = 1f,     // dB, 0 to 6, dead band around the target
+    Smoothing       = 300f,   // ms, 10 to 5000, rounds the gain curve
+    RelativeGate    = -10f,   // LU below the programme, quieter passages keep the gain
+    FreezeThreshold = -55f,   // LUFS, silence and noise never get pumped up
+    Ceiling         = -1f,    // dBTP, -20 to 0
+    Lookahead       = 5f      // ms, 1 to 10, also the latency
+};
+
+// Or start from a preset
+var broadcast = new OwnDynamicAmpEffect(OwnDynamicAmpPreset.Broadcast);
+
+// Meters, when the effect is processed directly
+float programLufs = rider.ProgramLoudness;
+float gainDb      = rider.CurrentGainDb;</code></pre></div>
+<p><strong>Presets:</strong> <code>Default</code>, <code>Speech</code>, <code>Music</code>, <code>Broadcast</code>, <code>Mastering</code>, <code>Live</code>, <code>Transparent</code></p>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>The gain is computed per sample, so the result does not depend on the block size. The look-ahead is latency: <code>LatencySamples</code> reports it and the mixer re-aligns the other tracks. <code>DynamicAmpEffect</code> stays unchanged for backward compatibility.</p></div>
+
 <h2 id="all-effects">The whole list</h2>
-<p>Every one of these processes in place, on the native engine, and allocates nothing on the managed side. The six above have presets and detailed parameters; the rest follow the same pattern.</p>
+<p>Every one of these processes in place, on the native engine, and allocates nothing on the managed side. The seven above have presets and detailed parameters; the rest follow the same pattern.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>Class</th><th>Description</th></tr></thead>
   <tbody>
@@ -201,6 +228,7 @@ delay.SetPreset(OwnDelayPreset.TapeEcho);</code></pre></div>
     <tr><td><code>AutoGainEffect</code></td><td>Automatic gain control (AGC)</td></tr>
     <tr><td><code>EnhancerEffect</code></td><td>Loudness enhancement / exciter</td></tr>
     <tr><td><code>DynamicAmpEffect</code></td><td>Dynamic range amplification</td></tr>
+    <tr><td><a href="#owndynamicamp"><code>OwnDynamicAmpEffect</code></a></td><td>Loudness rider (BS.1770, LUFS) with gated programme estimate, tolerance window and a true-peak look-ahead limiter</td></tr>
     <tr><td><code>RotaryEffect</code></td><td>Rotating speaker simulation (Leslie)</td></tr>
   </tbody>
 </table></div>

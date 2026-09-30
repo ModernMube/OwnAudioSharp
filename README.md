@@ -90,7 +90,7 @@ actually meet it, and answers "how do I build this?" as well as "what does this 
 | Playback & Mixing | Multi-track sync, real-time tempo/pitch, per-track volume |
 | Recording | Low-latency capture with device selection, WAV writing |
 | Channel routing | Per-source routing onto a multi-channel interface, with fan-out |
-| Effects | 18 real-time DSP effects (reverb, OwnReverb, OwnCompressor, OwnDelay, EQ, limiter, …) |
+| Effects | 19 real-time DSP effects (reverb, OwnReverb, OwnCompressor, OwnDelay, OwnDynamicAmp, EQ, limiter, …) |
 | Plugins | VST3 effect plugins with cross-platform editor GUI |
 | MIDI | Hardware I/O, SMF file read/write, hardware-accurate clock |
 | Network | Sample-accurate multi-device sync over LAN |
@@ -189,8 +189,8 @@ solo.StartSeconds = 36.0;   // moved while it plays
 
 > Guide: [GroupSource](https://modernmube.github.io/OwnAudioSharp/documents/api-sources.html#groupsource)
 
-### 18 Real-Time DSP Effects
-Reverb, OwnReverb (16-line FDN reverb with ducking), OwnCompressor (look-ahead, auto release, mid/side), OwnDelay (tape style delay with in-loop saturation and diffusion), equalizer, compressor, limiter, chorus, delay, distortion and more — freely combinable, inserted per-track or on the master bus.
+### 19 Real-Time DSP Effects
+Reverb, OwnReverb (16-line FDN reverb with ducking), OwnCompressor (look-ahead, auto release, mid/side), OwnDelay (tape style delay with in-loop saturation and diffusion), OwnDynamicAmp (BS.1770 loudness rider with true-peak limiter), equalizer, compressor, limiter, chorus, delay, distortion and more — freely combinable, inserted per-track or on the master bus.
 
 ### VST3 Plugin Support
 Load VST3 effect plugins and use their native cross-platform editor GUI, integrated into the effect chain like any built-in effect.

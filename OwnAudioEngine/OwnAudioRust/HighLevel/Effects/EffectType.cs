@@ -83,4 +83,10 @@ public enum EffectType : uint
     /// Tape style stereo delay: in-loop diffusion, filtering and ADAA saturation.
     /// </summary>
     OwnDelay = 21,
+
+    /// <summary>
+    /// Loudness based (BS.1770) level rider: gated programme estimate, tolerance window,
+    /// smoothed rate limited gain and a true-peak look-ahead limiter.
+    /// </summary>
+    OwnDynamicAmp = 22,
 }

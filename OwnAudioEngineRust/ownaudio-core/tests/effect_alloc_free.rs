@@ -19,8 +19,8 @@ use std::cell::Cell;
 
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, Enhancer, Equalizer,
-    Equalizer30, Flanger, Gate, Limiter, Overdrive, OwnCompressor, OwnDelay, OwnReverb, Phaser,
-    Reverb, Rotary, SmartMaster, VstAudioBuffer, VstEffect,
+    Equalizer30, Flanger, Gate, Limiter, Overdrive, OwnCompressor, OwnDelay, OwnDynamicAmp,
+    OwnReverb, Phaser, Reverb, Rotary, SmartMaster, VstAudioBuffer, VstEffect,
 };
 use ownaudio_core::multitrack::{MultiTrackMixer, TrackSource, TrackState};
 
@@ -100,6 +100,7 @@ fn effect_process_is_allocation_free_in_steady_state() {
         ("OwnReverb", Box::new(OwnReverb::new(SAMPLE_RATE))),
         ("OwnCompressor", Box::new(OwnCompressor::new(SAMPLE_RATE))),
         ("OwnDelay", Box::new(OwnDelay::new(SAMPLE_RATE))),
+        ("OwnDynamicAmp", Box::new(OwnDynamicAmp::new(SAMPLE_RATE))),
         ("Equalizer", Box::new(Equalizer::new(SAMPLE_RATE))),
         ("Equalizer30", Box::new(Equalizer30::new(SAMPLE_RATE))),
         ("Compressor", Box::new(Compressor::new(SAMPLE_RATE))),

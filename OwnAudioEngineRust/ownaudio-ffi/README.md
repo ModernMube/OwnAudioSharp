@@ -500,6 +500,7 @@ int32_t ownaudio_v1_effect_get_param(
 | 19 | OwnReverb (16-line FDN reverb) |
 | 20 | OwnCompressor (log-domain, look-ahead) |
 | 21 | OwnDelay (tape style stereo delay) |
+| 22 | OwnDynamicAmp (BS.1770 loudness rider, true-peak limiter) |
 
 **Universal parameter IDs (all effects):**
 

@@ -439,6 +439,7 @@ FodyWeavers.xsd
 # Local development notes
 *_plan*.md
 *_terv*.md
+/works_plan/
 
 # Rider project structure cache files
 *.lscache

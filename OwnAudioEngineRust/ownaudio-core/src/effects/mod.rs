@@ -16,6 +16,7 @@ pub mod overdrive;
 pub mod owncompressor;
 pub mod owndelay;
 pub mod owndsp;
+pub mod owndynamicamp;
 pub mod ownreverb;
 pub mod phaser;
 pub mod pitch_shift;
@@ -39,6 +40,7 @@ pub use limiter::Limiter;
 pub use overdrive::Overdrive;
 pub use owncompressor::OwnCompressor;
 pub use owndelay::OwnDelay;
+pub use owndynamicamp::OwnDynamicAmp;
 pub use ownreverb::OwnReverb;
 pub use phaser::Phaser;
 pub use pitch_shift::PitchShift;
@@ -109,6 +111,9 @@ pub enum EffectType {
     /// Tape-style stereo delay with in-loop diffusion, filtering and ADAA
     /// saturation (see [`owndelay::OwnDelay`]).
     OwnDelay = 21,
+    /// Loudness-based (BS.1770) level rider with gated programme estimate, tolerance
+    /// window and a true-peak look-ahead limiter (see [`owndynamicamp::OwnDynamicAmp`]).
+    OwnDynamicAmp = 22,
 }
 
 impl TryFrom<u32> for EffectType {
@@ -138,6 +143,7 @@ impl TryFrom<u32> for EffectType {
             19 => Ok(Self::OwnReverb),
             20 => Ok(Self::OwnCompressor),
             21 => Ok(Self::OwnDelay),
+            22 => Ok(Self::OwnDynamicAmp),
             _ => Err(()),
         }
     }

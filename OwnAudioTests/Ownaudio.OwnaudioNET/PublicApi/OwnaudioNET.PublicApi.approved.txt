@@ -528,6 +528,47 @@ namespace OwnaudioNET.Effects
         Glide = 0,
         Crossfade = 1,
     }
+    public sealed class OwnDynamicAmpEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public OwnDynamicAmpEffect() { }
+        public OwnDynamicAmpEffect(OwnaudioNET.Effects.OwnDynamicAmpPreset preset) { }
+        public OwnDynamicAmpEffect(float targetLoudness, float ceiling = -1) { }
+        public float Ceiling { get; set; }
+        public float CurrentGainDb { get; }
+        public float FallRate { get; set; }
+        public float FreezeThreshold { get; set; }
+        public float InitialGain { get; set; }
+        public float InputLevel { get; }
+        public int LatencySamples { get; }
+        public bool LimiterEnabled { get; set; }
+        public float LimiterGainReductionDb { get; }
+        public float LimiterRelease { get; set; }
+        public float Lookahead { get; set; }
+        public float MaxBoost { get; set; }
+        public float MaxCut { get; set; }
+        public float Mix { get; set; }
+        public float MomentaryLoudness { get; }
+        public string Name { get; set; }
+        public float ProgramLoudness { get; }
+        public float RelativeGate { get; set; }
+        public float RiseRate { get; set; }
+        public float Smoothing { get; set; }
+        public float TargetLoudness { get; set; }
+        public float Tolerance { get; set; }
+        public float Window { get; set; }
+        public void SetPreset(OwnaudioNET.Effects.OwnDynamicAmpPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum OwnDynamicAmpPreset
+    {
+        Default = 0,
+        Speech = 1,
+        Music = 2,
+        Broadcast = 3,
+        Mastering = 4,
+        Live = 5,
+        Transparent = 6,
+    }
     public sealed class OwnReverbEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public OwnReverbEffect() { }
