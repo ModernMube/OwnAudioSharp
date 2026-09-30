@@ -125,6 +125,18 @@ public class DspContractTests
                 return _fx;
             }
 
+            case "owndelay":
+            {
+                var _fx = new OwnDelayEffect();
+                _fx.TimeLeft = (float)_num(_p, "timeLeftMs", 375.0);
+                _fx.TimeRight = (float)_num(_p, "timeRightMs", 500.0);
+                _fx.Feedback = (float)_num(_p, "feedback", 0.45);
+                _fx.Mix = (float)_num(_p, "mix", 0.3);
+                _fx.LowCut = (float)_num(_p, "lowCutHz", 80.0);
+                _fx.HighCut = (float)_num(_p, "highCutHz", 8000.0);
+                return _fx;
+            }
+
             case "compressor":
             {
                 var _fx = new CompressorEffect(CompressorPreset.Default, rate);

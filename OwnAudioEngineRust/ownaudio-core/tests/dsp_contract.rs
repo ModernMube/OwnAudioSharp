@@ -140,6 +140,18 @@ fn build(entry: &Value, rate: f32) -> Box<dyn Effect> {
             Box::new(fx)
         }
 
+        "owndelay" => {
+            use ownaudio_core::effects::owndelay::*;
+            let mut fx = OwnDelay::new(rate);
+            fx.set_param(PARAM_TIME_L, param(p, "timeLeftMs", 375.0));
+            fx.set_param(PARAM_TIME_R, param(p, "timeRightMs", 500.0));
+            fx.set_param(PARAM_FEEDBACK, param(p, "feedback", 0.45));
+            fx.set_param(ownaudio_core::effects::PARAM_MIX, param(p, "mix", 0.3));
+            fx.set_param(PARAM_LOW_CUT, param(p, "lowCutHz", 80.0));
+            fx.set_param(PARAM_HIGH_CUT, param(p, "highCutHz", 8_000.0));
+            Box::new(fx)
+        }
+
         "compressor" => {
             use ownaudio_core::effects::compressor::*;
             let mut fx = Compressor::new(rate);

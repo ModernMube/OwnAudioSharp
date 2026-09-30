@@ -116,6 +116,17 @@ public static class EffectCatalog
             },
 
             new EffectCase("Overdrive", () => new OverdriveEffect(OverdrivePreset.Default)),
+
+            new EffectCase("OwnCompressor", () => new OwnCompressorEffect(OwnCompressorPreset.Default)),
+            new EffectCase("OwnDelay", () => new OwnDelayEffect(OwnDelayPreset.Default)),
+
+            new EffectCase("OwnDynamicAmp", () => new OwnDynamicAmpEffect(OwnDynamicAmpPreset.Default))
+            {
+                MixHonored = false,
+                Deviation = "Level rider with a true-peak limiter, always fully wet - Mix is kept for the interface only."
+            },
+
+            new EffectCase("OwnReverb", () => new OwnReverbEffect(OwnReverbPreset.Default)),
             new EffectCase("Phaser", () => new PhaserEffect(PhaserPreset.Default, Rate)),
             new EffectCase("Reverb", () => new ReverbEffect(ReverbPreset.Default)),
             new EffectCase("Rotary", () => new RotaryEffect(RotaryPreset.Default, Rate)),

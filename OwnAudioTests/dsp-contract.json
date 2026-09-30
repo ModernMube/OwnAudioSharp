@@ -148,6 +148,14 @@
         { "freqHz": 1000.0, "inputDb": -18.0, "measure": "peakDb", "expect": -19.125, "tolerance": 0.3, "note": "at the threshold the quadratic knee takes (1/R - 1)(W/2)^2 / 2W = 1.125 dB" },
         { "freqHz": 1000.0, "inputDb": -25.0, "measure": "peakDb", "expect": -25.0, "tolerance": 0.05, "note": "below the knee the gain is exactly unity" }
       ]
+    },
+    {
+      "effect": "owndelay",
+      "params": { "timeLeftMs": 100.0, "timeRightMs": 100.0, "feedback": 0.0, "mix": 1.0, "lowCutHz": 20.0, "highCutHz": 20000.0 },
+      "cases": [
+        { "freqHz": 1000.0, "inputDb": -20.0, "measure": "gainDb", "expect": 0.0, "tolerance": 0.05, "note": "no feedback and an open loop: the echo is the input, only later" },
+        { "freqHz": 1000.0, "inputDb": 0.0, "measure": "gainDb", "expect": -0.44, "tolerance": 0.05, "note": "the tape soft clip is always in: y = u - u^3 / (3 * 2.25^2) takes 20 log10(1 - 1 / (4 * 2.25^2)) off the fundamental" }
+      ]
     }
   ]
 }
