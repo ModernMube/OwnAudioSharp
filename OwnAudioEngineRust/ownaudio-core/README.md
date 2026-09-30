@@ -36,7 +36,7 @@ Cross-platform audio I/O library for OwnAudioSharp, built on [`cpal`](https://gi
 - **Format conversion** — bidirectional i16/u16/f32 with interleave/deinterleave utilities
 - **Lock-free ring buffer** — SPSC, safe to use between audio callback and application threads
 - **High-quality resampler** — sinc-based SRC via `rubato`
-- **18 built-in audio effects** — reverb, OwnReverb (16-line FDN), compressor, EQ (10 or 30 band), delay, chorus, etc.
+- **20 built-in audio effects** — reverb, OwnReverb (16-line FDN), OwnCompressor, OwnDelay (tape), compressor, EQ (10 or 30 band), delay, chorus, etc.
 - **Multi-track mixer** — per-track gain, mute, solo, tempo/pitch, effect chains, transport clock
 - **Group sources** — several files on one track timeline, sharing its stretch, effects and fader
 - **Zero-allocation audio path** — all buffers pre-allocated; no heap activity in callbacks
@@ -336,6 +336,8 @@ pub enum EffectType {
     DynamicAmp   = 15,
     Equalizer30  = 16,  // 30-band 1/3-octave ISO
     OwnReverb    = 19,  // 16-line FDN reverb
+    OwnCompressor = 20, // log-domain compressor with look-ahead
+    OwnDelay     = 21,  // tape style stereo delay
 }
 ```
 
@@ -380,6 +382,17 @@ Parameter IDs start at `2` for each effect type:
 low damping, diffusion, modulation rate (Hz), modulation depth, width, early level, late level,
 duck depth, duck attack (ms), duck release (ms), freeze (`0.0` / `1.0`).
 
+**OwnCompressor:** Parameter IDs 2–16, in order: threshold (dBFS), ratio, knee (dB), attack (ms),
+release (ms), auto release, look-ahead (ms), detector (`0` peak / `1` RMS), topology
+(`0` feed-forward / `1` feedback), stereo link, channel mode (`0` L/R / `1` M/S), sidechain
+high-pass (Hz, `0` = off), makeup (dB), auto makeup, range (dB). Look-ahead is the effect's
+latency; `latency_param()` lets the mixer re-align the tracks when it changes.
+
+**OwnDelay:** Parameter IDs 2–19, in order: time left (ms), time right (ms), feedback, cross
+feedback, time mode (`0` glide / `1` crossfade), glide (ms), drive (dB), low cut (Hz), high cut
+(Hz), diffusion, modulation rate (Hz), modulation depth (ms), duck amount, duck threshold (dBFS),
+duck attack (ms), duck release (ms), width, freeze (`0.0` / `1.0`).
+
 ### EffectChain
 
 ```rust
@@ -391,6 +404,8 @@ pub trait Effect: Send {
     fn reset(&mut self);
     fn is_enabled(&self) -> bool;
     fn set_enabled(&mut self, enabled: bool);
+    fn latency_samples(&self) -> u32;                  // default 0
+    fn latency_param(&self) -> Option<LatencyParam>;   // default None
 }
 ```
 

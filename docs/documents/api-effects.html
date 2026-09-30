@@ -6,7 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Effects &amp; VST3 — OwnAudioSharp</title>
-  <meta name="description" content="The 16 built-in DSP effects, the SmartMaster chain, VST3 plugin hosting and the before/after effect tap in OwnAudioSharp.">
+  <meta name="description" content="The 18 built-in DSP effects, the SmartMaster chain, VST3 plugin hosting and the before/after effect tap in OwnAudioSharp.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -29,7 +29,7 @@
 
 <p class="section-eyebrow">Step 4 of 8</p>
 <h1 class="page-title">Effects &amp; VST3</h1>
-<p class="page-subtitle">Shaping the sound — 16 built-ins, an adaptive mastering chain, any VST3 plugin, and a tap to see what they did. Namespace: <code>OwnaudioNET.Effects</code></p>
+<p class="page-subtitle">Shaping the sound — 18 built-ins, an adaptive mastering chain, any VST3 plugin, and a tap to see what they did. Namespace: <code>OwnaudioNET.Effects</code></p>
 
 <p>Every effect, built-in or plugin, is an <code>IEffectProcessor</code>, and they all go in one of two places:</p>
 
@@ -117,17 +117,81 @@ comp.SetPreset(CompressorPreset.VocalGentle);</code></pre></div>
 <p><strong>Presets:</strong> <code>Default</code>, <code>VocalGentle</code>, <code>VocalAggressive</code>, <code>Drums</code>, <code>Bass</code>, <code>MasteringLimiter</code>, <code>Vintage</code></p>
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><strong>The constructor and the properties do not use the same units.</strong> <code>Threshold</code> and <code>MakeupGain</code> are dB as properties, but the constructor arguments of the same name are <em>linear</em> — <code>new CompressorEffect(0.5f, makeupGain: 1.2f)</code> is the default −6 dB threshold with +1.6 dB of makeup. Set them through the properties and you never have to think about it.</p></div>
 
+<h2 id="owncompressor">OwnCompressorEffect</h2>
+<p>Log-domain compressor with look-ahead, soft knee, programme dependent release, peak or RMS detection, stereo link, mid/side, a sidechain high-pass, range and parallel mix. Every setting takes the unit it says — dB, ms, Hz — in the properties and nowhere else.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var comp = new OwnCompressorEffect
+{
+    Threshold         = -18f,  // dBFS, -60–0
+    Ratio             = 4f,    // 1–100 (above 20 it acts as a limiter)
+    Knee              = 6f,    // dB, 0 = hard knee … 24
+    Attack            = 10f,   // ms, 0.01–300 (10 % → 90 % of the step)
+    Release           = 100f,  // ms, 5–5000
+    AutoRelease       = true,  // slower release after long, deep compression
+    Lookahead         = 2f,    // ms, 0–10 — also the effect's latency
+    Detector          = OwnCompressorDetector.Rms,          // or Peak
+    Topology          = OwnCompressorTopology.FeedForward,  // or Feedback
+    StereoLink        = 1f,    // 0 = independent channels … 1 = fully linked
+    ChannelMode       = OwnCompressorChannelMode.LeftRight, // or MidSide
+    SidechainHighPass = 100f,  // Hz, 0 = off or 20–500 (detector only)
+    Makeup            = 3f,    // dB, -24–+24
+    AutoMakeup        = false,
+    Range             = 60f,   // dB, most gain reduction allowed
+    Mix               = 1f     // parallel mix, 0 = dry … 1 = fully compressed
+};
+
+// Or start from a preset
+var bus = new OwnCompressorEffect(OwnCompressorPreset.Bus);
+
+// Meters, when the effect is processed directly
+float grDb = comp.GainReductionDb;</code></pre></div>
+<p><strong>Presets:</strong> <code>Default</code>, <code>Vocal</code>, <code>Bus</code>, <code>Drums</code>, <code>Bass</code>, <code>Mastering</code>, <code>Parallel</code>, <code>Classic</code>, <code>Podcast</code></p>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p><strong>Look-ahead is latency.</strong> <code>LatencySamples</code> reports it, and the mixer re-aligns every other track when it changes — even after the effect is already in the chain. The jump itself is audible mid-signal, so set it up front. The dry half of <code>Mix</code> is delayed by the same amount, so parallel blending never comb filters.</p></div>
+
+<h2 id="owndelay">OwnDelayEffect</h2>
+<p>Tape style stereo delay. Saturation, diffusion and the low/high cut all sit inside the feedback loop, so every repeat gets a little darker, softer and more smeared than the one before. Time changes either glide like tape (with the pitch bend) or crossfade to the new time cleanly.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var delay = new OwnDelayEffect
+{
+    TimeLeft      = 375f,   // ms, 15–4000
+    TimeRight     = 500f,   // ms, 15–4000
+    Feedback      = 0.45f,  // 0.0–1.0
+    CrossFeedback = 0.1f,   // 0.0–1.0, L ↔ R (ping-pong)
+    TimeMode      = OwnDelayTimeMode.Glide,  // or Crossfade
+    Glide         = 150f,   // ms, 5–2000 (Glide mode only)
+    Drive         = 6f,     // dB, 0–24 tape saturation in the loop
+    LowCut        = 150f,   // Hz, 20–2000
+    HighCut       = 6000f,  // Hz, 500–20000
+    Diffusion     = 0.3f,   // 0.0–1.0, smears repeats towards a reverb
+    ModRate       = 0.6f,   // Hz, 0.05–10 wow
+    ModDepth      = 0.5f,   // ms, 0–5
+    DuckAmount    = 0.5f,   // 0 = off … 1, the dry input pushes the wet down
+    DuckThreshold = -30f,   // dBFS
+    Width         = 1.2f,   // 0 = mono … 2
+    Mix           = 0.3f
+};
+
+// Tempo sync
+delay.SyncToTempo(120, OwnDelayNoteValue.DottedEighth, OwnDelayNoteValue.Quarter);
+
+// Hold whatever is in the loop forever
+delay.Freeze = true;
+
+delay.SetPreset(OwnDelayPreset.TapeEcho);</code></pre></div>
+<p><strong>Presets:</strong> <code>Default</code>, <code>Slapback</code>, <code>PingPong</code>, <code>TapeEcho</code>, <code>DubEcho</code>, <code>Ambient</code>, <code>DuckedVocal</code>, <code>LoFi</code>, <code>Doubler</code></p>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p><code>Feedback + CrossFeedback</code> is capped at 1, so the loop cannot run away however hard you push both. <code>Freeze</code> mutes the input, pins the loop gain at exactly 1 and bypasses the filters, so the held sound does not decay or darken.</p></div>
+
 <h2 id="all-effects">The whole list</h2>
-<p>Every one of these processes in place, on the native engine, and allocates nothing on the managed side. The four above have presets and detailed parameters; the rest follow the same pattern.</p>
+<p>Every one of these processes in place, on the native engine, and allocates nothing on the managed side. The six above have presets and detailed parameters; the rest follow the same pattern.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>Class</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td><code>ReverbEffect</code></td><td>Freeverb-based reverb with presets</td></tr>
     <tr><td><code>OwnReverbEffect</code></td><td>16-line FDN reverb with diffusion, damping, modulation and a ducker</td></tr>
     <tr><td><code>DelayEffect</code></td><td>Stereo delay with ping-pong and damping</td></tr>
+    <tr><td><a href="#owndelay"><code>OwnDelayEffect</code></a></td><td>Tape style delay: in-loop saturation, diffusion and filters, glide or crossfade, ducking, freeze</td></tr>
     <tr><td><code>EqualizerEffect</code></td><td>10-band parametric EQ</td></tr>
     <tr id="equalizer30"><td><code>Equalizer30BandEffect</code></td><td>30-band graphic EQ on 1/3-octave ISO centres. Unlike the 10-band one, its <code>SetBandGain</code> really does carry the centre frequency and Q through to the engine.</td></tr>
     <tr><td><code>CompressorEffect</code></td><td>Dynamic range compressor</td></tr>
+    <tr><td><a href="#owncompressor"><code>OwnCompressorEffect</code></a></td><td>Log-domain compressor with look-ahead, auto release, stereo link, mid/side and parallel mix</td></tr>
     <tr><td><code>LimiterEffect</code></td><td>Soft/hard peak limiter</td></tr>
     <tr><td><code>ChorusEffect</code></td><td>Chorus / spatial thickening</td></tr>
     <tr><td><code>FlangerEffect</code></td><td>Flanging / sweeping comb filter</td></tr>

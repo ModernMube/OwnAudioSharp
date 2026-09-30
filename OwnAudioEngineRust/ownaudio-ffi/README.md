@@ -498,6 +498,8 @@ int32_t ownaudio_v1_effect_get_param(
 | 15 | DynamicAmp |
 | 16 | Equalizer30 (30-band 1/3-octave) |
 | 19 | OwnReverb (16-line FDN reverb) |
+| 20 | OwnCompressor (log-domain, look-ahead) |
+| 21 | OwnDelay (tape style stereo delay) |
 
 **Universal parameter IDs (all effects):**
 
