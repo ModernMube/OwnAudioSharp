@@ -45,6 +45,53 @@ public sealed class ChordSegmentationTests
     }
 
     /// <summary>
+    /// A chord between two others that falls under the minimum used to leave a hole. Now the
+    /// neighbours split its time and the result stays seamless from the first note to the last.
+    /// </summary>
+    [Fact]
+    public void AnalyzeSong_ShortChordBetweenTwoOthers_LeavesNoHole()
+    {
+        var notes = new List<Note>
+        {
+            _makeNote(60, 0f, 3f), _makeNote(64, 0f, 3f), _makeNote(67, 0f, 3f),
+            _makeNote(67, 3f, 4f), _makeNote(71, 3f, 4f), _makeNote(74, 3f, 4f),
+            _makeNote(65, 4f, 7f), _makeNote(69, 4f, 7f), _makeNote(72, 4f, 7f),
+        };
+
+        var chords = new SongChordAnalyzer(windowSize: 1.0f, hopSize: 0.5f, minimumChordDuration: 2.5f)
+            .AnalyzeSong(notes);
+
+        chords.Select(c => c.ChordName).Should().Equal("C", "F");
+        chords[0].StartTime.Should().Be(0f);
+        chords[1].StartTime.Should().BeApproximately(chords[0].EndTime, 0.0001f);
+        chords[0].EndTime.Should().BeApproximately(3.5f, 0.5f);
+        chords[1].EndTime.Should().BeApproximately(7f, 0.0001f);
+    }
+
+    /// <summary>
+    /// The same short interruption between two stretches of one chord folds the whole thing
+    /// into a single segment.
+    /// </summary>
+    [Fact]
+    public void AnalyzeSong_ShortChordInsideOneChord_BecomesOneSegment()
+    {
+        var notes = new List<Note>
+        {
+            _makeNote(60, 0f, 3f), _makeNote(64, 0f, 3f), _makeNote(67, 0f, 3f),
+            _makeNote(67, 3f, 4f), _makeNote(71, 3f, 4f), _makeNote(74, 3f, 4f),
+            _makeNote(60, 4f, 7f), _makeNote(64, 4f, 7f), _makeNote(67, 4f, 7f),
+        };
+
+        var chords = new SongChordAnalyzer(windowSize: 1.0f, hopSize: 0.5f, minimumChordDuration: 2.5f)
+            .AnalyzeSong(notes);
+
+        var chord = chords.Should().ContainSingle().Which;
+        chord.ChordName.Should().Be("C");
+        chord.StartTime.Should().Be(0f);
+        chord.EndTime.Should().BeApproximately(7f, 0.0001f);
+    }
+
+    /// <summary>
     /// A quiet stray note pushes the window under a strict threshold, so the analyzer has to
     /// prune. It must drop the stray note, not the A in the bass — dropping the bass would leave
     /// C-E-G and turn an Am7 into a C.

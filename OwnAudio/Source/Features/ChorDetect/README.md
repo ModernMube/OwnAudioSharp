@@ -220,8 +220,12 @@ Turns a full note list into a `List<TimedChord>`:
    candidates. This strips passing tones and ornaments that would otherwise
    mask the chord.
 3. Viterbi picks the path, then `_mergeAdjacent` fuses consecutive identical
-   labels (duration-weighted confidence) and drops anything shorter than
-   `minimumChordDuration`. Each window is reported for the stretch between the
+   labels (duration-weighted confidence). A segment shorter than
+   `minimumChordDuration` hands its time to the chords it touches instead of
+   leaving a hole: between two different chords the boundary moves to its
+   middle, between two of the same chord the three become one. Only short
+   segments with no chord next to them (silence on both sides) are dropped.
+   Each window is reported for the stretch between the
    midpoints to its neighbours' centres, so the returned segments never overlap
    even though the windows do; adjacency and the minimum still go by the
    windows' full span.

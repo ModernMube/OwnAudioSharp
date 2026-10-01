@@ -375,15 +375,38 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         }
 
         /// <summary>
-        /// Glues neighbouring windows with the same chord into one segment, confidence averaged by
-        /// length, and drops whatever ends up shorter than the minimum. Adjacency, the averaging
-        /// and the minimum all go by the windows' evidence span; only the reported times come
-        /// from the non-overlapping regions.
+        /// How far apart two regions may sit and still count as touching. Regions of consecutive
+        /// windows share the exact same boundary, this only soaks up float noise.
+        /// </summary>
+        private const float RegionTouchTolerance = 0.0001f;
+
+        /// <summary>
+        /// Glues neighbouring windows with the same chord into one segment, hands segments shorter
+        /// than the minimum over to the chords they sit between, and drops only the short ones
+        /// with no chord next to them. Adjacency, the averaging and the minimum all go by the
+        /// windows' evidence span; only the reported times come from the non-overlapping regions.
         /// </summary>
         private List<TimedChord> _mergeAdjacent(List<WindowChord> rawChords)
         {
-            var merged = new List<TimedChord>();
-            if (rawChords.Count == 0) return merged;
+            var segments = _joinRuns(rawChords);
+            _absorbShortSegments(segments);
+
+            var merged = new List<TimedChord>(segments.Count);
+            foreach (var segment in segments)
+            {
+                if (_longEnough(segment)) merged.Add(segment.ToTimedChord());
+            }
+
+            return merged;
+        }
+
+        /// <summary>
+        /// Runs of the same chord become one segment, confidence averaged by span.
+        /// </summary>
+        private List<WindowChord> _joinRuns(List<WindowChord> rawChords)
+        {
+            var segments = new List<WindowChord>();
+            if (rawChords.Count == 0) return segments;
 
             var current = rawChords[0];
 
@@ -394,29 +417,119 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 if (current.ChordName == next.ChordName &&
                     Math.Abs(current.SpanEnd - next.SpanStart) <= _hopSize * 1.5f)
                 {
-                    float currentDuration = current.SpanEnd - current.SpanStart;
-                    float nextDuration = next.SpanEnd - next.SpanStart;
-                    float totalDuration = currentDuration + nextDuration;
-
-                    float mergedConfidence = totalDuration > 0f
-                        ? (current.Confidence * currentDuration + next.Confidence * nextDuration) / totalDuration
-                        : (current.Confidence + next.Confidence) / 2f;
-
-                    current = new WindowChord(
-                        current.RegionStart, next.RegionEnd,
-                        current.SpanStart, next.SpanEnd,
-                        current.ChordName, mergedConfidence, current.Notes);
+                    current = _combine(current, next);
                 }
                 else
                 {
-                    if (_longEnough(current)) merged.Add(current.ToTimedChord());
+                    segments.Add(current);
                     current = next;
                 }
             }
 
-            if (_longEnough(current)) merged.Add(current.ToTimedChord());
+            segments.Add(current);
+            return segments;
+        }
 
-            return merged;
+        /// <summary>
+        /// Too-short segments that touch a chord give their time away instead of leaving a hole,
+        /// shortest first. Between two different chords the boundary moves to the middle of the
+        /// short one, between two of the same chord the three become one, next to a single chord
+        /// that chord takes it all. Isolated short segments stay for the final filter to drop.
+        /// </summary>
+        private void _absorbShortSegments(List<WindowChord> segments)
+        {
+            while (true)
+            {
+                int shortest = -1;
+                float shortestSpan = float.MaxValue;
+
+                for (int i = 0; i < segments.Count; i++)
+                {
+                    var segment = segments[i];
+                    float span = segment.SpanEnd - segment.SpanStart;
+
+                    if (!_longEnough(segment)
+                        && (_touches(segments, i - 1, i) || _touches(segments, i, i + 1))
+                        && span < shortestSpan)
+                    {
+                        shortest = i;
+                        shortestSpan = span;
+                    }
+                }
+
+                if (shortest < 0) return;
+
+                _absorb(segments, shortest);
+            }
+        }
+
+        private void _absorb(List<WindowChord> segments, int index)
+        {
+            var segment = segments[index];
+            bool hasPrevious = _touches(segments, index - 1, index);
+            bool hasNext = _touches(segments, index, index + 1);
+
+            if (hasPrevious && hasNext)
+            {
+                var previous = segments[index - 1];
+                var next = segments[index + 1];
+
+                if (previous.ChordName == next.ChordName)
+                {
+                    segments[index - 1] = _combine(previous, next);
+                    segments.RemoveRange(index, 2);
+                    return;
+                }
+
+                float regionMiddle = (segment.RegionStart + segment.RegionEnd) * 0.5f;
+                float spanMiddle = (segment.SpanStart + segment.SpanEnd) * 0.5f;
+
+                segments[index - 1] = previous.WithEnd(regionMiddle, Math.Max(previous.SpanEnd, spanMiddle));
+                segments[index + 1] = next.WithStart(regionMiddle, Math.Min(next.SpanStart, spanMiddle));
+            }
+            else if (hasPrevious)
+            {
+                var previous = segments[index - 1];
+                segments[index - 1] = previous.WithEnd(segment.RegionEnd, Math.Max(previous.SpanEnd, segment.SpanEnd));
+            }
+            else
+            {
+                var next = segments[index + 1];
+                segments[index + 1] = next.WithStart(segment.RegionStart, Math.Min(next.SpanStart, segment.SpanStart));
+            }
+
+            segments.RemoveAt(index);
+        }
+
+        /// <summary>
+        /// True when both indices exist and the second segment starts right where the first ends.
+        /// A no-chord window between them leaves a gap, and silence doesn't get painted over.
+        /// </summary>
+        private static bool _touches(List<WindowChord> segments, int first, int second)
+        {
+            if (first < 0 || second >= segments.Count) return false;
+
+            return segments[second].RegionStart - segments[first].RegionEnd <= RegionTouchTolerance;
+        }
+
+        /// <summary>
+        /// Two segments of the same chord as one, from the first's start to the second's end,
+        /// confidence averaged by span.
+        /// </summary>
+        private static WindowChord _combine(in WindowChord first, in WindowChord second)
+        {
+            float firstDuration = first.SpanEnd - first.SpanStart;
+            float secondDuration = second.SpanEnd - second.SpanStart;
+            float totalDuration = firstDuration + secondDuration;
+
+            float confidence = totalDuration > 0f
+                ? (first.Confidence * firstDuration + second.Confidence * secondDuration) / totalDuration
+                : (first.Confidence + second.Confidence) / 2f;
+
+            return new WindowChord(
+                first.RegionStart, second.RegionEnd,
+                first.SpanStart, second.SpanEnd,
+                first.ChordName, confidence, first.Notes);
         }
 
         /// <summary>
@@ -483,6 +596,22 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 ChordName = chordName;
                 Confidence = confidence;
                 Notes = notes;
+            }
+
+            /// <summary>
+            /// Same chord, reaching to a new end.
+            /// </summary>
+            internal WindowChord WithEnd(float regionEnd, float spanEnd)
+            {
+                return new WindowChord(RegionStart, regionEnd, SpanStart, spanEnd, ChordName, Confidence, Notes);
+            }
+
+            /// <summary>
+            /// Same chord, starting earlier.
+            /// </summary>
+            internal WindowChord WithStart(float regionStart, float spanStart)
+            {
+                return new WindowChord(regionStart, RegionEnd, spanStart, SpanEnd, ChordName, Confidence, Notes);
             }
 
             /// <summary>
