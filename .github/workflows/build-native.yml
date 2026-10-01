@@ -91,18 +91,34 @@ jobs:
             exit 0
           fi
 
-          if ! curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors --connect-timeout 30 \
-                 "${ASIO_SDK_ARCHIVE_URL}" -o asio_sdk.zip; then
-            echo "::error::ASIO SDK download failed after retries."
-            exit 1
-          fi
+          # Cloud drives answer runner IPs with an HTML interstitial now and then,
+          # as a 200 that curl can't tell from the file — so retry on content too.
+          MAX_ATTEMPTS=6
+          for ATTEMPT in $(seq 1 "${MAX_ATTEMPTS}"); do
+            rm -f asio_sdk.zip
+            if curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors --connect-timeout 30 \
+                   "${ASIO_SDK_ARCHIVE_URL}" -o asio_sdk.zip \
+               && unzip -tq asio_sdk.zip > /dev/null 2>&1; then
+              echo "ASIO SDK downloaded on attempt ${ATTEMPT}."
+              break
+            fi
 
-          if ! unzip -tq asio_sdk.zip > /dev/null 2>&1; then
-            KIND="unknown content"
-            if [[ "$(head -c 1 asio_sdk.zip)" == "<" ]]; then KIND="looks like an HTML page"; fi
-            echo "::error::ASIO SDK download is not a valid zip archive ($(stat -c %s asio_sdk.zip) bytes, ${KIND})."
-            exit 1
-          fi
+            KIND="no file"
+            if [[ -f asio_sdk.zip ]]; then
+              KIND="$(stat -c %s asio_sdk.zip) bytes, unknown content"
+              if [[ "$(head -c 1 asio_sdk.zip)" == "<" ]]; then
+                KIND="$(stat -c %s asio_sdk.zip) bytes, looks like an HTML page"
+              fi
+            fi
+
+            if [[ "${ATTEMPT}" == "${MAX_ATTEMPTS}" ]]; then
+              echo "::error::ASIO SDK download is not a valid zip archive after ${MAX_ATTEMPTS} attempts (${KIND})."
+              exit 1
+            fi
+
+            echo "::warning::ASIO SDK attempt ${ATTEMPT} returned no valid zip (${KIND}), retrying."
+            sleep $(( ATTEMPT * 30 ))
+          done
 
           mkdir -p asio_sdk
           unzip -q asio_sdk.zip -d asio_sdk
