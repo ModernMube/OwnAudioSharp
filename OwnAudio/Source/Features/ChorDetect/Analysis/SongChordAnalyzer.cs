@@ -240,7 +240,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         /// then Viterbi the whole lattice and emit a chord for every window that didn't land on
         /// no-chord. Windows with fewer than 3 notes go in empty.
         /// </summary>
-        private List<TimedChord> _analyzeWindows(List<Note> notes)
+        private List<WindowChord> _analyzeWindows(List<Note> notes)
         {
             float songDuration = 0f;
             for (int i = 0; i < notes.Count; i++)
@@ -273,7 +273,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             var decoder = new ChordProgressionDecoder(_confidence);
             int[] selection = decoder.Decode(windows);
 
-            var chords = new List<TimedChord>();
+            var chords = new List<WindowChord>();
 
             for (int i = 0; i < windows.Count; i++)
             {
@@ -286,12 +286,40 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 _collectWindowNotes(notes, window.StartTime, window.EndTime);
                 var noteNames = _detector.GetChordNoteNames(candidate.Name, _windowNotes);
 
-                chords.Add(new TimedChord(
+                chords.Add(new WindowChord(
+                    _regionStart(windows, i), _regionEnd(windows, i),
                     window.StartTime, window.EndTime,
                     candidate.Name, candidate.Cosine, noteNames));
             }
 
             return chords;
+        }
+
+        /// <summary>
+        /// Where the part of the timeline a window speaks for begins: halfway between its centre
+        /// and the previous window's. The first window reaches back to its own start.
+        /// </summary>
+        private static float _regionStart(List<ChordWindow> windows, int index)
+        {
+            if (index == 0) return windows[0].StartTime;
+
+            return (_center(windows[index - 1]) + _center(windows[index])) * 0.5f;
+        }
+
+        /// <summary>
+        /// Where it ends: halfway to the next window's centre, the last one runs to its own end.
+        /// Consecutive regions tile the song without overlapping, one hop each.
+        /// </summary>
+        private static float _regionEnd(List<ChordWindow> windows, int index)
+        {
+            if (index == windows.Count - 1) return windows[index].EndTime;
+
+            return (_center(windows[index]) + _center(windows[index + 1])) * 0.5f;
+        }
+
+        private static float _center(in ChordWindow window)
+        {
+            return (window.StartTime + window.EndTime) * 0.5f;
         }
 
         private void _collectWindowNotes(List<Note> allNotes, float windowStart, float windowEnd)
@@ -307,43 +335,52 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 
         /// <summary>
         /// Which notes to rank from. Full set if it already detects as a chord; otherwise we keep
-        /// throwing away the shortest note of the lowest pitch until something clicks or only 3 are
-        /// left. If nothing clicks, the full set goes in anyway — the scores will be low and the
-        /// decoder can still call it no-chord.
+        /// throwing away the weakest note — least amplitude times time inside the window, the
+        /// passing tones and ornaments — until something clicks or only 3 are left. The bass note
+        /// is never thrown away, it's the best root evidence the window has. If nothing clicks,
+        /// the full set goes in anyway — the scores will be low and the decoder can still call it
+        /// no-chord. Every check sees the same window-clipped chromagram the candidates are built from.
         /// </summary>
         private List<Note> _selectNoteSet(float windowStart, float windowEnd)
         {
-            if (_detector.TryAnalyzeChord(_windowNotes) != null) return _windowNotes;
+            if (_detector.MatchesChord(_windowNotes, windowStart, windowEnd)) return _windowNotes;
+
+            int bassPitch = ChordDetector.ComputeBassPitch(_windowNotes, windowStart, windowEnd);
 
             _workingSet.Clear();
             _workingSet.AddRange(_windowNotes);
             _workingSet.Sort((a, b) =>
-            {
-                int byPitch = a.Pitch.CompareTo(b.Pitch);
-                if (byPitch != 0) return byPitch;
-                return _overlap(a, windowStart, windowEnd).CompareTo(_overlap(b, windowStart, windowEnd));
-            });
+                _weight(a, windowStart, windowEnd).CompareTo(_weight(b, windowStart, windowEnd)));
 
             while (_workingSet.Count > 3)
             {
-                _workingSet.RemoveAt(0);
+                int victim = _workingSet.FindIndex(note => note.Pitch != bassPitch);
+                if (victim < 0) break;
 
-                if (_detector.TryAnalyzeChord(_workingSet) != null) return _workingSet;
+                _workingSet.RemoveAt(victim);
+
+                if (_detector.MatchesChord(_workingSet, windowStart, windowEnd)) return _workingSet;
             }
 
             return _windowNotes;
         }
 
-        private float _overlap(Note note, float windowStart, float windowEnd)
+        /// <summary>
+        /// What a note contributes to the window's chromagram: amplitude times clipped overlap.
+        /// </summary>
+        private static float _weight(Note note, float windowStart, float windowEnd)
         {
-            return Math.Min(note.EndTime, windowEnd) - Math.Max(note.StartTime, windowStart);
+            float overlap = Math.Min(note.EndTime, windowEnd) - Math.Max(note.StartTime, windowStart);
+            return note.Amplitude * Math.Max(overlap, 0f);
         }
 
         /// <summary>
         /// Glues neighbouring windows with the same chord into one segment, confidence averaged by
-        /// length, and drops whatever ends up shorter than the minimum.
+        /// length, and drops whatever ends up shorter than the minimum. Adjacency, the averaging
+        /// and the minimum all go by the windows' evidence span; only the reported times come
+        /// from the non-overlapping regions.
         /// </summary>
-        private List<TimedChord> _mergeAdjacent(List<TimedChord> rawChords)
+        private List<TimedChord> _mergeAdjacent(List<WindowChord> rawChords)
         {
             var merged = new List<TimedChord>();
             if (rawChords.Count == 0) return merged;
@@ -355,27 +392,29 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 var next = rawChords[i];
 
                 if (current.ChordName == next.ChordName &&
-                    Math.Abs(current.EndTime - next.StartTime) <= _hopSize * 1.5f)
+                    Math.Abs(current.SpanEnd - next.SpanStart) <= _hopSize * 1.5f)
                 {
-                    float currentDuration = current.EndTime - current.StartTime;
-                    float nextDuration = next.EndTime - next.StartTime;
+                    float currentDuration = current.SpanEnd - current.SpanStart;
+                    float nextDuration = next.SpanEnd - next.SpanStart;
                     float totalDuration = currentDuration + nextDuration;
 
                     float mergedConfidence = totalDuration > 0f
                         ? (current.Confidence * currentDuration + next.Confidence * nextDuration) / totalDuration
                         : (current.Confidence + next.Confidence) / 2f;
 
-                    current = new TimedChord(current.StartTime, next.EndTime, current.ChordName,
-                                           mergedConfidence, current.Notes);
+                    current = new WindowChord(
+                        current.RegionStart, next.RegionEnd,
+                        current.SpanStart, next.SpanEnd,
+                        current.ChordName, mergedConfidence, current.Notes);
                 }
                 else
                 {
-                    if (_longEnough(current)) merged.Add(current);
+                    if (_longEnough(current)) merged.Add(current.ToTimedChord());
                     current = next;
                 }
             }
 
-            if (_longEnough(current)) merged.Add(current);
+            if (_longEnough(current)) merged.Add(current.ToTimedChord());
 
             return merged;
         }
@@ -384,9 +423,75 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         /// On the tempo path the minimum is exactly one window long, and the float drift the window
         /// loop accumulates would shave a hair off some of them — so we let a millisecond slide.
         /// </summary>
-        private bool _longEnough(TimedChord chord)
+        private bool _longEnough(in WindowChord chord)
         {
-            return chord.EndTime - chord.StartTime >= _minimumChordDuration - 0.001f;
+            return chord.SpanEnd - chord.SpanStart >= _minimumChordDuration - 0.001f;
+        }
+
+        /// <summary>
+        /// A decoded window, or a run of them merged. Region is the stretch of the timeline it
+        /// gets reported for, span is the audio its evidence came from — overlapping windows make
+        /// the span wider than the region.
+        /// </summary>
+        private readonly struct WindowChord
+        {
+            /// <summary>
+            /// Reported start, seconds.
+            /// </summary>
+            internal readonly float RegionStart;
+
+            /// <summary>
+            /// Reported end, seconds.
+            /// </summary>
+            internal readonly float RegionEnd;
+
+            /// <summary>
+            /// Start of the first window behind it.
+            /// </summary>
+            internal readonly float SpanStart;
+
+            /// <summary>
+            /// End of the last window behind it.
+            /// </summary>
+            internal readonly float SpanEnd;
+
+            /// <summary>
+            /// The decoded chord.
+            /// </summary>
+            internal readonly string ChordName;
+
+            /// <summary>
+            /// Raw cosine, span-weighted once merged.
+            /// </summary>
+            internal readonly float Confidence;
+
+            /// <summary>
+            /// Note names of the first window.
+            /// </summary>
+            internal readonly string[] Notes;
+
+            /// <summary>
+            /// Straight assignment.
+            /// </summary>
+            internal WindowChord(float regionStart, float regionEnd, float spanStart, float spanEnd,
+                string chordName, float confidence, string[] notes)
+            {
+                RegionStart = regionStart;
+                RegionEnd = regionEnd;
+                SpanStart = spanStart;
+                SpanEnd = spanEnd;
+                ChordName = chordName;
+                Confidence = confidence;
+                Notes = notes;
+            }
+
+            /// <summary>
+            /// The public shape, with the region as its time span.
+            /// </summary>
+            internal TimedChord ToTimedChord()
+            {
+                return new TimedChord(RegionStart, RegionEnd, ChordName, Confidence, Notes);
+            }
         }
     }
 }

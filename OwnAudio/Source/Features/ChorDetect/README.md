@@ -213,12 +213,18 @@ Turns a full note list into a `List<TimedChord>`:
 1. Sort notes, detect the key, and hand it to a `KeyAware` `ChordDetector`.
 2. Slide a window (`_windowSize`, hop `_hopSize`) across the song. For each
    window, collect overlapping notes and run **progressive pruning**
-   (`GetAndPruneNotes`): try all notes first, then repeatedly drop the
-   shortest-duration note from the lowest-pitch group until a chord is found or
-   only 3 notes remain. This strips bass runs and melodic ornaments that would
-   otherwise mask the chord.
-3. `MergeAdjacentChords` fuses consecutive identical labels (duration-weighted
-   confidence) and drops anything shorter than `minimumChordDuration`.
+   (`_selectNoteSet`): try all notes first, then repeatedly drop the weakest
+   note (amplitude × time inside the window) until a chord is found or only 3
+   notes remain. The bass note is never dropped — it is the best root evidence
+   the window has. Every check uses the same window-clipped chromagram as the
+   candidates. This strips passing tones and ornaments that would otherwise
+   mask the chord.
+3. Viterbi picks the path, then `_mergeAdjacent` fuses consecutive identical
+   labels (duration-weighted confidence) and drops anything shorter than
+   `minimumChordDuration`. Each window is reported for the stretch between the
+   midpoints to its neighbours' centres, so the returned segments never overlap
+   even though the windows do; adjacency and the minimum still go by the
+   windows' full span.
 
 The window-note and pruning buffers (`_windowNotes`, `_workingSet`) are reused
 across windows to avoid per-window allocations.
@@ -281,7 +287,8 @@ To add a chord type, append a `(suffix, intervals)` entry to
 [Core/ChordTemplates.cs](Core/ChordTemplates.cs). Order intervals by harmonic
 importance — root first — because `CreateTemplate` weights by position. For a
 one-off custom chord at runtime use `ChordDetector.AddChordTemplate(name,
-pitchClasses)`.
+pitchClasses)` — it takes part in matching immediately and survives later
+key changes.
 
 ## Special chord labels
 

@@ -13,11 +13,21 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
     public partial class ChordDetector
     {
         /// <summary>
-        /// Drops in your own template. pitchClasses must start with the root.
+        /// Chords added through <see cref="AddChordTemplate"/>, kept so a key change that rebuilds
+        /// the built-in set doesn't wipe them.
+        /// </summary>
+        private readonly Dictionary<string, int[]> _customChords = new Dictionary<string, int[]>();
+
+        /// <summary>
+        /// Drops in your own template. pitchClasses must start with the root. Takes part in
+        /// detection right away and survives later key changes.
         /// </summary>
         public void AddChordTemplate(string chordName, int[] pitchClasses)
         {
-            _templates[chordName] = ChordTemplates.CreateTemplate(pitchClasses);
+            var copy = (int[])pitchClasses.Clone();
+            _customChords[chordName] = copy;
+            _templates[chordName] = ChordTemplates.CreateTemplate(copy);
+            _rebuildEntries();
         }
 
         /// <summary>
@@ -31,6 +41,10 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
         private void _updateTemplates()
         {
             _templates = ChordTemplates.CreateAllTemplates(_currentKey, _mode != DetectionMode.Basic);
+
+            foreach (var (chordName, pitchClasses) in _customChords)
+                _templates[chordName] = ChordTemplates.CreateTemplate(pitchClasses);
+
             _rebuildEntries();
         }
 

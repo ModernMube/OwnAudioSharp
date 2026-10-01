@@ -208,6 +208,17 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
         /// </summary>
         internal static int ComputeBassPitchClass(List<Note> notes, float windowStart = -1f, float windowEnd = -1f)
         {
+            int bassPitch = ComputeBassPitch(notes, windowStart, windowEnd);
+            return bassPitch < 0 ? -1 : bassPitch % 12;
+        }
+
+        /// <summary>
+        /// MIDI pitch of the lowest note that lasts long enough to be taken seriously, -1 when
+        /// nothing qualifies. Same rule as <see cref="ComputeBassPitchClass"/>, without folding
+        /// to a pitch class, so callers can tell the bass note itself apart from its octaves.
+        /// </summary>
+        internal static int ComputeBassPitch(List<Note> notes, float windowStart = -1f, float windowEnd = -1f)
+        {
             if (notes == null || notes.Count == 0) return -1;
 
             float maxDuration = 0f;
@@ -229,7 +240,24 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                     bassPitch = note.Pitch;
             }
 
-            return bassPitch == int.MaxValue ? -1 : bassPitch % 12;
+            return bassPitch == int.MaxValue ? -1 : bassPitch;
+        }
+
+        /// <summary>
+        /// Whether the notes name a chord above the confidence threshold inside the given window.
+        /// Chromagram and bass are clipped to the window exactly like the lattice candidates, and
+        /// only the best match is ranked — no names, explanations or allocations beyond the chroma.
+        /// </summary>
+        internal bool MatchesChord(List<Note> notes, float windowStart, float windowEnd)
+        {
+            if (notes == null || notes.Count < 3) return false;
+
+            var chromagram = ComputeChromagram(notes, windowStart, windowEnd);
+
+            Span<ScoredChord> top = stackalloc ScoredChord[1];
+            int count = _rankChords(chromagram, ComputeBassPitchClass(notes, windowStart, windowEnd), top);
+
+            return count > 0 && top[0].Cosine >= _confidenceThreshold;
         }
 
         /// <summary>
