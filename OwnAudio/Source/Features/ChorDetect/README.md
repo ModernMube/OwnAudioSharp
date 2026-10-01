@@ -181,8 +181,11 @@ The matching engine. Four `DetectionMode`s:
 How a window is scored:
 
 1. `ComputeChromagram` weights each pitch class by `Amplitude × overlap
-   duration`, so sustained chord tones outweigh brief passing notes, then
-   normalizes.
+   duration`, so sustained chord tones outweigh brief passing notes, and by
+   register: full weight up to E5 (MIDI 76), half an octave higher, so a melody
+   line above the voicing doesn't pass for a chord tone. The result is
+   log-compressed against the loudest bin (`log(1 + 3x)`), so a root doubled in
+   several octaves doesn't drown out the third, then normalized to sum 1.
 2. `RankChords` computes **cosine similarity** against every template and keeps
    the top candidates. The ranking score is cosine adjusted by two perceptual
    priors:
@@ -194,7 +197,13 @@ How a window is scored:
    The **reported confidence is always the raw cosine similarity**, so the
    meaning of `confidenceThreshold` is independent of the priors.
 3. In `Optimized` mode, candidates within `ambiguityThreshold` of the best are
-   reported as ambiguous (names joined with `/`) plus an `Alternatives` list.
+   reported as ambiguous (names joined with ` | `) plus an `Alternatives` list.
+4. **Inversions** are named with a slash (`C/E`) when one chord tone other than
+   the root holds the bottom of the texture for at least 60% of the time — the
+   lowest sounding note is followed through the span. A bass alternating
+   between root and fifth stays root position, and a bass outside the chord is
+   not written. `AnalyzeChord` does this per call, `SongChordAnalyzer` once per
+   merged segment.
 
 **Performance note:** the hot path is allocation-free. Templates are pre-computed
 into an immutable `TemplateEntry[]` (caching inverse magnitude, tone count,
@@ -307,6 +316,9 @@ pitchClasses)` — it takes part in matching immediately and survives later
 key changes.
 
 ## Special chord labels
+
+- `"C/E"` — a chord with its inversion; the part after the slash is the bass.
+  The WCSR evaluator ignores it, the MajMin and Sevenths levels don't score the bass.
 
 - `"N"` — no notes / silence.
 - `"Unknown"` — notes present but no template cleared the confidence threshold.

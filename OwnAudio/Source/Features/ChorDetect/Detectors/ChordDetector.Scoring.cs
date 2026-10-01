@@ -51,7 +51,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                                 ambiguous[w++] = _templateEntries[top[i].TemplateIndex].Name;
                         }
 
-                        var combinedName = string.Join("/", ambiguous, 0, Math.Min(3, ambiguous.Length));
+                        var combinedName = string.Join(AmbiguitySeparator, ambiguous, 0, Math.Min(3, ambiguous.Length));
                         return (combinedName, best.Cosine, true, ambiguous);
                     }
 
@@ -73,16 +73,35 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
         }
 
         /// <summary>
-        /// Pitch class histogram weighted by amplitude times sounding time, then normalized —
-        /// a held note counts for more than an ornament. Pass -1 for the bounds to use full
-        /// note durations instead of the window overlap.
+        /// Pitch class histogram weighted by amplitude times sounding time — a held note counts
+        /// for more than an ornament — and by register, so a melody line high above the chord
+        /// doesn't pass for a chord tone. Then log-compressed against the loudest bin, which keeps
+        /// a root doubled in three octaves from drowning out the third, and normalized to sum 1.
+        /// Pass -1 for the bounds to use full note durations instead of the window overlap.
         /// </summary>
         public float[] ComputeChromagram(List<Note> notes, float windowStart = -1f, float windowEnd = -1f)
         {
             var chroma = new float[12];
 
             foreach (var note in notes)
-                chroma[note.Pitch % 12] += note.Amplitude * _effectiveDuration(note, windowStart, windowEnd);
+            {
+                chroma[note.Pitch % 12] += note.Amplitude
+                    * _effectiveDuration(note, windowStart, windowEnd)
+                    * _registerWeight(note.Pitch);
+            }
+
+            float max = 0f;
+            for (int i = 0; i < 12; i++)
+            {
+                if (chroma[i] > max) max = chroma[i];
+            }
+
+            if (max > 0f)
+            {
+                float inverseMax = 1f / max;
+                for (int i = 0; i < 12; i++)
+                    chroma[i] = _compress(chroma[i] * inverseMax);
+            }
 
             float sum = 0f;
             for (int i = 0; i < 12; i++)
@@ -97,6 +116,34 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
 
             return chroma;
         }
+
+        /// <summary>
+        /// Full weight up to the top of the usual chord voicings, then falling off — an octave
+        /// higher a note counts half. Chords rarely live up there, melodies and ornaments do.
+        /// </summary>
+        private static float _registerWeight(int pitch)
+        {
+            if (pitch <= MelodyRegisterStart) return 1f;
+
+            return MelodyRegisterHalfLife / (MelodyRegisterHalfLife + (pitch - MelodyRegisterStart));
+        }
+
+        /// <summary>
+        /// log(1 + γx) scaled so 0 stays 0 and 1 stays 1. Only ratios survive the normalization,
+        /// and this squeezes them: three times the energy reads as twice the weight.
+        /// </summary>
+        private static float _compress(float relativeValue)
+        {
+            return (float)(Math.Log(1.0 + ChromaCompression * relativeValue) * _inverseCompressionScale);
+        }
+
+        private static readonly double _inverseCompressionScale = 1.0 / Math.Log(1.0 + ChromaCompression);
+
+        /// <summary>
+        /// The missing-tone cut-off on the compressed scale, so it still means 5% of the loudest
+        /// bin's energy.
+        /// </summary>
+        private static readonly float _missingToneThresholdRatio = _compress(MissingToneThresholdRatio);
 
         /// <summary>
         /// The hot loop. Scores every template and keeps the best ones in the caller's buffer
@@ -122,7 +169,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
             if (chromaMagnitudeSquared <= 0f) return 0;
 
             float inverseChromaMagnitude = (float)(1.0 / Math.Sqrt(chromaMagnitudeSquared));
-            float missingThreshold = chromaMax * MissingToneThresholdRatio;
+            float missingThreshold = chromaMax * _missingToneThresholdRatio;
 
             int capacity = top.Length;
             int filled = 0;

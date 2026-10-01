@@ -85,6 +85,39 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
         private const float BassMinimumDurationRatio = 0.25f;
 
         /// <summary>
+        /// Highest MIDI pitch (E5) that still counts with full weight in the chromagram.
+        /// </summary>
+        private const int MelodyRegisterStart = 76;
+
+        /// <summary>
+        /// Semitones above <see cref="MelodyRegisterStart"/> where a note's weight has halved.
+        /// </summary>
+        private const float MelodyRegisterHalfLife = 12f;
+
+        /// <summary>
+        /// γ of the chromagram's log compression. Mild on purpose: doubled roots and fifths stop
+        /// dominating, but a quiet passing tone stays well below the chord tones.
+        /// </summary>
+        private const double ChromaCompression = 3.0;
+
+        /// <summary>
+        /// Joins the tied readings of an ambiguous call in Optimized mode. Not a slash, that one
+        /// means an inversion.
+        /// </summary>
+        private const string AmbiguitySeparator = " | ";
+
+        /// <summary>
+        /// Sampling step for following the lowest sounding note through a span.
+        /// </summary>
+        private const float BassLineStepSeconds = 0.02f;
+
+        /// <summary>
+        /// Share of the time one pitch class has to hold the bottom before it counts as the bass.
+        /// An alternating root–fifth bass never gets there, a held inversion does.
+        /// </summary>
+        private const float BassLineDominance = 0.6f;
+
+        /// <summary>
         /// Scale of the active key as a 12 bit mask, all ones when we don't know the key.
         /// </summary>
         private int _scaleMask = 0xFFF;
@@ -134,6 +167,9 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
             var (chord, confidence, isAmbiguous, alternatives) = DetectChordAdvanced(chromagram, ComputeBassPitchClass(notes));
 
             var (pitchClasses, noteNames) = _buildPresentNotes(notes, chord);
+
+            if (!isAmbiguous)
+                chord = NameWithBass(chord, ComputeBassLine(notes));
 
             return new ChordAnalysis(chord, confidence, _explain(noteNames, chord, confidence, isAmbiguous), noteNames)
             {
@@ -241,6 +277,90 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
             }
 
             return bassPitch == int.MaxValue ? -1 : bassPitch;
+        }
+
+        /// <summary>
+        /// The pitch class holding the bottom of the texture across a span: at every step the
+        /// lowest sounding note gets the vote, weighted by its amplitude. -1 unless one pitch class
+        /// holds at least <see cref="BassLineDominance"/> of it. Bounds of -1 take the span of the
+        /// notes themselves.
+        /// </summary>
+        internal static int ComputeBassLine(List<Note> notes, float spanStart = -1f, float spanEnd = -1f)
+        {
+            if (notes == null || notes.Count == 0) return -1;
+
+            if (spanStart < 0f || spanEnd <= spanStart)
+            {
+                spanStart = float.MaxValue;
+                spanEnd = float.MinValue;
+                foreach (var note in notes)
+                {
+                    if (note.StartTime < spanStart) spanStart = note.StartTime;
+                    if (note.EndTime > spanEnd) spanEnd = note.EndTime;
+                }
+
+                if (spanEnd <= spanStart) return -1;
+            }
+
+            Span<float> votes = stackalloc float[12];
+            votes.Clear();
+            float total = 0f;
+
+            int steps = Math.Max(1, (int)Math.Ceiling((spanEnd - spanStart) / BassLineStepSeconds));
+            float step = (spanEnd - spanStart) / steps;
+
+            for (int s = 0; s < steps; s++)
+            {
+                float time = spanStart + (s + 0.5f) * step;
+                int lowestPitch = int.MaxValue;
+                float lowestAmplitude = 0f;
+
+                foreach (var note in notes)
+                {
+                    if (note.StartTime <= time && time < note.EndTime && note.Pitch < lowestPitch)
+                    {
+                        lowestPitch = note.Pitch;
+                        lowestAmplitude = note.Amplitude;
+                    }
+                }
+
+                if (lowestPitch == int.MaxValue) continue;
+
+                votes[lowestPitch % 12] += lowestAmplitude;
+                total += lowestAmplitude;
+            }
+
+            if (total <= 0f) return -1;
+
+            int bass = 0;
+            for (int pc = 1; pc < 12; pc++)
+            {
+                if (votes[pc] > votes[bass]) bass = pc;
+            }
+
+            return votes[bass] >= total * BassLineDominance ? bass : -1;
+        }
+
+        /// <summary>
+        /// The chord name with its inversion: "C/E" when the bass is a chord tone other than the
+        /// root, the plain name otherwise — root position, no clear bass, a bass outside the
+        /// chord, or a name we have no template for. The bass is spelled for the current key.
+        /// </summary>
+        internal string NameWithBass(string chordName, int bassPitchClass)
+        {
+            if (bassPitchClass < 0 || !_templates.TryGetValue(chordName, out var template))
+                return chordName;
+
+            int root = 0;
+            for (int pc = 1; pc < 12; pc++)
+            {
+                if (template[pc] > template[root]) root = pc;
+            }
+
+            if (bassPitchClass == root || template[bassPitchClass] <= 0f)
+                return chordName;
+
+            return chordName + "/" + ChordTemplates.GetNoteName(bassPitchClass, _currentKey);
         }
 
         /// <summary>

@@ -183,7 +183,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             DetectedKey = _dominantKey(timeline);
             _applyKey(timeline[0].Key);
 
-            return _mergeAdjacent(_analyzeWindows(sortedNotes));
+            return _mergeAdjacent(_analyzeWindows(sortedNotes), sortedNotes);
         }
 
         /// <summary>
@@ -199,7 +199,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             KeyTimeline = new List<TimedKey> { new TimedKey(0f, float.MaxValue, key) };
             _applyKey(key);
 
-            return _mergeAdjacent(_analyzeWindows(sortedNotes));
+            return _mergeAdjacent(_analyzeWindows(sortedNotes), sortedNotes);
         }
 
         /// <summary>
@@ -463,8 +463,9 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         /// than the minimum over to the chords they sit between, and drops only the short ones
         /// with no chord next to them. Adjacency, the averaging and the minimum all go by the
         /// windows' evidence span; only the reported times come from the non-overlapping regions.
+        /// Inversions are named last, over the whole merged segment.
         /// </summary>
-        private List<TimedChord> _mergeAdjacent(List<WindowChord> rawChords)
+        private List<TimedChord> _mergeAdjacent(List<WindowChord> rawChords, List<Note> notes)
         {
             var segments = _joinRuns(rawChords);
             _absorbShortSegments(segments);
@@ -472,10 +473,26 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             var merged = new List<TimedChord>(segments.Count);
             foreach (var segment in segments)
             {
-                if (_longEnough(segment)) merged.Add(segment.ToTimedChord());
+                if (_longEnough(segment)) merged.Add(_withInversion(segment, notes));
             }
 
             return merged;
+        }
+
+        /// <summary>
+        /// The segment as a TimedChord, with "/bass" added when one chord tone other than the root
+        /// holds the bottom for most of the segment. Done per segment rather than per window, so a
+        /// bass walking or alternating under one chord doesn't chop it into inversions.
+        /// </summary>
+        private TimedChord _withInversion(in WindowChord segment, List<Note> notes)
+        {
+            _applyKeyForTime((segment.RegionStart + segment.RegionEnd) * 0.5f);
+            _collectWindowNotes(notes, segment.RegionStart, segment.RegionEnd);
+
+            int bass = ChordDetector.ComputeBassLine(_windowNotes, segment.RegionStart, segment.RegionEnd);
+            string name = _detector.NameWithBass(segment.ChordName, bass);
+
+            return new TimedChord(segment.RegionStart, segment.RegionEnd, name, segment.Confidence, segment.Notes);
         }
 
         /// <summary>
@@ -690,14 +707,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             internal WindowChord WithStart(float regionStart, float spanStart)
             {
                 return new WindowChord(regionStart, RegionEnd, spanStart, SpanEnd, ChordName, Confidence, Notes);
-            }
-
-            /// <summary>
-            /// The public shape, with the region as its time span.
-            /// </summary>
-            internal TimedChord ToTimedChord()
-            {
-                return new TimedChord(RegionStart, RegionEnd, ChordName, Confidence, Notes);
             }
         }
     }
