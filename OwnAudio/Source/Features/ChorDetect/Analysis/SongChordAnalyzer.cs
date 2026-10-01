@@ -78,6 +78,25 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         private readonly float _minimumChordDuration;
 
         /// <summary>
+        /// Nominal beat length in seconds, 0 on the fixed-size path without a tempo.
+        /// </summary>
+        private readonly float _beatPeriod;
+
+        /// <summary>
+        /// The minimum the current run actually enforces. On the beat path a tracked beat may
+        /// come out a little shorter than the nominal quarter, and one full window has to keep
+        /// surviving the merge.
+        /// </summary>
+        private float _activeMinimum;
+
+        /// <summary>
+        /// Widest gap between two runs of the same chord that still joins them: a hop and a half
+        /// on the fixed grid, a beat and a half between beat cells, so one empty window or one
+        /// empty beat doesn't split a chord.
+        /// </summary>
+        private float _mergeGap;
+
+        /// <summary>
         /// Doubles as the no-chord emission in the decoder, so a window whose best guess is
         /// under this drops out the same way it used to fail the threshold.
         /// </summary>
@@ -113,22 +132,25 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         /// With bpm &gt; 0 the beat sets everything and windowSize/hopSize/minimumChordDuration are
         /// ignored: one quarter note per window, an eighth of hop, and nothing shorter than a
         /// quarter survives the merge. Anything faster than that isn't harmonic rhythm any more,
-        /// anything slower smears chord changes together.
+        /// anything slower smears chord changes together. The windows sit on beats tracked from
+        /// the note onsets, so they start where the beats are rather than at zero, and follow the
+        /// tempo if it drifts. Pass the tempo unrounded, a fraction of a BPM adds up over a song.
         /// </summary>
         public SongChordAnalyzer(
             float windowSize = 1.0f,
             float hopSize = 0.5f,
             float minimumChordDuration = 0.8f,
             float confidence = 0.6f,
-            int bpm = 0)
+            float bpm = 0f)
         {
             _detector = new ChordDetector(DetectionMode.KeyAware, confidence);
             _confidence = confidence;
 
-            if (bpm > 0)
+            if (bpm > 0f)
             {
                 float quarterNote = 60f / bpm;
 
+                _beatPeriod = quarterNote;
                 _windowSize = quarterNote;
                 _hopSize = quarterNote / 2f;
                 _minimumChordDuration = quarterNote;
@@ -139,6 +161,9 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 _hopSize = hopSize;
                 _minimumChordDuration = minimumChordDuration;
             }
+
+            _activeMinimum = _minimumChordDuration;
+            _mergeGap = _hopSize * 1.5f;
         }
 
         /// <summary>
@@ -249,12 +274,12 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             }
 
             var windows = new List<ChordWindow>();
+            var spans = _windowSpans(notes, songDuration);
 
-            for (float time = 0; time < songDuration; time += _hopSize)
+            foreach (var (windowStart, windowEnd, _) in spans)
             {
-                var windowEnd = Math.Min(time + _windowSize, songDuration);
-                _applyKeyForTime((time + windowEnd) * 0.5f);
-                _collectWindowNotes(notes, time, windowEnd);
+                _applyKeyForTime((windowStart + windowEnd) * 0.5f);
+                _collectWindowNotes(notes, windowStart, windowEnd);
 
                 ChordCandidate[] candidates;
                 if (_windowNotes.Count < 3)
@@ -263,21 +288,23 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 }
                 else
                 {
-                    var noteSet = _selectNoteSet(time, windowEnd);
-                    candidates = _detector.GetChordCandidates(noteSet, CandidatesPerWindow, time, windowEnd).ToArray();
+                    var noteSet = _selectNoteSet(windowStart, windowEnd);
+                    candidates = _detector.GetChordCandidates(noteSet, CandidatesPerWindow, windowStart, windowEnd).ToArray();
                 }
 
-                windows.Add(new ChordWindow(time, windowEnd, candidates));
+                windows.Add(new ChordWindow(windowStart, windowEnd, candidates));
             }
 
             var decoder = new ChordProgressionDecoder(_confidence);
             int[] selection = decoder.Decode(windows);
 
             var chords = new List<WindowChord>();
+            bool beatCells = _beatPeriod > 0f;
 
             for (int i = 0; i < windows.Count; i++)
             {
                 if (selection[i] == ChordProgressionDecoder.NoChordState) continue;
+                if (beatCells && !spans[i].onBeat) continue;
 
                 var window = windows[i];
                 var candidate = window.Candidates[selection[i]];
@@ -286,13 +313,64 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 _collectWindowNotes(notes, window.StartTime, window.EndTime);
                 var noteNames = _detector.GetChordNoteNames(candidate.Name, _windowNotes);
 
+                float regionStart = beatCells ? window.StartTime : _regionStart(windows, i);
+                float regionEnd = beatCells ? window.EndTime : _regionEnd(windows, i);
+
                 chords.Add(new WindowChord(
-                    _regionStart(windows, i), _regionEnd(windows, i),
+                    regionStart, regionEnd,
                     window.StartTime, window.EndTime,
                     candidate.Name, candidate.Cosine, noteNames));
             }
 
             return chords;
+        }
+
+        /// <summary>
+        /// The analysis windows, in order. Without a tempo a fixed grid from zero, every window
+        /// reporting for its share of the overlap. With one, a window per tracked beat and another
+        /// from every off-beat to the next, so the hop is half a beat. Only the beat windows are
+        /// reported — the beat cells tile the song and chord changes land on the beats — while the
+        /// off-beat ones still steer the decoder through the lattice.
+        /// </summary>
+        private List<(float start, float end, bool onBeat)> _windowSpans(List<Note> notes, float songDuration)
+        {
+            var spans = new List<(float start, float end, bool onBeat)>();
+            _activeMinimum = _minimumChordDuration;
+            _mergeGap = _hopSize * 1.5f;
+
+            if (_beatPeriod <= 0f)
+            {
+                for (float time = 0; time < songDuration; time += _hopSize)
+                    spans.Add((time, Math.Min(time + _windowSize, songDuration), true));
+
+                return spans;
+            }
+
+            _mergeGap = _beatPeriod * 1.5f;
+
+            var beats = BeatTracker.Track(notes, _beatPeriod, songDuration);
+
+            var grid = new List<float>(beats.Count * 2);
+            float shortestBeat = float.MaxValue;
+            for (int i = 0; i + 1 < beats.Count; i++)
+            {
+                grid.Add(beats[i]);
+                grid.Add((beats[i] + beats[i + 1]) * 0.5f);
+                shortestBeat = Math.Min(shortestBeat, beats[i + 1] - beats[i]);
+            }
+            grid.Add(beats[beats.Count - 1]);
+
+            if (shortestBeat < float.MaxValue)
+                _activeMinimum = Math.Min(_minimumChordDuration, shortestBeat);
+
+            for (int i = 0; i + 2 < grid.Count && grid[i] < songDuration; i++)
+            {
+                float start = Math.Max(grid[i], 0f);
+                float end = Math.Min(grid[i + 2], songDuration);
+                if (end > start) spans.Add((start, end, i % 2 == 0));
+            }
+
+            return spans;
         }
 
         /// <summary>
@@ -415,7 +493,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 var next = rawChords[i];
 
                 if (current.ChordName == next.ChordName &&
-                    Math.Abs(current.SpanEnd - next.SpanStart) <= _hopSize * 1.5f)
+                    Math.Abs(current.SpanEnd - next.SpanStart) <= _mergeGap)
                 {
                     current = _combine(current, next);
                 }
@@ -538,7 +616,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         /// </summary>
         private bool _longEnough(in WindowChord chord)
         {
-            return chord.SpanEnd - chord.SpanStart >= _minimumChordDuration - 0.001f;
+            return chord.SpanEnd - chord.SpanStart >= _activeMinimum - 0.001f;
         }
 
         /// <summary>

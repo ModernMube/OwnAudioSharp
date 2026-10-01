@@ -166,7 +166,7 @@ public static class ChordDetect
             if (!note.IsDrum) rawNotes.Add(note);
         }
 
-        int detectTempo = _detectBpm(samples, sampleRate, 1, report);
+        float detectTempo = _detectBpm(samples, sampleRate, 1, report);
 
         //With a tempo the analyzer works in quarter notes and ignores the three sizes below.
         var analyzer = new SongChordAnalyzer(
@@ -179,15 +179,16 @@ public static class ChordDetect
         var chords = analyzer.AnalyzeSong(rawNotes);
         report?.Invoke(1d);
 
-        return (chords, analyzer.DetectedKey, detectTempo > 0 ? detectTempo : DefaultBpm);
+        return (chords, analyzer.DetectedKey, detectTempo > 0f ? (int)Math.Round(detectTempo) : DefaultBpm);
     }
 #nullable restore
 
     /// <summary>
     /// Tempo over the whole stream, or 0 if the detector couldn't settle on one. Don't paper
-    /// over the 0 here — callers need to know detection failed.
+    /// over the 0 here — callers need to know detection failed. Left unrounded for the analyzer,
+    /// whose beat grid would otherwise start off by a fraction of a BPM.
     /// </summary>
-    private static int _detectBpm(float[] samples, int sampleRate, int channels, Action<double>? report = null)
+    private static float _detectBpm(float[] samples, int sampleRate, int channels, Action<double>? report = null)
     {
         const int chunkSize = 4096;
         const double tempoStart = DecodeShare + TranscribeShare;
@@ -209,7 +210,7 @@ public static class ChordDetect
         report?.Invoke(tempoStart + TempoShare);
 
         float bpm = bpmDetect.GetBpm();
-        return bpm > 0 ? (int)Math.Round(bpm) : 0;
+        return bpm > 0f ? bpm : 0f;
     }
 
     private static readonly object _realtimeLock = new object();

@@ -189,7 +189,8 @@ How a window is scored:
    - a **parsimony penalty** (`ComplexityPenaltyPerTone`) per chord tone beyond a
      triad, so a plain triad wins near-ties over spurious extended labels;
    - a **diatonic bonus** (`DiatonicBonus`) when every tone fits the active key's
-     scale — a tie-breaker only.
+     scale — a tie-breaker only. Minor keys use natural and harmonic minor
+     together, so the major dominant (E / E7 in A minor) counts as in key.
    The **reported confidence is always the raw cosine similarity**, so the
    meaning of `confidenceThreshold` is independent of the priors.
 3. In `Optimized` mode, candidates within `ambiguityThreshold` of the best are
@@ -225,10 +226,11 @@ Turns a full note list into a `List<TimedChord>`:
    leaving a hole: between two different chords the boundary moves to its
    middle, between two of the same chord the three become one. Only short
    segments with no chord next to them (silence on both sides) are dropped.
-   Each window is reported for the stretch between the
-   midpoints to its neighbours' centres, so the returned segments never overlap
-   even though the windows do; adjacency and the minimum still go by the
-   windows' full span.
+   Without a tempo each window is reported for the stretch between the
+   midpoints to its neighbours' centres; with one, only the on-beat windows are
+   reported, each for its beat cell. Either way the returned segments never
+   overlap even though the windows do; adjacency and the minimum still go by
+   the windows' full span.
 
 The window-note and pruning buffers (`_windowNotes`, `_workingSet`) are reused
 across windows to avoid per-window allocations.
@@ -251,6 +253,16 @@ window mostly sees passing tones, above it a chord change gets smeared across
 the window and the lattice has to pick from the union of two chords. Since the
 minimum equals the window, nothing shorter than a quarter can reach the result,
 but a single unrepeated window still survives the merge.
+
+The windows sit on **tracked beats**, not on a grid from zero.
+[Analysis/BeatTracker.cs](Analysis/BeatTracker.cs) builds an onset envelope
+from the note starts (amplitude × length, capped at one beat) and places the
+beats with dynamic programming (Ellis 2007): each beat may land 0.8–1.25 periods
+after the previous one, with a log-squared penalty for straying from the
+nominal period. That finds the phase and follows a tempo that drifts. Beat
+windows run beat to beat, off-beat windows between them; only the beat windows
+are reported, so chord changes land on the beats. The tempo is passed to the
+analyzer unrounded — `ChordDetect` rounds only the value it returns.
 
 Without a tempo (`bpm == 0`) all three arguments are used exactly as given.
 

@@ -139,26 +139,58 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
 
         /// <summary>
         /// 12 bit mask of the key's scale, all ones without a key so the diatonic bonus goes flat.
-        /// Minor keys use natural minor — the bonus is small enough that a borrowed dominant
-        /// doesn't get punished for it.
+        /// Minor keys take natural and harmonic minor together: the raised leading tone belongs to
+        /// the key, so the major dominant (E and E7 in A minor) and the diminished seventh on the
+        /// leading tone count as in-key instead of losing the tie-break to the minor v.
         /// </summary>
         private static int _buildScaleMask(MusicalKey? key)
         {
             if (key == null) return 0xFFF;
 
             string tonicName = key.IsMajor ? key.KeyName : key.KeyName.TrimEnd('m');
-            int tonic = Array.IndexOf(key.PreferredNoteNames, tonicName);
+            int tonic = _pitchClassOf(tonicName);
             if (tonic < 0) return 0xFFF;
 
             ReadOnlySpan<int> intervals = key.IsMajor
                 ? stackalloc int[] { 0, 2, 4, 5, 7, 9, 11 }
-                : stackalloc int[] { 0, 2, 3, 5, 7, 8, 10 };
+                : stackalloc int[] { 0, 2, 3, 5, 7, 8, 10, 11 };
 
             int mask = 0;
             foreach (int interval in intervals)
                 mask |= 1 << ((tonic + interval) % 12);
 
             return mask;
+        }
+
+        /// <summary>
+        /// Pitch class of a note name like "C", "F#" or "Cb", -1 when it isn't one. Parsed rather
+        /// than looked up in the key's spelling table, which has no entry for Cb.
+        /// </summary>
+        private static int _pitchClassOf(string noteName)
+        {
+            if (string.IsNullOrEmpty(noteName)) return -1;
+
+            int pitchClass = noteName[0] switch
+            {
+                'C' => 0,
+                'D' => 2,
+                'E' => 4,
+                'F' => 5,
+                'G' => 7,
+                'A' => 9,
+                'B' => 11,
+                _ => -1
+            };
+            if (pitchClass < 0) return -1;
+
+            for (int i = 1; i < noteName.Length; i++)
+            {
+                if (noteName[i] == '#') pitchClass++;
+                else if (noteName[i] == 'b') pitchClass--;
+                else return -1;
+            }
+
+            return (pitchClass % 12 + 12) % 12;
         }
 
         /// <summary>
