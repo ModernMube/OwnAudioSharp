@@ -1534,7 +1534,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
     }
     public class SongChordAnalyzer
     {
-        public SongChordAnalyzer(float windowSize = 1, float hopSize = 0.5, float minimumChordDuration = 0.8, float confidence = 0.6, int bpm = 0) { }
+        public SongChordAnalyzer(float windowSize = 1, float hopSize = 0.5, float minimumChordDuration = 0.8, float confidence = 0.6, float bpm = 0) { }
         public OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey? DetectedKey { get; }
         public System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord> AnalyzeSong(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> songNotes) { }
         public System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord> AnalyzeSongInKey(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> songNotes, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey key) { }
