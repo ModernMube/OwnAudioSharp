@@ -14,7 +14,7 @@ This package provides the **core foundation** for OwnAudioSharp's audio engine a
 
 **IMPORTANT**: This is a **core library only** — it does not contain platform-specific implementations. For actual audio I/O, use **[OwnAudioRust](../OwnAudioRust/)** — the cross-platform native engine built on **cpal** (Rust), supporting Windows, Linux, macOS, Android, and iOS.
 
-> **Version**: 4.0.9-preview.4  
+> **Version**: 4.0.9-preview.5  
 > **Target Framework**: `net10.0` (mobile: `net10.0-android`, `net10.0-ios`)
 
 > **Note on the managed buffering primitives.** `LockFreeRingBuffer<T>`, `AudioFramePool` and

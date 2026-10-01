@@ -23,7 +23,7 @@ Part of the [OwnAudioSharp](https://github.com/modernmube/OwnAudioSharp) ecosyst
 Or (once published to NuGet):
 
 ```xml
-<PackageReference Include="OwnAudioSharp.Midi" Version="4.0.9-preview.4" />
+<PackageReference Include="OwnAudioSharp.Midi" Version="4.0.9-preview.5" />
 ```
 
 ---
