@@ -74,24 +74,44 @@ jobs:
       - name: Install cargo-xwin (MSVC cross-linker)
         run: cargo install cargo-xwin --locked
 
-      # Attempt to download ASIO SDK from a private artifact store.
-      # If the secret is absent the build falls back to WASAPI-only.
+      # Download the ASIO SDK from a private artifact store.
+      # Without the secret (forks, fork PRs) the build falls back to WASAPI-only.
+      # With the secret set, any failure fails the job: a silent fallback would
+      # commit ASIO-less Windows binaries back to the branch.
       - name: Download ASIO SDK
         id: asio-sdk
-        continue-on-error: true
         env:
           ASIO_SDK_ARCHIVE_URL: ${{ secrets.ASIO_SDK_ARCHIVE_URL }}
         shell: bash
         run: |
+          set -euo pipefail
           if [[ -z "${ASIO_SDK_ARCHIVE_URL}" ]]; then
             echo "asio_available=false" >> "$GITHUB_OUTPUT"
             echo "::warning::ASIO_SDK_ARCHIVE_URL secret not set — building WASAPI-only."
             exit 0
           fi
+
+          if ! curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors --connect-timeout 30 \
+                 "${ASIO_SDK_ARCHIVE_URL}" -o asio_sdk.zip; then
+            echo "::error::ASIO SDK download failed after retries."
+            exit 1
+          fi
+
+          if ! unzip -tq asio_sdk.zip > /dev/null 2>&1; then
+            KIND="unknown content"
+            if [[ "$(head -c 1 asio_sdk.zip)" == "<" ]]; then KIND="looks like an HTML page"; fi
+            echo "::error::ASIO SDK download is not a valid zip archive ($(stat -c %s asio_sdk.zip) bytes, ${KIND})."
+            exit 1
+          fi
+
           mkdir -p asio_sdk
-          curl -fsSL "${ASIO_SDK_ARCHIVE_URL}" -o asio_sdk.zip
           unzip -q asio_sdk.zip -d asio_sdk
           SDK_DIR=$(find asio_sdk -name "asio.h" -exec dirname {} \; | head -n 1)
+          if [[ -z "${SDK_DIR}" ]]; then
+            echo "::error::ASIO SDK archive does not contain asio.h."
+            exit 1
+          fi
+
           SDK_ROOT="${SDK_DIR%/common}"
           echo "ASIO_SDK_DIR=${SDK_ROOT}" >> "$GITHUB_ENV"
           echo "asio_available=true" >> "$GITHUB_OUTPUT"
@@ -121,7 +141,7 @@ jobs:
           fi
           cargo xwin build --release $FEATURES --target aarch64-pc-windows-msvc
 
-      - name: Validate ASIO exports (win-x64)
+      - name: Validate ASIO build
         if: steps.asio-sdk.outputs.asio_available == 'true'
         shell: pwsh
         run: |
@@ -145,6 +165,14 @@ jobs:
             exit 1
           }
           Write-Host "ASIO exports verified: $exports"
+          foreach ($target in "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc") {
+            $binary = "OwnAudioEngineRust/target/$target/release/ownaudio_ffi.dll"
+            if (-not (Select-String -Path $binary -Pattern "asio" -SimpleMatch -Quiet)) {
+              Write-Error "$binary was built without ASIO support."
+              exit 1
+            }
+            Write-Host "ASIO code present in $binary"
+          }
 
       - name: Summarize ASIO status
         if: steps.asio-sdk.outputs.asio_available != 'true'
