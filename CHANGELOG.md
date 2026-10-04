@@ -3,6 +3,67 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.9-preview.5 — 2026-10-01
+
+### Added
+
+- **Chord detection follows the beat of the song.** With a tempo, `SongChordAnalyzer` no longer
+  lays its quarter-note grid from zero: a beat tracker places the beats on the note onsets
+  (dynamic programming after Ellis 2007), finds the phase and follows a tempo that drifts or
+  breathes. One window sits on every beat and another on every off-beat; only the beat cells are
+  reported, so chord changes land on the beats and consecutive chords tile the song.
+- **Inversions are named.** When a chord tone other than the root holds the bass for most of a
+  chord's span, the name carries it after a slash — `C/E`, `Am/C`. `SongChordAnalyzer` decides
+  per merged chord, so a walking or alternating bass under one chord doesn't chop it into
+  inversions; `ChordDetector.AnalyzeChord` decides over the notes it is given.
+
+### Changed
+
+- **`TimedChord.ChordName` and `ChordAnalysis.ChordName` can contain a slash** for an inversion
+  (see above). Code that looks a name up as is should split at the `/` first.
+- **Ambiguous names in Optimized mode are joined with `" | "`** instead of `"/"`, which now means
+  an inversion: `"C | Am"`.
+- **`SongChordAnalyzer` takes the tempo as `float`.** `ChordDetect` hands it the detected tempo
+  unrounded, since a fraction of a BPM drifts the beat grid by whole beats over a song. Source
+  passing an `int` compiles as before; code built against preview.4 has to be recompiled.
+- **The chromagram weighs register and compresses.** Notes above E5 count less — an octave higher,
+  half — so a melody line doesn't pass for a chord tone, and the chroma is log-compressed against
+  its loudest bin, so a root doubled in three octaves no longer drowns out the third.
+- **Minor keys include the raised leading tone.** The diatonic mask of a minor key is natural and
+  harmonic minor together, so the major dominant (`E`, `E7` in A minor) and the diminished seventh
+  on the leading tone count as in key instead of losing to the minor v.
+- **OwnCompressor carries every channel through its look-ahead.** Channels past the stereo pair are
+  delayed with the first two (up to 16), instead of leaving the compressed pair behind them.
+- **Matchering picks mid/side only for a real stereo source.** The compressor goes mid/side when
+  the side is above −30 dB against the mid; a near-mono source with a faint decorrelation stays
+  left/right.
+- **Windows natives always ship with ASIO.** The native build fails when the ASIO SDK can't be
+  fetched, instead of falling back to WASAPI-only binaries without a word, and checks both Windows
+  DLLs for the ASIO code.
+
+### Fixed
+
+- **A bypassed OwnCompressor or OwnDynamicAmp keeps its track aligned.** Delay compensation kept
+  counting the look-ahead of a disabled effect while the chain skipped it, so the track ran early
+  by up to 10 ms and replayed stale audio when the effect came back. Bypassed, both now pass the
+  delayed dry signal.
+- **The matchering rider's freeze threshold follows the level it hears.** It was planned on the
+  source, while the rider gets the audio after the pre-gain, the EQ and the compressor — or the
+  cut-only shift in a profile — so quiet passages froze the gain more often than planned.
+- **Chords no longer leave holes.** A segment shorter than the minimum gives its time to its
+  neighbours: between two different chords the boundary moves to its middle, between two of the
+  same chord the three become one, next to a single chord that chord takes it. Only an isolated
+  short segment is dropped.
+- **Reported chord times don't overlap.** Each window reports the stretch between its neighbours'
+  centres, so `TimedChord` spans tile the song.
+- **Note pruning keeps the bass.** When a window doesn't detect as a chord the weakest note goes
+  first — amplitude times its time inside the window — and the bass note never goes, judged on
+  the same window-clipped chromagram the candidates are built from.
+- **`ChordDetector.AddChordTemplate` takes effect at once and survives a key change.** A custom
+  template used to sit unused until the next rebuild, and a key change wiped it.
+- **The scale mask of a Cb major key** is built from the parsed tonic; the key's spelling table
+  has no entry for Cb, so it fell back to no key at all.
+
 ## 4.0.9-preview.4 — 2026-09-30
 
 ### Added

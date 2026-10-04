@@ -65,7 +65,7 @@ var (chord, stability) = ChordDetect.DetectRealtime(
 if (stability > 0.6f)
     Console.WriteLine($"Chord: {chord}  Stability: {stability:P0}");</code></pre></div>
 
-<p><code>intervalSecond</code> is only a <strong>fallback</strong> window size. When tempo detection succeeds the window is derived from the BPM instead (quarter note below 100 BPM, half note up to 150, whole note above) and the argument is ignored.</p>
+<p><code>intervalSecond</code> is only a <strong>fallback</strong> window size. When tempo detection succeeds the argument is ignored: the windows are one beat long, placed on beats tracked from the note onsets (so they follow the song's phase and any tempo drift), and chord changes land on the beats. A chord shorter than a beat is handed to its neighbours.</p>
 
 <h3>Return Types</h3>
 <div class="table-wrap"><table class="prop-table">
@@ -73,7 +73,7 @@ if (stability > 0.6f)
   <tbody>
     <tr><td><code>chords</code></td><td><code>List&lt;TimedChord&gt;</code></td><td>Chord progression on the timeline.</td></tr>
     <tr><td><code>TimedChord.StartTime</code> / <code>EndTime</code></td><td><code>float</code></td><td>Chord span in seconds.</td></tr>
-    <tr><td><code>TimedChord.ChordName</code></td><td><code>string</code></td><td>Chord name (e.g. <code>"Cmaj"</code>, <code>"Am7"</code>). <code>"N"</code> means silence, <code>"Unknown"</code> means nothing cleared the confidence threshold.</td></tr>
+    <tr><td><code>TimedChord.ChordName</code></td><td><code>string</code></td><td>Chord name (e.g. <code>"Cmaj"</code>, <code>"Am7"</code>). An inversion carries its bass after a slash (<code>"C/E"</code>, <code>"Am/C"</code>) when a chord tone other than the root holds the bottom for most of the span. <code>"N"</code> means silence, <code>"Unknown"</code> means nothing cleared the confidence threshold.</td></tr>
     <tr><td><code>TimedChord.Confidence</code></td><td><code>float</code></td><td>Cosine similarity against the chord template, 0.0–1.0.</td></tr>
     <tr><td><code>TimedChord.Notes</code></td><td><code>string[]</code></td><td>Constituent note names, spelled to fit the key.</td></tr>
     <tr><td><code>key</code></td><td><code>MusicalKey</code></td><td>Detected musical key (Krumhansl–Schmuckler).</td></tr>
