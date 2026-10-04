@@ -382,7 +382,8 @@ public sealed partial class AudioMixer
 
     /// <summary>
     /// Tears down the session (tracks, feeders, output stream) and the tick, then hands the
-    /// device back to the engine.
+    /// device back to the engine. Not onto a lost device though — reopening there throws
+    /// out of Dispose and leaves the master effects behind.
     /// </summary>
     private void _disposeRustSession()
     {
@@ -390,6 +391,8 @@ public sealed partial class AudioMixer
 
         lock (_rustSessionLock)
         {
+            bool _deviceGone = _rustOutputStream?.PollErrorState(out _) == AudioStreamErrorKind.DeviceNotAvailable;
+
             //Native effects live on the session mixer, disposing it frees them — just drop the pairings
             _rustMasterEffects.Clear();
 
@@ -414,7 +417,15 @@ public sealed partial class AudioMixer
             _rustDiagnosticEngine?.TrackSessionCapture(0);
             _rustDiagnosticEngine = null;
 
-            _rustReleasedEngine?.RestoreOutput();
+            if (_deviceGone)
+            {
+                Log.Info("[Mixer] Output device is gone, engine playback stays released");
+            }
+            else
+            {
+                try { _rustReleasedEngine?.RestoreOutput(); }
+                catch (Exception ex) { Log.Error("[Mixer] Engine playback could not be restored, it stays released", ex); }
+            }
             _rustReleasedEngine = null;
 
             Log.Info("[Mixer] Native session disposed, device handed back to the engine");
