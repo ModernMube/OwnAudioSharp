@@ -1,8 +1,8 @@
 /* ─── Version ─────────────────────────────────────────────────────────────────
    The one place the site's version lives. Every page writes it as an empty
    [data-version] element; the attribute value is whatever goes in front of the
-   number, so data-version="v" renders "v4.0.9-preview.5".                    */
-const SITE_VERSION = '4.0.9-preview.5';
+   number, so data-version="v" renders "v4.0.9-preview.6".                    */
+const SITE_VERSION = '4.0.9-preview.6';
 
 /* ─── Theme ───────────────────────────────────────────────────────────────── */
 (function () {
