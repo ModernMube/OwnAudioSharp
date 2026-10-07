@@ -114,7 +114,7 @@ dotnet add package OwnAudioSharp.Mt3      # Optional — MT3 transcription
 | Package | Platforms | What it is |
 |---|---|---|
 | `OwnAudioSharp` | Windows, Linux, macOS | The complete edition. Playback, recording, mixing, effects, VST3 and MIDI, plus the analysis features (chord detection, note transcription, matchering) and the waveform display. |
-| `OwnAudioSharp.Mobile` | Android, iOS | The same feature set built for mobile, including matchering and the waveform display — minus the ONNX-based analysis (no chord detection, no note transcription). |
+| `OwnAudioSharp.Mobile` | Android, iOS | The same feature set built for mobile, including matchering — minus the ONNX-based analysis (no chord detection, no note transcription) and the waveform display. No UI framework dependency, so it fits any mobile UI stack. |
 | `OwnAudioSharp.Basic` | Windows, Linux, macOS | Audio in and out, and nothing that could be left out. Playback, recording, mixing, effects and VST3 — no analysis features, no ONNX models, no UI dependency. |
 | `OwnAudioSharp.Mt3` | Windows, Linux, macOS (ARM) | Optional add-on. Swaps the note transcriber behind chord detection for MT3, which labels every note with its instrument. Separate package because ONNX Runtime costs ~26 MB per platform. |
 

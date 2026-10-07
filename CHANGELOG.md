@@ -3,6 +3,24 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.9-preview.7 — 2026-10-07
+
+### Changed
+
+- **`OwnAudioSharp.Mobile` no longer depends on Avalonia.** The package ships no visual controls
+  any more, `WaveDisplayControl` included, so it works under any mobile UI stack (MAUI, Avalonia,
+  Uno, native Android/iOS). For a waveform, read the data with `FileSource.GetPeaks` and draw it
+  with your own UI. The desktop `OwnAudioSharp` package keeps the Avalonia control.
+
+## 4.0.9-preview.6 — 2026-10-04
+
+### Changed
+
+- **Windows natives always ship with ASIO.** The native build fails when the ASIO SDK can't be
+  fetched, instead of falling back to WASAPI-only binaries without a word, and checks both Windows
+  DLLs for the ASIO code. The SDK download is retried when the host answers with a page instead
+  of the zip.
+
 ## 4.0.9-preview.5 — 2026-10-01
 
 ### Added
@@ -37,9 +55,6 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 - **Matchering picks mid/side only for a real stereo source.** The compressor goes mid/side when
   the side is above −30 dB against the mid; a near-mono source with a faint decorrelation stays
   left/right.
-- **Windows natives always ship with ASIO.** The native build fails when the ASIO SDK can't be
-  fetched, instead of falling back to WASAPI-only binaries without a word, and checks both Windows
-  DLLs for the ASIO code.
 
 ### Fixed
 
