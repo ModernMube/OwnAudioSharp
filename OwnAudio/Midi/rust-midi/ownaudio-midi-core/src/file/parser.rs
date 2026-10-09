@@ -13,7 +13,9 @@ use crate::file::{MidiEventData, MidiEventKind, MidiFileData, MidiTrackData};
 /// malformed.
 pub fn parse_midi_file(data: &[u8]) -> Result<MidiFileData, MidiError> {
     if data.len() < 14 {
-        return Err(MidiError::InvalidFile("file shorter than MThd header".into()));
+        return Err(MidiError::InvalidFile(
+            "file shorter than MThd header".into(),
+        ));
     }
 
     if &data[0..4] != b"MThd" {

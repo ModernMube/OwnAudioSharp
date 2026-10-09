@@ -135,7 +135,12 @@ fn writer_round_trips_through_parser() {
 }
 
 /// Builds a plain channel event for the batch tests.
-fn channel_event(delta: i32, status: u8, d1: u8, d2: u8) -> ownaudio_midi_ffi::types::NativeMidiEvent {
+fn channel_event(
+    delta: i32,
+    status: u8,
+    d1: u8,
+    d2: u8,
+) -> ownaudio_midi_ffi::types::NativeMidiEvent {
     ownaudio_midi_ffi::types::NativeMidiEvent {
         delta_time: delta,
         event_type: 0,

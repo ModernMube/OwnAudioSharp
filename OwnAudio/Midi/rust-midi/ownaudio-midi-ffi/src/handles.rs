@@ -116,9 +116,7 @@ pub(crate) unsafe fn output_from_ptr<'a>(
 /// # Safety
 /// `ptr` must originate from `ownaudio_midi_v1_clock_create` and must not have
 /// been destroyed.
-pub(crate) unsafe fn clock_from_ptr<'a>(
-    ptr: *mut MidiClockHandle,
-) -> Option<&'a mut ClockWrapper> {
+pub(crate) unsafe fn clock_from_ptr<'a>(ptr: *mut MidiClockHandle) -> Option<&'a mut ClockWrapper> {
     if ptr.is_null() {
         None
     } else {
@@ -131,9 +129,7 @@ pub(crate) unsafe fn clock_from_ptr<'a>(
 /// # Safety
 /// `ptr` must originate from `ownaudio_midi_v1_file_parse` and must not have
 /// been destroyed.
-pub(crate) unsafe fn file_from_ptr<'a>(
-    ptr: *mut MidiFileHandle,
-) -> Option<&'a mut FileWrapper> {
+pub(crate) unsafe fn file_from_ptr<'a>(ptr: *mut MidiFileHandle) -> Option<&'a mut FileWrapper> {
     if ptr.is_null() {
         None
     } else {

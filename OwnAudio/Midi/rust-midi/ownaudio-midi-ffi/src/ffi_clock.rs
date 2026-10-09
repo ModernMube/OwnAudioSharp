@@ -93,7 +93,10 @@ pub extern "C" fn ownaudio_midi_v1_clock_start(
             None => return MidiErrorCode::NullPointer as i32,
         };
 
-        let state = PulseState { callback, user_data };
+        let state = PulseState {
+            callback,
+            user_data,
+        };
         wrapper.inner.start(Box::new(move || state.fire()));
         MidiErrorCode::Success as i32
     }));

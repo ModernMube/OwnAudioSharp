@@ -33,6 +33,4 @@ pub use file::{
     parse_midi_file, write_midi_file, MidiEventData, MidiEventKind, MidiFileData, MidiTrackData,
 };
 pub use message::MidiMessage;
-pub use port::{
-    list_input_port_names, list_output_port_names, MidiInputPort, MidiOutputPort,
-};
+pub use port::{list_input_port_names, list_output_port_names, MidiInputPort, MidiOutputPort};

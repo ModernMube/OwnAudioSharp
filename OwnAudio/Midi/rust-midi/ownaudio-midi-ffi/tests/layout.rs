@@ -15,7 +15,11 @@ use ownaudio_midi_ffi::{
 #[test]
 fn native_midi_message_size_and_align() {
     assert_eq!(size_of::<NativeMidiMessage>(), 16, "NativeMidiMessage size");
-    assert_eq!(align_of::<NativeMidiMessage>(), 8, "NativeMidiMessage align");
+    assert_eq!(
+        align_of::<NativeMidiMessage>(),
+        8,
+        "NativeMidiMessage align"
+    );
 }
 
 #[test]
@@ -24,7 +28,11 @@ fn native_midi_message_field_offsets() {
     assert_eq!(offset_of!(NativeMidiMessage, data1), 1, "data1");
     assert_eq!(offset_of!(NativeMidiMessage, data2), 2, "data2");
     assert_eq!(offset_of!(NativeMidiMessage, _pad), 3, "_pad");
-    assert_eq!(offset_of!(NativeMidiMessage, timestamp_us), 8, "timestamp_us");
+    assert_eq!(
+        offset_of!(NativeMidiMessage, timestamp_us),
+        8,
+        "timestamp_us"
+    );
 }
 
 #[test]
@@ -42,7 +50,11 @@ fn native_midi_event_field_offsets() {
     assert_eq!(offset_of!(NativeMidiEvent, data2), 7, "data2");
     assert_eq!(offset_of!(NativeMidiEvent, meta_type), 8, "meta_type");
     assert_eq!(offset_of!(NativeMidiEvent, meta_data), 16, "meta_data");
-    assert_eq!(offset_of!(NativeMidiEvent, meta_data_len), 24, "meta_data_len");
+    assert_eq!(
+        offset_of!(NativeMidiEvent, meta_data_len),
+        24,
+        "meta_data_len"
+    );
 }
 
 #[test]

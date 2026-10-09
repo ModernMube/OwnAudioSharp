@@ -97,10 +97,7 @@ impl MidiInputPort {
     /// Starts delivering incoming messages to `callback`.
     ///
     /// Calling this on an already-started port is a no-op.
-    pub fn start(
-        &mut self,
-        callback: Box<InputCallback>,
-    ) -> Result<(), MidiError> {
+    pub fn start(&mut self, callback: Box<InputCallback>) -> Result<(), MidiError> {
         if self.connection.is_some() {
             return Ok(());
         }
