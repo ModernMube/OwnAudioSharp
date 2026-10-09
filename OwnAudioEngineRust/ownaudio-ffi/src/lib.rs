@@ -56,3 +56,7 @@ pub use handles::{
 };
 pub use host_api::OwnHostApi;
 pub use ownaudio_core::effects::{VstAudioBuffer, VstProcessFn};
+
+// Pulls the MIDI exports into the same archive (iOS, see the `midi` feature).
+#[cfg(feature = "midi")]
+pub use ownaudio_midi_ffi;

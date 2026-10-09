@@ -13,7 +13,18 @@ internal static class MidiNativeLibraryLoader
     /// <summary>
     /// The name every [LibraryImport] here uses.
     /// </summary>
+    /// <remarks>
+    /// iOS links the MIDI exports statically (inside OwnAudioSharp.Mobile's libownaudio_ffi.a, or
+    /// this package's own archive), and "__Internal" makes the AOT compiler reference each symbol
+    /// directly. A resolver handing back the main image looked fine but referenced nothing, so
+    /// -dead_strip took every MIDI export out of the app and the first call hit
+    /// EntryPointNotFoundException. Same deal as the audio engine's NativeLibraryLoader.
+    /// </remarks>
+#if IOS || TVOS
+    internal const string LogicalName = "__Internal";
+#else
     internal const string LogicalName = "ownaudio_midi_ffi";
+#endif
 
     /// <summary>
     /// So we only hook the resolver once.
@@ -21,14 +32,15 @@ internal static class MidiNativeLibraryLoader
     private static bool _registered;
 
     /// <summary>
-    /// Hooks up the resolver, idempotent.
+    /// Hooks up the resolver, idempotent. Not on iOS: the runtime resolves __Internal itself.
     /// </summary>
     public static void EnsureRegistered()
     {
         if (_registered) return;
-
-        NativeLibrary.SetDllImportResolver(typeof(MidiNativeLibraryLoader).Assembly, _resolve);
         _registered = true;
+
+        if (!OperatingSystem.IsIOS() && !OperatingSystem.IsTvOS())
+            NativeLibrary.SetDllImportResolver(typeof(MidiNativeLibraryLoader).Assembly, _resolve);
     }
 
     /// <summary>
@@ -38,10 +50,6 @@ internal static class MidiNativeLibraryLoader
     private static IntPtr _resolve(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
         if (!string.Equals(libraryName, LogicalName, StringComparison.Ordinal)) return IntPtr.Zero;
-
-        //iOS links the midi ffi statically, so the symbols are already in the main image
-        if (OperatingSystem.IsIOS() || OperatingSystem.IsTvOS())
-            return NativeLibrary.GetMainProgramHandle();
 
         return NativeLibResolver.Resolve("ownaudio_midi_ffi", assembly, searchPath);
     }

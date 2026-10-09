@@ -3,6 +3,27 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.9-preview.8 — 2026-10-09
+
+### Changed
+
+- **`OwnAudioSharp.Mobile` carries MIDI.** `OwnAudio.Midi.dll` ships in the package, and on iOS the
+  MIDI exports are built into the same `libownaudio_ffi.a` as the audio engine (`ownaudio-ffi`
+  feature `midi`). Two static Rust archives side by side each brought their own Rust std and broke
+  the app's link with duplicate symbols. Android gets the MIDI shared libraries next to the audio
+  one. `OwnAudioSharp.Midi` no longer links its own iOS archive when the Mobile package is there.
+- **`midir` 0.10 → 0.11** in the MIDI core: 0.11 accepts the `alsa` that `cpal` 0.18 uses, so the
+  two can share one dependency graph.
+
+### Fixed
+
+- **MIDI on iOS lost all its native symbols.** The MIDI loader resolved its library to the main
+  image through a resolver, which references nothing, so `-dead_strip` removed every
+  `ownaudio_midi_v1_*` export and the first call threw `EntryPointNotFoundException`. On iOS it now
+  imports from `__Internal`, like the audio engine.
+- **The Mobile package packs for Android again** when a local MT3 build is lying around:
+  `Mt3/bin` and `Mt3/obj` are out of the project's item globs.
+
 ## 4.0.9-preview.7 — 2026-10-07
 
 ### Changed

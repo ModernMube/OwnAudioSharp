@@ -9,7 +9,7 @@
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
-    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;Mt3\bin\**;Mt3\obj\**</DefaultItemExcludes>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.StartsWith('net10.0-android'))">24.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.StartsWith('net10.0-ios'))">12.2</SupportedOSPlatformVersion>
   </PropertyGroup>
@@ -19,9 +19,9 @@
     <GeneratePackageOnBuild Condition="'$(BuildMobile)' != 'true'">false</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\artifacts\local-packages\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
-    <Version>4.0.9-preview.7</Version>
+    <Version>4.0.9-preview.8</Version>
     <Authors>ModernMube</Authors>
-    <Description>Cross-platform audio engine for .NET mobile apps (Android, iOS), built on a native Rust core. Playback, recording, multi-track mixing, effects, VST3 hosting and matchering, without the ONNX-based analysis features (no chord detection, no note transcription). No UI framework dependency and no visual controls, so it works with any UI stack. AOT-compatible and trimmable.</Description>
+    <Description>Cross-platform audio engine for .NET mobile apps (Android, iOS), built on a native Rust core. Playback, recording, multi-track mixing, effects, VST3 hosting, matchering and MIDI (ports, files, clock), without the ONNX-based analysis features (no chord detection, no note transcription). No UI framework dependency and no visual controls, so it works with any UI stack. AOT-compatible and trimmable.</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -55,6 +55,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime" />
     <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" PrivateAssets="all" IncludeAssets="runtime" />
+    <!-- MIDI ships inside this package: on iOS its exports live in libownaudio_ffi.a, a second
+         static archive would bring a second Rust std. The project packs on its own too, not here. -->
+    <ProjectReference Include="..\Midi\OwnAudio.Midi.csproj" PrivateAssets="all" IncludeAssets="runtime"
+                      AdditionalProperties="GeneratePackageOnBuild=false" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -67,12 +71,12 @@
 
     <ItemGroup>
       <_EngineAssembly Include="@(ReferenceCopyLocalPaths)"
-                       Condition="'%(Extension)' == '.dll' AND ('%(Filename)' == 'Ownaudio.Core' OR '%(Filename)' == 'OwnAudioRust')" />
+                       Condition="'%(Extension)' == '.dll' AND ('%(Filename)' == 'Ownaudio.Core' OR '%(Filename)' == 'OwnAudioRust' OR '%(Filename)' == 'OwnAudio.Midi')" />
       <BuildOutputInPackage Include="@(_EngineAssembly)" />
     </ItemGroup>
 
-    <Error Condition="'@(_EngineAssembly->Count())' != '2'"
-           Text="OwnAudioSharp.Mobile would ship without its engine assemblies for $(TargetFramework): expected Ownaudio.Core.dll and OwnAudioRust.dll among the resolved references, found '@(_EngineAssembly->'%(Filename)')'. Pack with -p:BuildMobile=true so both projects expose their mobile target framework." />
+    <Error Condition="'@(_EngineAssembly->Count())' != '3'"
+           Text="OwnAudioSharp.Mobile would ship without its engine assemblies for $(TargetFramework): expected Ownaudio.Core.dll, OwnAudioRust.dll and OwnAudio.Midi.dll among the resolved references, found '@(_EngineAssembly->'%(Filename)')'. Pack with -p:BuildMobile=true so all three projects expose their mobile target framework." />
   </Target>
 
   <ItemGroup>
@@ -82,6 +86,10 @@
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\ios-arm64\**\*.*" Pack="true" PackagePath="runtimes\ios-arm64" />
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\iossimulator-arm64\**\*.*" Pack="true" PackagePath="runtimes\iossimulator-arm64" />
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\iossimulator-x64\**\*.*" Pack="true" PackagePath="runtimes\iossimulator-x64" />
+    <!-- Android keeps MIDI in its own shared library, next to the audio one. -->
+    <None Include="..\Midi\runtimes\android-arm\**\*.*" Pack="true" PackagePath="runtimes\android-arm" />
+    <None Include="..\Midi\runtimes\android-arm64\**\*.*" Pack="true" PackagePath="runtimes\android-arm64" />
+    <None Include="..\Midi\runtimes\android-x64\**\*.*" Pack="true" PackagePath="runtimes\android-x64" />
   </ItemGroup>
 
   <ItemGroup>

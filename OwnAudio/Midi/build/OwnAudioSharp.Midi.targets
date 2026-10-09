@@ -1,6 +1,9 @@
 <Project>
 
-  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'ios-arm64'">
+  <!-- With OwnAudioSharp.Mobile in the app the MIDI exports are already in its libownaudio_ffi.a;
+       linking this archive too would bring a second Rust std (duplicate symbols). -->
+
+  <ItemGroup Condition="'$(OwnAudioMidiInMobile)' != 'true' AND '$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'ios-arm64'">
     <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/ios-arm64/native/libownaudio_midi_ffi.a">
       <Kind>Static</Kind>
       <ForceLoad>True</ForceLoad>
@@ -9,7 +12,7 @@
     </NativeReference>
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'iossimulator-arm64'">
+  <ItemGroup Condition="'$(OwnAudioMidiInMobile)' != 'true' AND '$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'iossimulator-arm64'">
     <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/iossimulator-arm64/native/libownaudio_midi_ffi.a">
       <Kind>Static</Kind>
       <ForceLoad>True</ForceLoad>
@@ -18,7 +21,7 @@
     </NativeReference>
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'iossimulator-x64'">
+  <ItemGroup Condition="'$(OwnAudioMidiInMobile)' != 'true' AND '$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'iossimulator-x64'">
     <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/iossimulator-x64/native/libownaudio_midi_ffi.a">
       <Kind>Static</Kind>
       <ForceLoad>True</ForceLoad>

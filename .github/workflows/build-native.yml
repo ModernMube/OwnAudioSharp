@@ -322,15 +322,15 @@ jobs:
 
       - name: Build ios-arm64 (device)
         working-directory: OwnAudioEngineRust
-        run: cargo build --release --target aarch64-apple-ios -p ownaudio-ffi
+        run: cargo build --release --target aarch64-apple-ios -p ownaudio-ffi --features midi
 
       - name: Build iossimulator-arm64
         working-directory: OwnAudioEngineRust
-        run: cargo build --release --target aarch64-apple-ios-sim -p ownaudio-ffi
+        run: cargo build --release --target aarch64-apple-ios-sim -p ownaudio-ffi --features midi
 
       - name: Build iossimulator-x64
         working-directory: OwnAudioEngineRust
-        run: cargo build --release --target x86_64-apple-ios -p ownaudio-ffi
+        run: cargo build --release --target x86_64-apple-ios -p ownaudio-ffi --features midi
 
       - name: Collect artifacts
         run: |
@@ -339,6 +339,7 @@ jobs:
           cp OwnAudioEngineRust/target/x86_64-apple-darwin/release/libownaudio_ffi.dylib  artifacts/osx-x64/
           cp OwnAudioEngineRust/target/aarch64-apple-darwin/release/libownaudio_ffi.dylib artifacts/osx-arm64/
           # iOS ships as static archives (.a) linked via NativeReference: device + both simulators.
+          # They carry the MIDI exports too (--features midi): one archive, one Rust std in the app.
           cp OwnAudioEngineRust/target/aarch64-apple-ios/release/libownaudio_ffi.a     artifacts/ios-arm64/native/
           cp OwnAudioEngineRust/target/aarch64-apple-ios-sim/release/libownaudio_ffi.a artifacts/iossimulator-arm64/native/
           cp OwnAudioEngineRust/target/x86_64-apple-ios/release/libownaudio_ffi.a      artifacts/iossimulator-x64/native/

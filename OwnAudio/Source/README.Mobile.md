@@ -18,6 +18,7 @@ OwnAudioSharp.Mobile is a professional-grade audio engine providing high-perform
   - Built-in effects and DSP routines
   - **Channel Routing**: place each source on chosen outputs of a multi-channel interface, including fan-out (one signal onto several outputs) and a master chain scoped to the main pair
   - **WAV Writing**: record the mix while it plays, bounce it offline, or stream any source to disk yourself with `WaveFileWriter`
+- **MIDI included**: the `OwnAudio.Midi` API (ports, Standard MIDI Files, clock) comes in this package — do not add `OwnAudioSharp.Midi` next to it. On iOS the MIDI exports live in the same static library as the audio engine (one Rust runtime in the app, CoreMIDI linked by the package); on Android MIDI files and the clock work, the hardware ports are a stub.
 
 ## Quick Start
 

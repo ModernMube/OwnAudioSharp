@@ -16,4 +16,4 @@ thiserror = "1"
 # module falls back to a stub (see src/port_android.rs); file and clock
 # functionality remain fully available.
 [target.'cfg(not(target_os = "android"))'.dependencies]
-midir = "0.10"
+midir = "0.11"

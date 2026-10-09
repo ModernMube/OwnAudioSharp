@@ -1,11 +1,17 @@
 <Project>
 
+  <!-- libownaudio_ffi.a carries the MIDI exports as well; OwnAudioSharp.Midi reads this and does
+       not link its own archive next to it. -->
+  <PropertyGroup>
+    <OwnAudioMidiInMobile>true</OwnAudioMidiInMobile>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'ios-arm64'">
     <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/ios-arm64/native/libownaudio_ffi.a">
       <Kind>Static</Kind>
       <ForceLoad>True</ForceLoad>
       <SmartLink>False</SmartLink>
-      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation CoreMIDI Foundation</Frameworks>
     </NativeReference>
   </ItemGroup>
 
@@ -14,7 +20,7 @@
       <Kind>Static</Kind>
       <ForceLoad>True</ForceLoad>
       <SmartLink>False</SmartLink>
-      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation CoreMIDI Foundation</Frameworks>
     </NativeReference>
   </ItemGroup>
 
@@ -23,7 +29,7 @@
       <Kind>Static</Kind>
       <ForceLoad>True</ForceLoad>
       <SmartLink>False</SmartLink>
-      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation CoreMIDI Foundation</Frameworks>
     </NativeReference>
   </ItemGroup>
 

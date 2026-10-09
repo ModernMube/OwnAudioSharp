@@ -16,11 +16,16 @@ default = []
 # The SDK is available under a dual licence (proprietary + GPLv2).
 # See: https://www.steinberg.net/developers/
 asio = ["cpal/asio"]
+# Links the MIDI FFI (ownaudio_midi_* exports) into this library. The iOS builds turn it on:
+# there both ship as static archives, and two of them would each carry a Rust std and clash in
+# the app's link. Desktop and Android keep the separate ownaudio_midi_ffi library.
+midi = ["dep:ownaudio-midi-ffi"]
 
 [dependencies]
 ownaudio-core = { path = "../ownaudio-core" }
 ownaudio-soundtouch = { path = "../ownaudio-soundtouch" }
 cpal = "0.18"
+ownaudio-midi-ffi = { path = "../../OwnAudio/Midi/rust-midi/ownaudio-midi-ffi", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 ndk-context = "0.1"
