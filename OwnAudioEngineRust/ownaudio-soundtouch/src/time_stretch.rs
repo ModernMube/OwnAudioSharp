@@ -330,8 +330,11 @@ impl TimeStretch {
         // comb-filter the passthrough (an audible phaser), and — because the shift is sticky — a
         // track that was time-stretched and then returned to unity would never recover its clarity.
         // Skipping the search keeps unity transparent and lets such a track heal immediately.
+        // The join has to sit mid-window though: the first sequence already stepped the input
+        // back by half a seek window, expecting the search to land there. Join at 0 and every
+        // sequence after it replays that half window, so the track runs 9 ms behind its clock.
         if (self.tempo - 1.0).abs() < 1e-6 {
-            return 0;
+            return (self.seek_length + 1) / 2;
         }
         if self.quick_seek {
             self.seek_best_overlap_position_quick(ref_pos)

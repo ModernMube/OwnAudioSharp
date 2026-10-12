@@ -129,6 +129,55 @@ fn unity_settings_reproduce_duration_mono() {
     );
 }
 
+/// A metronome bypasses the stretch, the file tracks don't — any delay here puts the click
+/// ahead of the music. Clicks over noise, so every join has something to line up with.
+#[test]
+fn unity_adds_no_delay() {
+    for rate in [44100u32, 48000] {
+        let mut st = SoundTouchProcessor::new();
+        st.set_sample_rate(rate).unwrap();
+        st.set_channels(1).unwrap();
+
+        let period = 9973usize;
+        let mut seed = 7u32;
+        let input: Vec<f32> = (0..rate as usize * 4)
+            .map(|i| {
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                if i % period == 0 {
+                    1.0
+                } else {
+                    ((seed >> 8) as f32 / 16_777_216.0 - 0.5) * 0.2
+                }
+            })
+            .collect();
+
+        let mut out = Vec::new();
+        let mut scratch = vec![0.0f32; 4096];
+        for block in input.chunks(1024) {
+            st.put_samples(block, block.len()).unwrap();
+            while let n @ 1.. = st.receive_samples(&mut scratch, 4096) {
+                out.extend_from_slice(&scratch[..n]);
+            }
+        }
+
+        let clicks: Vec<usize> = out
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.abs() > 0.6)
+            .map(|(i, _)| i)
+            .collect();
+        assert!(clicks.len() > 10, "{rate} Hz: lost the clicks");
+
+        // 44.1k comes out one frame late from the very first click, before any join, so
+        // that frame isn't the WSOLA's; what matters is that no join adds to it
+        let lag = clicks[0];
+        assert!(lag <= 1, "{rate} Hz: {lag} frames late");
+        for (k, at) in clicks.iter().enumerate() {
+            assert_eq!(*at, lag + k * period, "{rate} Hz: click {k} moved");
+        }
+    }
+}
+
 #[test]
 fn ratio_matches_reported_value() {
     let mut st = SoundTouchProcessor::new();
