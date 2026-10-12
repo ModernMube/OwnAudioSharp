@@ -3,6 +3,26 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.10-preview.1 — 2026-10-12
+
+### Fixed
+
+- **A track at unity tempo no longer runs behind its clock.** At tempo 1.0 the stretch skips its
+  overlap search and joined each sequence at offset 0, but the first sequence had already stepped
+  the input back by half a seek window. Every sequence after it replayed that half window, so a
+  track through the stretch stage played about 9 ms late against anything that bypasses it — the
+  metronome click landed ahead of the music. The join now sits mid-window, and no join moves the
+  output any more at 44.1 or 48 kHz.
+
+## 4.0.9 — 2026-10-10
+
+The preview line closes here — nothing has landed since `4.0.9-preview.8` but a rustfmt pass over
+the MIDI crates. What the release brings over 4.0.8: `OwnCompressorEffect`, `OwnDelayEffect` and
+`OwnDynamicAmpEffect`, native in the Rust engine too, with matchering rebuilt on them and measuring
+loudness in LUFS; chord detection that follows the beat and names inversions; Windows natives
+that always carry ASIO; and an `OwnAudioSharp.Mobile` without Avalonia that ships MIDI on Android
+and iOS. The sections below have it in detail.
+
 ## 4.0.9-preview.8 — 2026-10-09
 
 ### Changed
