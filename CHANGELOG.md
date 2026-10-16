@@ -3,6 +3,37 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.10-preview.3 — 2026-10-16
+
+### Changed
+
+- **`cpal` 0.18.1 → 0.18.2** in the engine. Mostly backend fixes: WASAPI no longer panics when the
+  device is lost and packs 24-bit samples into the right bits, CoreAudio no longer plays stale audio
+  when a callback fills only part of its buffer, iOS streams resume after an audio session
+  interruption, and stream timestamps stay monotonic across device changes.
+- **Symphonia 0.5 → 0.6** for decoding. The supported formats stay the same; what changes is how
+  much a bad file can do. A long list of panics found by fuzzing is fixed, and the demuxers no longer
+  allocate whatever a crafted header asks for. The Matroska demuxer and parts of the MP4 one, which
+  M4A goes through, were rewritten. Gapless trimming moved into the decoders, and the end of the
+  stream is now signalled apart from a read error.
+
+### Fixed
+
+- **VBR MP3 durations from a Xing/Info or VBRI header that sits in a CRC-protected frame.** That
+  header used to be skipped, so the duration was estimated and seeking could land off.
+- **Silent sections of an MP3 are decoded again.** Under certain conditions Symphonia 0.5 skipped
+  them.
+- **Seeking stays sample-accurate under the new gapless handling.** The frames dropped after a seek
+  are now counted from each decoded packet's own timestamp, so it holds when the decoder trims the
+  encoder delay or the MP3 reader steps back a few frames for its bit reservoir. Matroska
+  timestamps are converted from the file's timestamp scale (1 ms by default) instead of being read
+  as frames.
+- **An xrun no longer counts as a stream fault.** cpal reports buffer under- and overruns through
+  the stream error callback — on ALSA, PulseAudio, JACK and ASIO already, and since 0.18.2 on
+  CoreAudio, AAudio, PipeWire and WASAPI capture too. Each one was recorded as a `BackendSpecific`
+  fault, so a single dropout raised `AudioMixer.StreamFaulted` and logged a fatal error. Xruns are
+  left out now; device loss and backend failures are reported as before.
+
 ## 4.0.10-preview.2 — 2026-10-16
 
 ### Fixed
