@@ -189,8 +189,9 @@ impl AudioEngine {
         let err_fn = {
             let error_state = Arc::clone(&error_state);
             move |e: cpal::Error| {
-                error_state.record(&e);
-                eprintln!("[ownaudio-core] output stream error: {e}");
+                if error_state.record(&e) {
+                    eprintln!("[ownaudio-core] output stream error: {e}");
+                }
             }
         };
 
@@ -426,8 +427,9 @@ impl AudioEngine {
         let err_fn = {
             let error_state = Arc::clone(&error_state);
             move |e: cpal::Error| {
-                error_state.record(&e);
-                eprintln!("[ownaudio-core] input stream error: {e}");
+                if error_state.record(&e) {
+                    eprintln!("[ownaudio-core] input stream error: {e}");
+                }
             }
         };
 

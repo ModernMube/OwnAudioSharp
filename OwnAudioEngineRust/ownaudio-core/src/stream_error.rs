@@ -73,8 +73,14 @@ impl StreamErrorState {
     /// so the control side treats them uniformly as "the stream stopped and must
     /// be reopened"; anything else is reported as
     /// [`StreamErrorKind::BackendSpecific`].
-    pub fn record(&self, err: &cpal::Error) {
+    ///
+    /// An xrun is a glitch, not a fault — the stream keeps running — so it is
+    /// left out entirely. Since cpal 0.18.2 CoreAudio, AAudio, PipeWire and WASAPI
+    /// capture report every one of them, and counting them would raise a fault
+    /// per dropout. Returns `false` for those.
+    pub fn record(&self, err: &cpal::Error) -> bool {
         let kind = match err.kind() {
+            cpal::ErrorKind::Xrun => return false,
             cpal::ErrorKind::DeviceNotAvailable
             | cpal::ErrorKind::HostUnavailable
             | cpal::ErrorKind::StreamInvalidated => StreamErrorKind::DeviceNotAvailable,
@@ -82,6 +88,7 @@ impl StreamErrorState {
         };
         self.kind.store(kind as u32, Ordering::Release);
         self.count.fetch_add(1, Ordering::AcqRel);
+        true
     }
 
     /// Returns the most recently recorded error kind.
@@ -101,5 +108,30 @@ impl StreamErrorState {
 impl Default for StreamErrorState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xrun_is_not_a_fault() {
+        let state = StreamErrorState::new();
+        assert!(!state.record(&cpal::Error::new(cpal::ErrorKind::Xrun)));
+        assert_eq!(state.kind(), StreamErrorKind::None);
+        assert_eq!(state.count(), 0);
+    }
+
+    #[test]
+    fn device_loss_and_backend_errors_are_counted() {
+        let state = StreamErrorState::new();
+
+        assert!(state.record(&cpal::Error::new(cpal::ErrorKind::StreamInvalidated)));
+        assert_eq!(state.kind(), StreamErrorKind::DeviceNotAvailable);
+
+        assert!(state.record(&cpal::Error::new(cpal::ErrorKind::BackendError)));
+        assert_eq!(state.kind(), StreamErrorKind::BackendSpecific);
+        assert_eq!(state.count(), 2);
     }
 }
