@@ -114,6 +114,30 @@ public sealed class AudioMixerRustNativeTrackEffectTests : IDisposable
     }
 
     /// <summary>
+    /// The mock engine never drains the command queue, so piling effects on fills it — the same
+    /// wall thirty tracks of effects hit at one Play. It has to defer, not throw out of AddEffect
+    /// or the tick, and a removal still has to land.
+    /// </summary>
+    [Fact]
+    public void FullCommandQueue_DefersTheChainInsteadOfThrowing()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+
+        var fileSource = new FileSource(_wavPath);
+        var wrapped = new SourceWithEffects(fileSource);
+        mixer.AddSource(wrapped);
+
+        for (int i = 0; i < 400; i++)
+            wrapped.Invoking(w => w.AddEffect(new CompressorEffect())).Should().NotThrow();
+
+        mixer.Invoking(m => m.ReconcileRustTrackEffectsOnce()).Should().NotThrow("a full queue is not a tick error");
+        fileSource.RustTrack!.Effects.Effects.Count.Should().BeLessThan(400, "the queue really did fill up");
+
+        IEffectProcessor _first = wrapped.GetEffects()[0];
+        wrapped.Invoking(w => w.RemoveEffect(_first)).Should().NotThrow();
+    }
+
+    /// <summary>
     /// Same for the master bus, and the effect must not be left on the managed list either.
     /// </summary>
     [Fact]

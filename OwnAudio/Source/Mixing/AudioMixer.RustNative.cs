@@ -152,7 +152,8 @@ public sealed partial class AudioMixer
 
         /// <summary>
         /// Pushes one param to the native twin, skipping unchanged values — this is the
-        /// flood guard for the lock-free command queue.
+        /// flood guard for the lock-free command queue. Only noted as sent once it got in,
+        /// a full queue would otherwise lose the value for good.
         /// </summary>
         /// <param name="paramId"></param>
         /// <param name="value"></param>
@@ -161,12 +162,12 @@ public sealed partial class AudioMixer
             if (LastParams.TryGetValue(paramId, out float _last) && _last.Equals(value))
                 return;
 
-            LastParams[paramId] = value;
-
             if (_masterChain is not null)
                 _masterChain.SetParam(Native, paramId, value);
             else
                 _trackChain?.SetParam(Native, paramId, value);
+
+            LastParams[paramId] = value;
         }
     }
 

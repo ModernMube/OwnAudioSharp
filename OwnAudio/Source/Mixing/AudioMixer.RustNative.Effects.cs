@@ -4,6 +4,7 @@ using System.Threading;
 using Logger;
 using Ownaudio.Audio.Tracks;
 using Ownaudio.Safe;
+using Ownaudio.Safe.Exceptions;
 using OwnaudioNET.Core;
 using OwnaudioNET.Effects.VST;
 using OwnaudioNET.Engine;
@@ -121,7 +122,8 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// One mirroring pass over every paired master effect.
+    /// One mirroring pass over every paired master effect. A full queue just leaves the
+    /// unsent params for the next tick.
     /// </summary>
     internal void MirrorRustMasterEffectsOnce()
     {
@@ -130,9 +132,26 @@ public sealed partial class AudioMixer
             if (_rustSession is null)
                 return;
 
-            foreach (var pair in _rustMasterEffects)
-                _mirrorPair(pair);
+            try
+            {
+                foreach (var pair in _rustMasterEffects)
+                    _mirrorPair(pair);
+            }
+            catch (OwnAudioException ex) when (_isQueueFull(ex)) { }
         }
+    }
+
+    /// <summary>
+    /// Set while the track effect pass keeps bouncing off a full queue, so the log gets one line a streak.
+    /// </summary>
+    private bool _rustQueueWasFull;
+
+    private static bool _isQueueFull(OwnAudioException ex) => ex.Message.Contains("command queue is full");
+
+    private void _noteQueueFull()
+    {
+        if (!_rustQueueWasFull) Log.Info("[Mixer] Command queue full, the effect chains catch up on the next tick");
+        _rustQueueWasFull = true;
     }
 
     /// <summary>
@@ -149,8 +168,8 @@ public sealed partial class AudioMixer
         int _generation = pair.Managed.ResetGeneration;
         if (_generation != pair.LastResetGeneration)
         {
-            pair.LastResetGeneration = _generation;
             pair.ResetNative();
+            pair.LastResetGeneration = _generation;
         }
 
         RustEffectAdapters.Mirror(pair.Managed, pair.Sink);
@@ -159,27 +178,41 @@ public sealed partial class AudioMixer
     /// <summary>
     /// Reconciles every wrapper's effect list onto its native track chain and mirrors the
     /// params. Runs on the tick, and straight away on the caller thread whenever a wrapper's
-    /// chain is edited.
+    /// chain is edited. A full command queue (thirty tracks of effects at one Play) is not an
+    /// error: that track's stale CachedVersion keeps the rest pending for the next tick. The
+    /// other tracks still get their pass — a removal must not wait behind someone else's add.
     /// </summary>
     internal void ReconcileRustTrackEffectsOnce()
     {
         lock (_rustSessionLock)
         {
+            bool _full = false;
+
             foreach (RustTrackEffectRouting routing in _rustEffectSources)
             {
                 AudioTrack? _track = routing.Backing.RustTrack;
                 if (_track is null) continue;
 
-                int _version = routing.Source.EffectsVersion;
-                if (_version != routing.CachedVersion)
+                try
                 {
-                    _rebuildTrackChain(routing, _track.Effects);
-                    routing.CachedVersion = _version;
-                }
+                    int _version = routing.Source.EffectsVersion;
+                    if (_version != routing.CachedVersion)
+                    {
+                        _rebuildTrackChain(routing, _track.Effects);
+                        routing.CachedVersion = _version;
+                    }
 
-                foreach (var pair in routing.Pairs)
-                    _mirrorPair(pair);
+                    foreach (var pair in routing.Pairs)
+                        _mirrorPair(pair);
+                }
+                catch (OwnAudioException ex) when (_isQueueFull(ex))
+                {
+                    _full = true;
+                }
             }
+
+            if (_full) _noteQueueFull();
+            else _rustQueueWasFull = false;
         }
     }
 
