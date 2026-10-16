@@ -3,6 +3,18 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.10-preview.2 — 2026-10-16
+
+### Fixed
+
+- **A full command queue no longer fails the control tick.** Thirty tracks with five effects each,
+  started by one Play, put more on the 1024-slot queue than one render block drains, and the next
+  effect add threw out of the tick (`Rust-native control sync tick failed`, logged as an error) or
+  out of `SourceWithEffects.AddEffect`. The rebuild now stops for that track and picks up on the
+  next tick, and the other tracks still get their pass, so a removal never waits behind someone
+  else's add. A parameter or reset the queue turned away is sent again instead of being marked as
+  delivered — before, that value was lost until it changed again.
+
 ## 4.0.10-preview.1 — 2026-10-12
 
 ### Fixed
