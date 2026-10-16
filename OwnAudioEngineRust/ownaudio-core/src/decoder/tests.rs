@@ -297,3 +297,31 @@ fn symphonia_decodes_aac_in_m4a() {
 fn symphonia_decodes_alac_in_m4a() {
     assert_decodes_as_mono_tone(&fixture_path("alac_mono.m4a"));
 }
+
+/// Seeks a mono fixture and checks exactly the tail past the target comes out.
+/// The decoder's gapless trim and our post-seek drop both shift the count, so
+/// any disagreement between them shows up here as a short or long tail.
+fn assert_seek_leaves_exact_tail(path: &str) {
+    let full = drain_backend(&mut SymphoniaBackend::open(path, 0, 0).expect("open")).len();
+
+    let target = 20_000;
+    let mut backend = SymphoniaBackend::open(path, 0, 0).expect("open");
+    backend.seek(target as u64).expect("seek");
+    let rest = drain_backend(&mut backend).len();
+
+    let expected = full - target;
+    assert!(
+        rest.abs_diff(expected) <= 2,
+        "{rest} frames after seeking to {target}, expected {expected} (±2)"
+    );
+}
+
+#[test]
+fn aac_seek_leaves_exact_tail() {
+    assert_seek_leaves_exact_tail(&fixture_path("aac_mono.m4a"));
+}
+
+#[test]
+fn alac_seek_leaves_exact_tail() {
+    assert_seek_leaves_exact_tail(&fixture_path("alac_mono.m4a"));
+}

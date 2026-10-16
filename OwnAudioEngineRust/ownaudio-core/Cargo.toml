@@ -21,7 +21,7 @@ ownaudio-soundtouch = { path = "../ownaudio-soundtouch" }
 # runtime, so the native library loads on every platform without FFmpeg.
 # This is the only decoder in the product - the managed side has no FFmpeg
 # fallback behind it since 4.0.
-symphonia = { version = "0.5", features = [
+symphonia = { version = "0.6", features = [
     "mp3", "flac", "wav", "pcm", "adpcm", "ogg", "vorbis", "aac", "alac", "isomp4", "aiff",
 ] }
 

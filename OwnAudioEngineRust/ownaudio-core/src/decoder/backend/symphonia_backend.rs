@@ -5,16 +5,18 @@
 //! is - anything outside that list fails to open.
 
 use std::fs::File;
+use std::io::ErrorKind;
 use std::path::Path;
 
-use symphonia::core::audio::{SampleBuffer, SignalSpec};
-use symphonia::core::codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL};
+use symphonia::core::audio::{AudioSpec, GenericAudioBufferRef};
+use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymError;
-use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
+use symphonia::core::formats::probe::Hint;
+use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
-use symphonia::core::units::Time;
+use symphonia::core::packet::Packet;
+use symphonia::core::units::{Time, TimeBase};
 
 use crate::decoder::stream_info::{AudioStreamInfo, DecoderReadResult};
 use crate::decoder::AudioDecoderBackend;
@@ -25,10 +27,13 @@ use super::resample::StreamResampler;
 /// Symphonia-backed streaming decoder.
 pub(crate) struct SymphoniaBackend {
     format: Box<dyn FormatReader>,
-    decoder: Box<dyn Decoder>,
+    decoder: Box<dyn AudioDecoder>,
     track_id: u32,
+    /// Tick length of the track's timestamps, `None` reads as one tick per source frame.
+    time_base: Option<TimeBase>,
 
     source_channels: usize,
+    source_rate: u32,
     output_channels: usize,
     output_rate: u32,
 
@@ -37,8 +42,8 @@ pub(crate) struct SymphoniaBackend {
     /// Container frame count scaled to the output rate, `None` when the container is silent.
     total_output_frames: Option<u64>,
 
-    /// Reused interleaved-`f32` view over the most recently decoded packet.
-    sample_buf: Option<SampleBuffer<f32>>,
+    /// Reused interleaved-`f32` copy of the most recently decoded packet.
+    sample_buf: Vec<f32>,
 
     /// Optional sample-rate converter, present only when the requested output
     /// rate differs from the source rate.
@@ -55,9 +60,9 @@ pub(crate) struct SymphoniaBackend {
     /// `true` once the source stream is exhausted.
     eof: bool,
 
-    /// Source frames still to be discarded after a coarse seek so the output is
-    /// sample-accurate (`required_ts - actual_ts` from the last seek).
-    skip_source_frames: u64,
+    /// Track timestamp the last seek asked for. Decoded frames before it are dropped,
+    /// cleared once a packet reaches it.
+    seek_ts: Option<i64>,
 }
 
 impl SymphoniaBackend {
@@ -70,44 +75,52 @@ impl SymphoniaBackend {
             hint.with_extension(ext);
         }
 
-        let fmt_opts = FormatOptions {
-            enable_gapless: true,
-            ..Default::default()
-        };
-        let meta_opts = MetadataOptions::default();
-
-        let probed = symphonia::default::get_probe()
-            .format(&hint, mss, &fmt_opts, &meta_opts)
+        let mut format = symphonia::default::get_probe()
+            .probe(
+                &hint,
+                mss,
+                FormatOptions::default(),
+                MetadataOptions::default(),
+            )
             .map_err(map_sym_err_open)?;
 
-        let mut format = probed.format;
-
+        let no_track =
+            || AudioError::DecoderUnsupported(format!("{path}: no decodable audio track"));
         let track = format
-            .tracks()
-            .iter()
-            .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
-            .ok_or_else(|| {
-                AudioError::DecoderUnsupported(format!("{path}: no decodable audio track"))
-            })?;
+            .default_track(TrackType::Audio)
+            .ok_or_else(no_track)?;
 
         let track_id = track.id;
-        let params = track.codec_params.clone();
+        let time_base = track.time_base;
+        let num_frames = track.num_frames;
+        let params = track
+            .codec_params
+            .as_ref()
+            .and_then(|p| p.audio())
+            .ok_or_else(no_track)?
+            .clone();
         let bit_depth = params.bits_per_sample.unwrap_or(0);
 
+        // Gapless is on by default: the decoder trims encoder delay and padding itself.
         let mut decoder = symphonia::default::get_codecs()
-            .make(&params, &DecoderOptions::default())
+            .make_audio_decoder(&params, &AudioDecoderOptions::default())
             .map_err(map_sym_err_open)?;
 
-        // MP4/M4A doesn't populate `codec_params.channels` on the track — only
-        // the decoder knows the real layout (AAC's ASC, ALAC's magic cookie).
-        // Decode the first packet up front so `source_channels`/`source_rate`
-        // reflect reality instead of a guessed default.
+        // MP4/M4A doesn't populate the channels on the track — only the decoder
+        // knows the real layout (AAC's ASC, ALAC's magic cookie). Decode the
+        // first packet up front so `source_channels`/`source_rate` reflect
+        // reality instead of a guessed default.
         let peeked = peek_first_packet(format.as_mut(), decoder.as_mut(), track_id)?;
 
         let (source_channels, source_rate) = match &peeked {
-            Some((_, spec)) => (spec.channels.count().max(1), spec.rate.max(1)),
+            Some((_, spec)) => (spec.channels().count().max(1), spec.rate().max(1)),
             None => (
-                params.channels.map(|c| c.count()).unwrap_or(2).max(1),
+                params
+                    .channels
+                    .as_ref()
+                    .map(|c| c.count())
+                    .unwrap_or(2)
+                    .max(1),
                 params.sample_rate.unwrap_or(44_100).max(1),
             ),
         };
@@ -123,12 +136,12 @@ impl SymphoniaBackend {
             target_sample_rate
         };
 
-        let duration_ms = match params.n_frames {
-            Some(frames) if source_rate > 0 => frames.saturating_mul(1000) / source_rate as u64,
-            _ => AudioStreamInfo::UNKNOWN_DURATION,
+        let duration_ms = match num_frames {
+            Some(frames) => frames.saturating_mul(1000) / source_rate as u64,
+            None => AudioStreamInfo::UNKNOWN_DURATION,
         };
 
-        let total_output_frames = params.n_frames.map(|frames| {
+        let total_output_frames = num_frames.map(|frames| {
             ((frames as u128 * output_rate as u128 + source_rate as u128 / 2) / source_rate as u128)
                 as u64
         });
@@ -154,25 +167,27 @@ impl SymphoniaBackend {
             format,
             decoder,
             track_id,
+            time_base,
             source_channels,
+            source_rate,
             output_channels,
             output_rate,
             stream_info,
             total_output_frames,
-            sample_buf: None,
+            sample_buf: Vec::new(),
             resampler,
             residual: Vec::new(),
             residual_pos: 0,
             output_frame_pos: 0,
             eof: peeked.is_none(),
-            skip_source_frames: 0,
+            seek_ts: None,
         };
 
         // Feed the packet consumed by `peek_first_packet` through the normal
         // channel/rate conversion pipeline so it isn't lost.
-        if let Some((sample_buf, _spec)) = peeked {
+        if let Some((samples, _spec)) = peeked {
             push_decoded(
-                sample_buf.samples(),
+                &samples,
                 this.source_channels,
                 this.output_channels,
                 this.resampler.as_mut(),
@@ -191,55 +206,43 @@ impl SymphoniaBackend {
             self.residual.clear();
             self.residual_pos = 0;
 
-            let packet = match self.format.next_packet() {
-                Ok(p) => p,
-                Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                    // Drain any tail held inside the resampler before reporting EOF.
-                    if let Some(rs) = self.resampler.as_mut() {
-                        rs.flush(&mut self.residual);
-                    }
-                    return Ok(self.residual.is_empty());
-                }
-                Err(SymError::ResetRequired) => {
-                    self.decoder.reset();
-                    continue;
-                }
-                Err(e) => return Err(map_sym_err_read(e)),
+            let Some(packet) =
+                next_track_packet(self.format.as_mut(), self.decoder.as_mut(), self.track_id)?
+            else {
+                return Ok(drain_tail(self.resampler.as_mut(), &mut self.residual));
             };
 
-            if packet.track_id() != self.track_id {
-                continue;
-            }
+            // pts belongs to the first decoded frame, the decoder trims `trim_start` off it.
+            let first_ts = packet
+                .pts
+                .get()
+                .saturating_add(packet.trim_start.get() as i64);
 
             let decoded = match self.decoder.decode(&packet) {
                 Ok(d) => d,
                 // Decode errors on a single packet are recoverable: skip it.
                 Err(SymError::DecodeError(_)) => continue,
-                Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                    if let Some(rs) = self.resampler.as_mut() {
-                        rs.flush(&mut self.residual);
-                    }
-                    return Ok(self.residual.is_empty());
+                Err(SymError::IoError(e)) if e.kind() == ErrorKind::UnexpectedEof => {
+                    return Ok(drain_tail(self.resampler.as_mut(), &mut self.residual));
                 }
                 Err(e) => return Err(map_sym_err_read(e)),
             };
+            copy_interleaved(&decoded, &mut self.sample_buf);
 
-            let spec = *decoded.spec();
-            let capacity = decoded.capacity() as u64;
-            let sample_buf = self
-                .sample_buf
-                .get_or_insert_with(|| SampleBuffer::new(capacity, spec));
-            sample_buf.copy_interleaved_ref(decoded);
-            let mut interleaved = sample_buf.samples();
+            let mut interleaved = &self.sample_buf[..];
 
-            // Discard leading source frames left over from a coarse seek so the
-            // output starts exactly at the requested position.
-            if self.skip_source_frames > 0 {
-                let packet_frames = (interleaved.len() / self.source_channels) as u64;
-                let drop_frames = self.skip_source_frames.min(packet_frames);
-                self.skip_source_frames -= drop_frames;
-                let offset = drop_frames as usize * self.source_channels;
-                interleaved = &interleaved[offset..];
+            if let Some(target) = self.seek_ts {
+                let packet_frames = interleaved.len() / self.source_channels;
+                let behind = ts_to_frames(
+                    target.saturating_sub(first_ts),
+                    self.time_base,
+                    self.source_rate,
+                );
+                let drop_frames = behind.clamp(0, packet_frames as i64) as usize;
+                if drop_frames < packet_frames {
+                    self.seek_ts = None;
+                }
+                interleaved = &interleaved[drop_frames * self.source_channels..];
                 if interleaved.is_empty() {
                     continue;
                 }
@@ -305,7 +308,9 @@ impl AudioDecoderBackend for SymphoniaBackend {
 
     fn seek(&mut self, frame_position: u64) -> Result<()> {
         let seconds = frame_position as f64 / self.output_rate as f64;
-        let time = Time::new(seconds.trunc() as u64, seconds.fract());
+        let time = Time::try_from_secs_f64(seconds).ok_or_else(|| {
+            AudioError::DecoderSeek(format!("frame {frame_position} is out of range"))
+        })?;
 
         let seeked = self
             .format
@@ -318,10 +323,9 @@ impl AudioDecoderBackend for SymphoniaBackend {
             )
             .map_err(map_sym_err_seek)?;
 
-        // Symphonia positions the reader at the start of the packet containing
-        // the target (`actual_ts`); discard the remaining source frames up to
-        // `required_ts` to make the seek sample-accurate.
-        self.skip_source_frames = seeked.required_ts.saturating_sub(seeked.actual_ts);
+        // The reader lands on a packet at or before the target (MP3 even backs up a few
+        // for the bit reservoir); `refill_residual` drops the frames up to `required_ts`.
+        self.seek_ts = Some(seeked.required_ts.get());
 
         self.decoder.reset();
         if let Some(rs) = self.resampler.as_mut() {
@@ -335,45 +339,75 @@ impl AudioDecoderBackend for SymphoniaBackend {
     }
 }
 
-/// Decodes packets for `track_id` until the first non-empty buffer, returning
-/// it (as an owned interleaved `f32` copy) with its [`SignalSpec`], or
-/// `Ok(None)` if the stream ends first. Used at `open()` to learn the real
-/// channel/sample-rate before committing to a guess.
+/// Next packet of `track_id`, `None` once the stream ends. A truncated tail
+/// counts as the end too, so a cut-off file plays up to the cut.
+fn next_track_packet(
+    format: &mut dyn FormatReader,
+    decoder: &mut dyn AudioDecoder,
+    track_id: u32,
+) -> Result<Option<Packet>> {
+    loop {
+        match format.next_packet() {
+            Ok(Some(packet)) if packet.track_id == track_id => return Ok(Some(packet)),
+            Ok(Some(_)) => {}
+            Ok(None) => return Ok(None),
+            Err(SymError::IoError(e)) if e.kind() == ErrorKind::UnexpectedEof => return Ok(None),
+            Err(SymError::ResetRequired) => decoder.reset(),
+            Err(e) => return Err(map_sym_err_read(e)),
+        }
+    }
+}
+
+/// Decodes packets for `track_id` until the first one that decodes, returning
+/// its samples (interleaved `f32`) with its [`AudioSpec`], or `Ok(None)` if the
+/// stream ends first. Used at `open()` to learn the real channel/sample-rate
+/// before committing to a guess.
 fn peek_first_packet(
     format: &mut dyn FormatReader,
-    decoder: &mut dyn Decoder,
+    decoder: &mut dyn AudioDecoder,
     track_id: u32,
-) -> Result<Option<(SampleBuffer<f32>, SignalSpec)>> {
-    loop {
-        let packet = match format.next_packet() {
-            Ok(p) => p,
-            Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Ok(None);
-            }
-            Err(SymError::ResetRequired) => {
-                decoder.reset();
-                continue;
-            }
-            Err(e) => return Err(map_sym_err_read(e)),
-        };
-
-        if packet.track_id() != track_id {
-            continue;
-        }
-
+) -> Result<Option<(Vec<f32>, AudioSpec)>> {
+    while let Some(packet) = next_track_packet(format, decoder, track_id)? {
         let decoded = match decoder.decode(&packet) {
             Ok(d) => d,
             Err(SymError::DecodeError(_)) => continue,
-            Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Ok(None);
-            }
+            Err(SymError::IoError(e)) if e.kind() == ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => return Err(map_sym_err_read(e)),
         };
 
-        let spec = *decoded.spec();
-        let mut sample_buf = SampleBuffer::new(decoded.capacity() as u64, spec);
-        sample_buf.copy_interleaved_ref(decoded);
-        return Ok(Some((sample_buf, spec)));
+        let mut samples = Vec::new();
+        copy_interleaved(&decoded, &mut samples);
+        return Ok(Some((samples, decoded.spec().clone())));
+    }
+
+    Ok(None)
+}
+
+/// Copies `decoded` into `out` as interleaved `f32`, reusing its allocation.
+/// The copy wants the slice sized exactly, so `out` is resized first.
+fn copy_interleaved(decoded: &GenericAudioBufferRef<'_>, out: &mut Vec<f32>) {
+    out.resize(decoded.samples_interleaved(), 0.0);
+    decoded.copy_to_slice_interleaved(out.as_mut_slice());
+}
+
+/// End of stream: pushes whatever the resampler still holds onto `residual`.
+/// Returns `true` when that left nothing to play.
+fn drain_tail(resampler: Option<&mut StreamResampler>, residual: &mut Vec<f32>) -> bool {
+    if let Some(rs) = resampler {
+        rs.flush(residual);
+    }
+    residual.is_empty()
+}
+
+/// Track timestamp ticks to source frames. Audio containers mostly tick at
+/// `1 / rate` already, where this is the identity, but Matroska ticks on its
+/// timestamp scale (1 ms by default).
+fn ts_to_frames(ticks: i64, time_base: Option<TimeBase>, rate: u32) -> i64 {
+    match time_base {
+        Some(tb) => {
+            (ticks as i128 * tb.numer.get() as i128 * rate as i128 / tb.denom.get() as i128) as i64
+        }
+        None => ticks,
     }
 }
 
