@@ -3,6 +3,14 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.10 — 2026-10-23
+
+The preview line closes here — nothing has landed since `4.0.10-preview.3`. What the release brings
+over 4.0.9: Symphonia 0.6 for decoding, with sample-accurate seeking under its gapless handling and
+correct VBR MP3 durations; `cpal` 0.18.2, and xruns no longer reported as stream faults; a full
+native command queue that no longer fails the control tick; and a unity-tempo track that no longer
+runs behind its clock. The sections below have it in detail.
+
 ## 4.0.10-preview.3 — 2026-10-16
 
 ### Changed
