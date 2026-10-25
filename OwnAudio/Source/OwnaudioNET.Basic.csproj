@@ -28,7 +28,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.303" PrivateAssets="All" />
-    <PackageReference Include="OwnAudioVst" Version="1.7.0" />
+    <PackageReference Include="OwnAudioVst" Version="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>
