@@ -149,7 +149,7 @@ jobs:
 
   rust-build-macos:
     name: Rust / macOS (x64 + ARM64 + iOS)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -263,7 +263,7 @@ jobs:
       - rust-build-linux-arm64
       - rust-build-macos
       - rust-build-android
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - uses: actions/checkout@v4

@@ -293,7 +293,7 @@ jobs:
   rust-build-macos:
     name: Rust / macOS (x64 + ARM64 + iOS)
     needs: version
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
 
@@ -552,7 +552,7 @@ jobs:
       - version
       - rust-build-macos
       - rust-build-android
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
 
@@ -703,7 +703,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-14 ]
+        os: [ ubuntu-latest, windows-latest, macos-15 ]
     runs-on: ${{ matrix.os }}
     env:
       OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
