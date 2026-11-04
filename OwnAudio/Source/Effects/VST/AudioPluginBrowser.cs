@@ -7,7 +7,7 @@ using OwnVST3Host;
 namespace OwnaudioNET.Effects.VST
 {
     /// <summary>
-    /// Plugin formats we can host. AudioUnit is macOS only.
+    /// Plugin formats we can host. AudioUnit is macOS and iOS, VST3 desktop only.
     /// </summary>
     [Flags]
     public enum AudioPluginFormat
@@ -69,8 +69,8 @@ namespace OwnaudioNET.Effects.VST
     /// <summary>
     /// Finds installed plugins across every format the native host was built with.
     /// VST3PluginHost.FindPlugins only walks the VST3 directories, and AudioUnits have no
-    /// directory to walk — they live in the macOS component registry — so this is the way in
-    /// when you want both.
+    /// directory to walk — they live in Apple's component registry — so this is the way in
+    /// when you want both, and the only way on iOS.
     /// </summary>
     public static class AudioPluginBrowser
     {
@@ -80,7 +80,7 @@ namespace OwnaudioNET.Effects.VST
         public static bool IsSupported => PluginScanner.IsSupported;
 
         /// <summary>
-        /// AudioUnits exist on macOS only; elsewhere a scan just returns VST3s.
+        /// True on macOS and iOS. Elsewhere a scan just returns VST3s.
         /// </summary>
         public static bool AudioUnitSupported => PluginScanner.AudioUnitSupported;
 

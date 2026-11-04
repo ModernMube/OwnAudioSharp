@@ -493,9 +493,8 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// The good teardown on macOS. After closing the editor we let the CFRunLoop breathe for
-        /// 200 ms so already queued JUCE timer callbacks can finish — unload them underneath and
-        /// you get a SIGSEGV. Elsewhere it is just Dispose.
+        /// The good teardown on macOS. The editor goes away on the main thread, so we give the
+        /// run loop 200 ms before the plugin is freed under it. Elsewhere it is just Dispose.
         /// </summary>
         public async ValueTask DisposeAsync()
         {
@@ -515,7 +514,7 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Blocking teardown. On macOS it sleeps a bit for the same JUCE timer reason —
+        /// Blocking teardown. On macOS it sleeps a bit for the same run loop reason —
         /// use DisposeAsync when you have an async context.
         /// </summary>
         public void Dispose()

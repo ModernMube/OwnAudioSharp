@@ -1,15 +1,31 @@
 # VST
 
-VST3 plugin hosting for OwnAudioSharp. This module lets you load a third-party
-VST3 effect (or instrument), drive its editor, read/write its parameters, and
-insert it into the OwnAudio effect chain as a standard
+VST3 and AudioUnit plugin hosting for OwnAudioSharp. This module lets you load a
+third-party VST3 or AudioUnit effect (or instrument), drive its editor, read/write
+its parameters, and insert it into the OwnAudio effect chain as a standard
 [`IEffectProcessor`](../../Interfaces/IEffectProcessor.cs).
 
 Namespace root: `OwnaudioNET.Effects.VST`
 
-The actual native bridge lives in the **`OwnVST3Host`** / **`OwnVST3Host.NativeWindow`**
-assemblies (`ThreadedVst3Wrapper`, `OwnVst3Wrapper`, `VstEditorController`, …).
-This folder is the managed-side integration layer over that bridge.
+The actual native bridge is the **`OwnAudioVst`** package (2.1.0): the
+`OwnVST3Host` assembly (`ThreadedVst3Wrapper`, `OwnVst3Wrapper`,
+`VstEditorController`, `PluginScanner`, …) over a JUCE-free native library built
+on the VST3 SDK and Apple's `AUAudioUnit`. This folder is the managed-side
+integration layer over that bridge.
+
+## Platforms
+
+| Platform | Formats | Editor |
+| --- | --- | --- |
+| Windows, Linux | VST3 | own window (`OpenEditor`) |
+| macOS | VST3, AudioUnit (v2 and v3) | own window (`OpenEditor`) |
+| iOS / iPadOS 15+ (Mobile package) | AudioUnit: Apple's built-in units and third-party AUv3 extensions, which run out of process | none: `OpenEditor` throws `InvalidOperationException` |
+| Android | — | — |
+
+On iOS the `OwnAudioVst` package brings `ownvst3.xcframework` with it, and a
+`buildTransitive` target embeds it into the `net10.0-ios` app. OwnAudioVst 2.1.0
+can also attach an AudioUnit editor to a view you own (`AttachEditorToView`),
+but `VST3PluginHost` does not expose that yet.
 
 ---
 
@@ -22,6 +38,7 @@ This folder is the managed-side integration layer over that bridge.
 | [VST3BufferConverter.cs](VST3BufferConverter.cs) | Zero-allocation interleaved ↔ planar buffer conversion (VST3 wants planar). |
 | [VST3ParameterInfo.cs](VST3ParameterInfo.cs) | Immutable parameter metadata (id, name, value, range, default). |
 | [VST3PluginInfo.cs](VST3PluginInfo.cs) | Plugin discovery metadata (path, name, vendor, version, flags, param count). |
+| [AudioPluginBrowser.cs](AudioPluginBrowser.cs) | Scanner across both formats (`AudioPluginInfo`, `AudioPluginFormat`), with a persistable scan cache. |
 
 ---
 
@@ -89,9 +106,11 @@ Ready gate can't be skipped.
 ### macOS disposal note
 
 `DisposeAsync` (and `Dispose`) close the editor, then **yield ~200 ms** on macOS
-so queued JUCE `CFRunLoop` timer callbacks can drain before the native library
-unloads. Without that gap those callbacks touch freed memory and `SIGSEGV`.
-Prefer `DisposeAsync` when you have an async context.
+(`Dispose` sleeps ~150 ms) before the plugin is freed. The editor is torn down on
+the main thread, and the gap lets the run loop finish with it first. The gap dates
+from the JUCE backend, where queued `CFRunLoop` timer callbacks crashed with
+`SIGSEGV` without it, and it is kept as a safety margin. Prefer `DisposeAsync`
+when you have an async context.
 
 ---
 
@@ -117,11 +136,11 @@ automatically by `SourceWithEffects.Stop()` / `AudioMixer.Stop()`.
 ### Native (Rust) hosting fast path
 
 Several `internal` members (`CanHostNatively`, `NativePluginHandle`,
-`NativeProcessAudioPointer`, `SetNativeBypass`) let the Rust-native mixer call
-the plugin's `VST3Plugin_ProcessAudio` export directly on the Rust audio thread,
-bypassing the managed `Process` path. In that mode `Enabled` is honored via
-JUCE's `processBlockBypassed` (latency-compensated, no time jump) rather than a
-host-side dry/wet switch.
+`NativeProcessAudioPointer`) let the Rust-native mixer call the plugin's
+`VST3Plugin_ProcessAudio` export directly on the Rust audio thread, bypassing the
+managed `Process` path. In that mode `Enabled` and `Mix` are applied in the
+bridge against the latency-delayed dry path, as described under
+[Threading model](#threading-model), so a bypass flip causes no time jump.
 
 ### Latency
 
@@ -168,13 +187,32 @@ Static helpers on `VST3PluginHost`:
 Prefer `ScanPluginsQuick` on startup; only call `ScanPlugins` when you need the
 full details.
 
+These only walk VST3 folders. AudioUnits live in Apple's component registry and
+have no path to find, so for both formats (and for anything at all on iOS) use
+`AudioPluginBrowser`:
+
+```csharp
+if (!AudioPluginBrowser.IsSupported) return;      // no native plugin host here
+
+var plugins = await AudioPluginBrowser.ScanAsync(AudioPluginFormat.All);  // quick scan
+var host    = await VST3PluginHost.CreateAsync(plugins[0]);               // VST3 or AU
+
+string cache = AudioPluginBrowser.GetCacheXml();  // save it; RestoreCache(cache) skips the next scan
+```
+
+A quick scan leaves the channel counts at -1; `ResolveAsync(info)` loads one
+plugin to fill them in, `deepScan: true` does it for all of them. The loaded
+host reports what it actually got through `Format`, `IsAudioUnit` and
+`Identifier`, and the `Identifier` loads the same plugin again.
+
 ---
 
 ## Gotchas
 
 - Never call `GetProcessor()` before awaiting `InitializeAudioAsync` — it throws.
 - Dispose order is **processor → host**, and only after the audio engine stops.
-- Use `DisposeAsync` on macOS to avoid the JUCE timer-callback crash.
+- Use `DisposeAsync` on macOS; it waits for the editor teardown without blocking.
+- On iOS there is no editor window: check the platform before calling `OpenEditor`.
 - `SetParameter` is not immediate — it lands ~1 audio block later. For instant,
   synchronous updates (state restore) use `SetParametersAsync` /
   `ApplyParametersAsync`.

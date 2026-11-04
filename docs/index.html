@@ -95,7 +95,7 @@
         <span class="feature-chip">♻️ Fully native audio thread</span>
         <span class="feature-chip">📦 Zero external dependencies</span>
         <span class="feature-chip">🎛️ 19 built-in DSP effects</span>
-        <span class="feature-chip">🔌 VST3 plugin hosting</span>
+        <span class="feature-chip">🔌 VST3 &amp; AudioUnit hosting</span>
         <span class="feature-chip">🎹 MIDI I/O · SMF · Clock</span>
         <span class="feature-chip">🌐 Network sync &lt;5&nbsp;ms</span>
         <span class="feature-chip">🎵 MP3 · FLAC · WAV · AAC · ALAC · MP4 · OGG · AIFF</span>
@@ -299,7 +299,7 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
     <div class="card-grid">
       <div class="card"><div class="card-icon">🎚️</div><div class="card-title">Multi-Track Mixing</div><div class="card-desc">Sample-accurate sync via a shared clock, per-track volume, real-time tempo &amp; pitch.</div></div>
       <div class="card"><div class="card-icon">🎛️</div><div class="card-title">19 DSP Effects</div><div class="card-desc">Reverb, OwnReverb (FDN), OwnCompressor, OwnDelay (tape), OwnDynamicAmp (LUFS), EQ (10/30-band), compressor, limiter, delay, chorus and more — per-track or master.</div></div>
-      <div class="card"><div class="card-icon">🔌</div><div class="card-title">VST3 Plugins</div><div class="card-desc">Host VST3 effect plugins with their native cross-platform editor GUI.</div></div>
+      <div class="card"><div class="card-icon">🔌</div><div class="card-title">VST3 &amp; AudioUnit Plugins</div><div class="card-desc">Host VST3 effect plugins with their own editor GUI on the desktop, and AudioUnits on macOS and iOS.</div></div>
       <div class="card"><div class="card-icon">🎙️</div><div class="card-title">Recording</div><div class="card-desc">Low-latency capture with device selection, sample rate and channel control.</div></div>
       <div class="card"><div class="card-icon">🎹</div><div class="card-title">MIDI</div><div class="card-desc">Hardware I/O, SMF file read/write, hardware-accurate 24 PPQN clock — AOT-friendly.</div></div>
       <div class="card"><div class="card-icon">🌐</div><div class="card-title">Network Sync</div><div class="card-desc">Sample-accurate multi-device playback over LAN, &lt;5 ms, with server auto-discovery.</div></div>
@@ -324,7 +324,7 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
         </div>
         <div class="pkg-card">
           <div class="pkg-card-name" style="color:var(--success)">OwnAudioSharp.Mobile</div>
-          <div class="pkg-card-desc">The same feature set built for mobile, mastering included — minus the ONNX-based analysis and the waveform display. No UI framework dependency.</div>
+          <div class="pkg-card-desc">The same feature set built for mobile, mastering included — minus the ONNX-based analysis and the waveform display. No UI framework dependency. Hosts AudioUnits (AUv3) on iOS.</div>
           <div class="pkg-card-size">Android ARM · ARM64 · x64 · iOS ARM64</div>
         </div>
         <div class="pkg-card">
@@ -383,7 +383,7 @@ dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine</code></p
       </a>
       <a href="documents/api-effects.html" class="api-card">
         <div class="api-card-title">4 · Effects &amp; VST3</div>
-        <div class="api-card-desc">19 built-in DSP effects, SmartMaster, VST3 plugin hosting.</div>
+        <div class="api-card-desc">19 built-in DSP effects, SmartMaster, VST3 and AudioUnit plugin hosting.</div>
       </a>
       <a href="documents/api-sync.html" class="api-card">
         <div class="api-card-title">5 · Timeline &amp; Sync</div>

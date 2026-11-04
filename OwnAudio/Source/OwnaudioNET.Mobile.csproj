@@ -21,7 +21,7 @@
     <PackageId>OwnAudioSharp.Mobile</PackageId>
     <Version>4.0.11</Version>
     <Authors>ModernMube</Authors>
-    <Description>Cross-platform audio engine for .NET mobile apps (Android, iOS), built on a native Rust core. Playback, recording, multi-track mixing, effects, VST3 hosting, matchering and MIDI (ports, files, clock), without the ONNX-based analysis features (no chord detection, no note transcription). No UI framework dependency and no visual controls, so it works with any UI stack. AOT-compatible and trimmable.</Description>
+    <Description>Cross-platform audio engine for .NET mobile apps (Android, iOS), built on a native Rust core. Playback, recording, multi-track mixing, effects, AudioUnit (AUv3) plugin hosting on iOS, matchering and MIDI (ports, files, clock), without the ONNX-based analysis features (no chord detection, no note transcription). No UI framework dependency and no visual controls, so it works with any UI stack. AOT-compatible and trimmable.</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

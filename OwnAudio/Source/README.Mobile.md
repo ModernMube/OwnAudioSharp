@@ -14,8 +14,8 @@ OwnAudioSharp.Mobile is a professional-grade audio engine providing high-perform
   - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
   - **Clips on One Track**: `GroupSource` lays several files out on one timeline — a DAW lane sharing one tempo, effect chain and fader, with effect tails ringing across the cuts
   - Audio matchering and mastering
-  - Real-time chord detection
   - Built-in effects and DSP routines
+  - **AudioUnit plugins on iOS / iPadOS 15+**: Apple's built-in units and third-party AUv3 extensions, found with `AudioPluginBrowser.ScanAsync` and loaded with `VST3PluginHost.CreateAsync` into any effect chain. The plugin host framework (`ownvst3.xcframework`) is embedded into the app automatically. iOS has no plugin editor windows, so `OpenEditor` is not available there. There is no plugin hosting on Android.
   - **Channel Routing**: place each source on chosen outputs of a multi-channel interface, including fan-out (one signal onto several outputs) and a master chain scoped to the main pair
   - **WAV Writing**: record the mix while it plays, bounce it offline, or stream any source to disk yourself with `WaveFileWriter`
 - **MIDI included**: the `OwnAudio.Midi` API (ports, Standard MIDI Files, clock) comes in this package — do not add `OwnAudioSharp.Midi` next to it. On iOS the MIDI exports live in the same static library as the audio engine (one Rust runtime in the app, CoreMIDI linked by the package); on Android MIDI files and the clock work, the hardware ports are a stub.

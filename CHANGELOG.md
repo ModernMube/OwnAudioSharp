@@ -3,6 +3,35 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.11 — 2026-11-01
+
+A dependency release: the engine and the OwnAudioSharp API are the same as in 4.0.10. What changes
+is the plugin host underneath — `OwnAudioSharp`, `OwnAudioSharp.Basic` and `OwnAudioSharp.Mobile`
+move from OwnAudioVst 1.7.0 to 2.1.0 (via 2.0.0 in `4.0.11-preview.1`).
+
+### Changed
+
+- **The plugin host has no JUCE in it any more** (OwnAudioVst 2.0.0). A new native library sits
+  behind the same C ABI, so `VST3PluginHost` and `AudioPluginBrowser` work unchanged. VST3 is built
+  directly on the VST3 SDK 3.8.1, and AudioUnits on macOS go through `AUAudioUnit` for v2 and v3
+  units. Saved plugin states (the `VC2!` container of 1.6/1.7 and the raw 1.5.x blobs) and
+  `plugin-cache.xml` keep loading. Editor windows are owned by the native library. The natives are
+  much smaller: the win-x64 DLL went from ~3.1 MB to ~0.4 MB, the macOS dylib from ~18.9 MB to ~1.3 MB.
+- **`OwnAudioSharp.Mobile` hosts AudioUnits on iOS / iPadOS 15+** (OwnAudioVst 2.1.0). This covers
+  Apple's built-in units and third-party AUv3 extensions, which run out of process. They are found
+  through `AudioPluginBrowser` and load with `VST3PluginHost.CreateAsync` like on macOS, and
+  `AudioUnitSupported` is `true` there. `ownvst3.xcframework` is embedded into the app by a
+  `buildTransitive` target. iOS has no plugin windows, so `OpenEditor` throws there. VST3 stays
+  desktop-only, and Android has no plugin host.
+- The macOS native builds run on the `macos-15` runner image. GitHub retires `macos-14`, and the
+  deployment targets did not change.
+
+### Fixed
+
+- On macOS, AudioUnits are created on the main thread, so popup menus no longer stay open in some
+  plugins. Editor teardown is safer, and the editor receives mouse-moved events.
+- The plugin host's native library is found in single-file publishes and in macOS app bundles.
+
 ## 4.0.10 — 2026-10-23
 
 The preview line closes here — nothing has landed since `4.0.10-preview.3`. What the release brings

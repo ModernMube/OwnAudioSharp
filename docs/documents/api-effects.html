@@ -6,7 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Effects &amp; VST3 — OwnAudioSharp</title>
-  <meta name="description" content="The 19 built-in DSP effects, the SmartMaster chain, VST3 plugin hosting and the before/after effect tap in OwnAudioSharp.">
+  <meta name="description" content="The 19 built-in DSP effects, the SmartMaster chain, VST3 and AudioUnit plugin hosting and the before/after effect tap in OwnAudioSharp.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -291,9 +291,9 @@ smartMaster.ApplyConfiguration(config);</code></pre></div>
 
 <!-- VST3 -->
 <h2 id="vst3">VST3 plugins</h2>
-<p>A loaded plugin hands you an <code>IEffectProcessor</code>, so from the mixer's point of view it is no different from a built-in effect — including its own editor window. Effects only; instruments are not supported.</p>
+<p>A loaded plugin hands you an <code>IEffectProcessor</code>, so from the mixer's point of view it is no different from a built-in effect — including its own editor window. Effects only; instruments are not supported. The same <code>VST3PluginHost</code> loads AudioUnits on macOS and iOS — see <a href="#audiounit">AudioUnits &amp; the plugin browser</a>.</p>
 <div class="callout callout-info"><div class="callout-icon">💡</div><p>The order is always the same: <strong>create → check <code>IsEffect</code> → <code>InitializeAudioAsync()</code> → <code>GetProcessor()</code></strong>. Adding a processor before its audio is initialized is the usual reason a plugin does nothing. <a href="recipes.html#fx-live">Full example with error handling →</a></p></div>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET.Effects;
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET.Effects.VST;
 
 // Discover plugins
 List&lt;string&gt;         paths = VST3PluginHost.FindPlugins();
@@ -349,11 +349,47 @@ host.Dispose();</code></pre></div>
     <tr><td><code>HasEditor</code></td><td><code>bool</code></td><td>Whether the plugin has a graphical editor.</td></tr>
     <tr><td><code>IsEditorOpen</code></td><td><code>bool</code></td><td>Whether the editor window is currently open.</td></tr>
     <tr><td><code>IsReady</code></td><td><code>bool</code></td><td>Whether initialized and ready to process audio.</td></tr>
-    <tr><td><code>PluginPath</code></td><td><code>string</code></td><td>Filesystem path to the .vst3 bundle.</td></tr>
+    <tr><td><code>PluginPath</code></td><td><code>string</code></td><td>What the plugin was loaded from: a <code>.vst3</code> bundle path or an <code>AudioUnit:</code> identifier.</td></tr>
+    <tr><td><code>Format</code></td><td><code>AudioPluginFormat</code></td><td><code>Vst3</code> or <code>AudioUnit</code> — what the plugin actually turned out to be.</td></tr>
+    <tr><td><code>IsAudioUnit</code></td><td><code>bool</code></td><td>Shorthand for <code>Format == AudioPluginFormat.AudioUnit</code>.</td></tr>
+    <tr><td><code>Identifier</code></td><td><code>string</code></td><td>The resolved identifier. Store it, and it loads the same plugin again through <code>CreateAsync</code>.</td></tr>
   </tbody>
 </table></div>
 
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Call <code>PauseDeviceMonitoring()</code> before opening the VST3 editor window and <code>ResumeDeviceMonitoring()</code> after closing to prevent device enumeration interference.</p></div>
+
+<h3 id="audiounit">AudioUnits &amp; the plugin browser</h3>
+<p><code>VST3PluginHost.FindPlugins()</code> walks the VST3 folders, which is never going to find an AudioUnit: AUs live in the system's component registry and are addressed by an identifier, not a path. <code>AudioPluginBrowser</code> asks the native host instead and lists both formats. What it returns goes straight into <code>CreateAsync</code>, and from there everything is the same as above.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET.Effects.VST;
+
+if (!AudioPluginBrowser.IsSupported) return;   // no native plugin host on this platform
+
+// Quick scan: near-instant, but leaves the channel counts at -1.
+// deepScan: true loads every plugin to fill them in — minutes on a big collection.
+var progress = new Progress&lt;AudioPluginScanProgress&gt;(p =&gt; status.Text = p.CurrentItem);
+IReadOnlyList&lt;AudioPluginInfo&gt; plugins = await AudioPluginBrowser.ScanAsync(
+    AudioPluginFormat.All, deepScan: false, progress);
+
+AudioPluginInfo pick = plugins.First(p =&gt; !p.IsInstrument);
+VST3PluginHost host = await VST3PluginHost.CreateAsync(pick);   // VST3 or AudioUnit
+
+// Keep the scan result between runs
+settings.PluginCache = AudioPluginBrowser.GetCacheXml();
+AudioPluginBrowser.RestoreCache(settings.PluginCache);           // next start, no scan</code></pre></div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Platform</th><th>Formats</th><th>Editor</th></tr></thead>
+  <tbody>
+    <tr><td>Windows · Linux</td><td>VST3</td><td>Own window (<code>OpenEditor</code>)</td></tr>
+    <tr><td>macOS</td><td>VST3, AudioUnit (v2 and v3)</td><td>Own window (<code>OpenEditor</code>)</td></tr>
+    <tr><td>iOS / iPadOS 15+</td><td>AudioUnit — Apple's built-in units and third-party AUv3 extensions</td><td>Not available</td></tr>
+    <tr><td>Android</td><td>—</td><td>—</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>On iOS, <code>OwnAudioSharp.Mobile</code> brings the native plugin host with it as <code>ownvst3.xcframework</code> and embeds it into your <code>net10.0-ios</code> app. There is nothing to configure. AUv3 extensions run out of process, as iOS requires.</p></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>iOS has no top-level plugin windows, so <code>OpenEditor()</code> throws <code>InvalidOperationException</code> there. Apple's built-in units report <code>HasEditor == false</code> on iOS anyway. The plugin still processes audio and its parameters work as usual. OwnAudioSharp does not yet expose a way to embed an AUv3 editor in your own view.</p></div>
 
 <div class="callout callout-danger"><div class="callout-icon">🚫</div><p>Take an effect out of its chain before disposing it, and leave a moment in between — the audio thread may still be inside the native twin. <a href="recipes.html#fx-live">Safe removal →</a></p></div>
 

@@ -228,6 +228,8 @@ if (!await host.InitializeAudioAsync(OwnaudioNet.Engine!.Config.SampleRate, maxB
 
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>A 64-bit process cannot load a 32-bit plugin, and vice versa. On Apple Silicon an Intel-only plugin will not load either.</p></div>
 
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>On iOS only AudioUnits load. VST3 is desktop-only, and Android has no plugin host at all. If <code>OpenEditor()</code> throws on iOS, that is expected: there are no plugin windows there. <a href="api-effects.html#audiounit">Platforms →</a></p></div>
+
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="memory">Memory keeps growing</h2>
 <p><strong>Why:</strong> something that owns native memory is never being released. Two usual suspects.</p>
