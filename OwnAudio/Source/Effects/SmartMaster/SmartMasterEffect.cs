@@ -33,7 +33,19 @@ namespace OwnaudioNET.Effects.SmartMaster
         private AudioMixer? _mixer;
 
         private readonly object _configLock = new object();
-        
+
+        private static readonly float[] _graphicCentres =
+        {
+            20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
+            200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
+            2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f
+        };
+
+        private readonly GraphicEqSolver _graphicSolver = new GraphicEqSolver(SmartMasterConfig.EqBands, 1, 0.005, 18f);
+        private readonly float[] _graphicSolvedFor = new float[SmartMasterConfig.EqBands];
+        private readonly float[] _graphicFilter = new float[SmartMasterConfig.EqBands];
+        private readonly object _graphicLock = new object();
+
         private CancellationTokenSource? _measurementCancellation;
         
         private long _sanitizedSamples;
@@ -412,7 +424,49 @@ namespace OwnaudioNET.Effects.SmartMaster
         #endregion
         
         #region Public API - Configuration
-        
+
+        /// <summary>
+        /// The gains the graphic EQ's filters run for the current curve — draw the response off
+        /// these at GraphicBandQ. GraphicEQGains is the curve, the bells overlap.
+        /// </summary>
+        public void GetGraphicFilterGains(Span<float> into)
+        {
+            lock (_graphicLock)
+            {
+                _refreshGraphic();
+                _graphicFilter.AsSpan(0, Math.Min(into.Length, _graphicFilter.Length)).CopyTo(into);
+            }
+        }
+
+        /// <summary>
+        /// Same for the mirror, once a tick. Only re-solves when the curve or the rate moved.
+        /// </summary>
+        internal float[] GraphicFilterGains()
+        {
+            lock (_graphicLock)
+            {
+                _refreshGraphic();
+                return _graphicFilter;
+            }
+        }
+
+        private void _refreshGraphic()
+        {
+            float[] _curve = _configuration.GraphicEQGains;
+            float _rate = _config?.SampleRate ?? 48000f;
+
+            if (_graphicSolver.TunedSampleRate != _rate)
+            {
+                Span<float> qs = stackalloc float[SmartMasterConfig.EqBands];
+                qs.Fill(SmartMasterConfig.GraphicBandQ);
+                _graphicSolver.Retune(_graphicCentres, qs, _rate);
+            }
+            else if (_curve.AsSpan().SequenceEqual(_graphicSolvedFor)) return;
+
+            _curve.CopyTo(_graphicSolvedFor, 0);
+            _graphicSolver.Solve(_graphicSolvedFor, _graphicFilter);
+        }
+
         /// <summary>
         /// Get configuration
         /// </summary>

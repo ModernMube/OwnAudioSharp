@@ -200,7 +200,7 @@ the track gain, so the capture comes in at full level with the monitor muted.
 | Field | Meaning |
 | --- | --- |
 | `SubsonicEnabled` / `SubsonicFrequency` | 24 dB/oct subsonic high-pass on the input. |
-| `GraphicEQGains[30]` | 30-band graphic EQ gains in dB (0 = flat), ISO centres 20 Hz – 16 kHz, constant-Q. |
+| `GraphicEQGains[30]` | 30-band graphic EQ curve in dB (0 = flat) at the ISO centres 20 Hz – 16 kHz. The bells are `GraphicBandQ` (2.5) wide and overlap; the effect solves the filter gains so the response runs through these values (`GetGraphicFilterGains`). |
 | `ParametricEQ[8]` | Input PEQ: `Shape` (bell / low shelf / high shelf), `Frequency`, `Q`, `GainDb`. |
 | `SubharmonicEnabled` / `SubharmonicMix` / `SubharmonicLowLevel` / `SubharmonicHighLevel` | Octave-divider sub synth: master level plus the 24–36 Hz and 36–56 Hz band levels. `Mix` is a parallel level, not a dry/wet crossfade. |
 | `CompressorEnabled` / `Threshold` / `Ratio` / `Attack` / `Release` / `Knee` | Compressor. `Threshold` is linear 0–1; `Knee` is the OverEasy width in dB. |

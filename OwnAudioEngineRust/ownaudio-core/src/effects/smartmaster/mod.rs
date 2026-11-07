@@ -28,7 +28,7 @@
 //! |----------|--------------------------------------------|--------------|
 //! | 0        | enabled                                    | 0/1          |
 //! | 1        | mix (accepted, inert)                      | 0..1         |
-//! | 2..=31   | graphic-EQ band gains (30 bands)           | dB           |
+//! | 2..=31   | graphic-EQ band filter gains (30 bands)    | dB           |
 //! | 32       | subharmonic enabled                        | 0/1          |
 //! | 33       | subharmonic mix                            | 0..1         |
 //! | 34       | compressor enabled                         | 0/1          |
@@ -67,9 +67,14 @@ use subharmonic::SubharmonicSynth;
 use subsonic::Subsonic;
 
 use super::compressor::{self, Compressor};
-use super::equalizer30::{Equalizer30, PARAM_BAND_0, PARAM_BAND_29};
+use super::equalizer30::{Equalizer30, PARAM_BAND_0, PARAM_BAND_29, PARAM_BAND_Q_0};
 use super::limiter::{self, Limiter};
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
+
+/// Q of every graphic EQ bell, wider than 1/3 octave so the bands overlap into a smooth
+/// curve. The C# side solves the band gains against it (`SmartMasterConfig.GraphicBandQ`),
+/// so the two have to move together.
+const GRAPHIC_Q: f32 = 2.5;
 
 const PARAM_SUB_ENABLED: u32 = 32;
 const PARAM_SUB_MIX: u32 = 33;
@@ -209,6 +214,9 @@ impl SmartMaster {
             band_scratch: vec![0.0; INITIAL_SCRATCH_FRAMES * 2],
         };
 
+        for band in 0..=PARAM_BAND_29 - PARAM_BAND_0 {
+            sm.eq.set_param(PARAM_BAND_Q_0 + band, GRAPHIC_Q);
+        }
         sm.sync_comp_makeup();
         sm
     }
@@ -569,6 +577,14 @@ mod tests {
     fn effect_type_is_smartmaster() {
         let sm = SmartMaster::new(SR);
         assert_eq!(sm.effect_type(), EffectType::SmartMaster);
+    }
+
+    #[test]
+    fn graphic_eq_runs_the_wide_bells() {
+        let sm = SmartMaster::new(SR);
+        for band in 0..=PARAM_BAND_29 - PARAM_BAND_0 {
+            assert_eq!(sm.eq.get_param(PARAM_BAND_Q_0 + band), Some(GRAPHIC_Q));
+        }
     }
 
     #[test]

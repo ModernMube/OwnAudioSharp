@@ -99,7 +99,7 @@ float g = eq.Band4Gain;     // query 500Hz band
 eq.SetBandGain(4, 500f, 1.0f, +2.5f);
 
 eq.SetPreset(EqualizerPreset.Rock);</code></pre></div>
-<p><strong>Presets:</strong> <code>Default</code>, <code>Bass</code>, <code>Treble</code>, <code>Rock</code>, <code>Classical</code>, <code>Pop</code>, <code>Jazz</code>, <code>Voice</code></p>
+<p><strong>Presets:</strong> <code>Default</code>, <code>Bass</code>, <code>Treble</code>, <code>Rock</code>, <code>Classical</code>, <code>Pop</code>, <code>Jazz</code>, <code>Voice</code> (for a full mix or speech), and <code>MaleVocal</code>, <code>FemaleVocal</code>, <code>AcousticGuitar</code>, <code>BassGuitar</code>, <code>Piano</code>, <code>Drums</code>, <code>Brass</code> (for a single track). A preset's band values are the curve at each band centre, and no preset boosts by more than +6&nbsp;dB.</p>
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>The band centres and Q of this EQ are fixed: the native filter bank runs the ISO frequencies above at Q&nbsp;=&nbsp;1.0 and takes gain only. <code>SetBandGain</code> keeps its <code>frequency</code> and <code>q</code> parameters for source compatibility but does nothing with them — setting them is silent, not an error. Use <a href="#equalizer30">Equalizer30BandEffect</a> when you need to move a bell or change its width.</p></div>
 
 <h2 id="compressor">CompressorEffect</h2>
@@ -216,7 +216,7 @@ float gainDb      = rider.CurrentGainDb;</code></pre></div>
     <tr><td><code>DelayEffect</code></td><td>Stereo delay with ping-pong and damping</td></tr>
     <tr><td><a href="#owndelay"><code>OwnDelayEffect</code></a></td><td>Tape style delay: in-loop saturation, diffusion and filters, glide or crossfade, ducking, freeze</td></tr>
     <tr><td><code>EqualizerEffect</code></td><td>10-band parametric EQ</td></tr>
-    <tr id="equalizer30"><td><code>Equalizer30BandEffect</code></td><td>30-band graphic EQ on 1/3-octave ISO centres. Unlike the 10-band one, its <code>SetBandGain</code> really does carry the centre frequency and Q through to the engine.</td></tr>
+    <tr id="equalizer30"><td><code>Equalizer30BandEffect</code></td><td>30-band graphic EQ on 1/3-octave ISO centres. Unlike the 10-band one, its <code>SetBandGain</code> really does carry the centre frequency and Q through to the engine. It has the same presets, plus <code>Electronic</code> and <code>Acoustic</code>.</td></tr>
     <tr><td><code>CompressorEffect</code></td><td>Dynamic range compressor</td></tr>
     <tr><td><a href="#owncompressor"><code>OwnCompressorEffect</code></a></td><td>Log-domain compressor with look-ahead, auto release, stereo link, mid/side and parallel mix</td></tr>
     <tr><td><code>LimiterEffect</code></td><td>Soft/hard peak limiter</td></tr>

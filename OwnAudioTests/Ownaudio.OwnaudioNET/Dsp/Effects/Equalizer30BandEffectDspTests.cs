@@ -108,6 +108,56 @@ public class Equalizer30BandEffectDspTests
     }
 
     /// <summary>
+    /// Every fader at the same height is a straight line, also halfway between two centres —
+    /// with 1/3-octave bells the curve sagged there and bulged on the centres.
+    /// </summary>
+    [Theory]
+    [InlineData(-6.0)]
+    [InlineData(6.0)]
+    public void EvenFadersGiveAnEvenCurve(double gainDb)
+    {
+        using (var _eq = new Equalizer30BandEffect(Rate))
+        {
+            for (int b = 0; b < 30; b++) _eq[b] = (float)gainDb;
+
+            foreach (int b in new[] { 10, 16, 21 })
+            {
+                double _between = Math.Sqrt(Centres[b] * Centres[b + 1]);
+
+                EffectHarness.MeasureGainDb(_eq, Centres[b], -24.0).Should().BeApproximately(gainDb, 0.4, $"on {Centres[b]} Hz");
+                EffectHarness.MeasureGainDb(_eq, _between, -24.0).Should().BeApproximately(gainDb, 0.4, $"between {Centres[b]} and {Centres[b + 1]} Hz");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A preset's numbers are the curve, so measuring a centre has to give the band value back.
+    /// </summary>
+    [Theory]
+    [InlineData(Equalizer30Preset.Bass)]
+    [InlineData(Equalizer30Preset.Rock)]
+    [InlineData(Equalizer30Preset.Voice)]
+    [InlineData(Equalizer30Preset.Electronic)]
+    [InlineData(Equalizer30Preset.MaleVocal)]
+    [InlineData(Equalizer30Preset.FemaleVocal)]
+    [InlineData(Equalizer30Preset.AcousticGuitar)]
+    [InlineData(Equalizer30Preset.BassGuitar)]
+    [InlineData(Equalizer30Preset.Piano)]
+    [InlineData(Equalizer30Preset.Drums)]
+    [InlineData(Equalizer30Preset.Brass)]
+    public void PresetCurveIsWhatItSays(Equalizer30Preset preset)
+    {
+        using (var _eq = new Equalizer30BandEffect(preset, Rate))
+        {
+            foreach (int b in new[] { 5, 8, 11, 13, 17, 21, 24, 26, 28 })
+            {
+                EffectHarness.MeasureGainDb(_eq, Centres[b], -24.0, seconds: _seconds(b))
+                    .Should().BeApproximately(_eq[b], 0.6, $"{preset} at {Centres[b]} Hz");
+            }
+        }
+    }
+
+    /// <summary>
     /// A third-octave band leans on its neighbours a bit, but three bands out it should
     /// be mostly gone.
     /// </summary>

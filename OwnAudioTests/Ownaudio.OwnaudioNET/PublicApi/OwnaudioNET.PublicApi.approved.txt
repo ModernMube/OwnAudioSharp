@@ -245,6 +245,7 @@ namespace OwnaudioNET.Effects
     }
     public sealed class Equalizer30BandEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
+        public const float DefaultBandQ = 2.5F;
         public Equalizer30BandEffect(OwnaudioNET.Effects.Equalizer30Preset preset, float sampleRate = 44100) { }
         public Equalizer30BandEffect(float sampleRate = 44100, float[]? gains = null) { }
         public float this[int band] { get; set; }
@@ -254,6 +255,8 @@ namespace OwnaudioNET.Effects
         public float[] GetAllGains() { }
         public float GetBandFrequency(int band) { }
         public float GetBandGain(int band) { }
+        public float GetBandQ(int band) { }
+        public float GetFilterGain(int band) { }
         public void SetAllGains(float[] gains) { }
         public void SetBandGain(int band, float frequency, float q, float gainDB) { }
         public void SetPreset(OwnaudioNET.Effects.Equalizer30Preset preset) { }
@@ -271,9 +274,17 @@ namespace OwnaudioNET.Effects
         Voice = 7,
         Electronic = 8,
         Acoustic = 9,
+        MaleVocal = 10,
+        FemaleVocal = 11,
+        AcousticGuitar = 12,
+        BassGuitar = 13,
+        Piano = 14,
+        Drums = 15,
+        Brass = 16,
     }
     public sealed class EqualizerEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
+        public const float BandQ = 1F;
         public EqualizerEffect(OwnaudioNET.Effects.EqualizerPreset preset, float sampleRate = 44100) { }
         public EqualizerEffect(float sampleRate = 44100, float band0Gain = 0, float band1Gain = 0, float band2Gain = 0, float band3Gain = 0, float band4Gain = 0, float band5Gain = 0, float band6Gain = 0, float band7Gain = 0, float band8Gain = 0, float band9Gain = 0) { }
         public float Band0Gain { get; set; }
@@ -288,6 +299,7 @@ namespace OwnaudioNET.Effects
         public float Band9Gain { get; set; }
         public float Mix { get; set; }
         public string Name { get; set; }
+        public float GetFilterGain(int band) { }
         public void SetBandGain(int band, float frequency, float q, float gainDB) { }
         public void SetPreset(OwnaudioNET.Effects.EqualizerPreset preset) { }
         public override string ToString() { }
@@ -302,6 +314,13 @@ namespace OwnaudioNET.Effects
         Pop = 5,
         Jazz = 6,
         Voice = 7,
+        MaleVocal = 8,
+        FemaleVocal = 9,
+        AcousticGuitar = 10,
+        BassGuitar = 11,
+        Piano = 12,
+        Drums = 13,
+        Brass = 14,
     }
     public sealed class FlangerEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
@@ -349,6 +368,10 @@ namespace OwnaudioNET.Effects
         GuitarNoise = 3,
         Broadcast = 4,
         Subtle = 5,
+    }
+    public static class GraphicEq
+    {
+        public static double BellDb(double centreHz, double q, double gainDb, double atHz, double sampleRate) { }
     }
     public sealed class LimiterEffect : OwnaudioNET.Effects.NativeBackedEffect, OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
@@ -806,6 +829,7 @@ namespace OwnaudioNET.Effects.SmartMaster
     {
         public const int AlignChannels = 3;
         public const int EqBands = 30;
+        public const float GraphicBandQ = 2.5F;
         public const int ParametricBands = 8;
         public SmartMasterConfig() { }
         public float CompressorAttack { get; set; }
@@ -850,6 +874,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         public void CancelMeasurement() { }
         public void Dispose() { }
         public OwnaudioNET.Effects.SmartMaster.SmartMasterConfig GetConfiguration() { }
+        public void GetGraphicFilterGains(System.Span<float> into) { }
         public float GetLastMicLevel() { }
         public OwnaudioNET.Effects.SmartMaster.MeasurementStatusInfo GetMeasurementStatus() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }

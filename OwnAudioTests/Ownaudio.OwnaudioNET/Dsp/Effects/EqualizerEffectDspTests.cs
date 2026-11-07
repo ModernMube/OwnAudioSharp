@@ -28,6 +28,51 @@ public class EqualizerEffectDspTests
     }
 
     /// <summary>
+    /// All ten at -6 dB is -6 dB on the centres and between them, not the -9..-11 the
+    /// overlapping bells summed to before the solver.
+    /// </summary>
+    [Fact]
+    public void EvenFadersGiveAnEvenCurve()
+    {
+        using (EqualizerEffect _eq = _flat())
+        {
+            for (int b = 0; b < 10; b++) _eq.SetBandGain(b, Centres[b], 1.0f, -6f);
+
+            foreach (int b in new[] { 3, 5, 7 })
+            {
+                EffectHarness.MeasureGainDb(_eq, Centres[b]).Should().BeApproximately(-6.0, 0.5, $"on {Centres[b]} Hz");
+                EffectHarness.MeasureGainDb(_eq, Centres[b] * Math.Sqrt(2)).Should().BeApproximately(-6.0, 0.5, $"above {Centres[b]} Hz");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Preset values are the curve at the centres, the solver must hold that for the canned ones too.
+    /// </summary>
+    [Theory]
+    [InlineData(EqualizerPreset.Bass)]
+    [InlineData(EqualizerPreset.Rock)]
+    [InlineData(EqualizerPreset.Voice)]
+    [InlineData(EqualizerPreset.MaleVocal)]
+    [InlineData(EqualizerPreset.FemaleVocal)]
+    [InlineData(EqualizerPreset.AcousticGuitar)]
+    [InlineData(EqualizerPreset.BassGuitar)]
+    [InlineData(EqualizerPreset.Piano)]
+    [InlineData(EqualizerPreset.Drums)]
+    [InlineData(EqualizerPreset.Brass)]
+    public void PresetCurveIsWhatItSays(EqualizerPreset preset)
+    {
+        using (var _eq = new EqualizerEffect(preset, Rate))
+        {
+            float[] _want = { _eq.Band1Gain, _eq.Band2Gain, _eq.Band3Gain, _eq.Band4Gain, _eq.Band5Gain, _eq.Band6Gain, _eq.Band7Gain, _eq.Band8Gain };
+
+            for (int b = 1; b <= 8; b++)
+                EffectHarness.MeasureGainDb(_eq, Centres[b], -24.0, seconds: b < 3 ? 3 : 1)
+                    .Should().BeApproximately(_want[b - 1], 0.6, $"{preset} at {Centres[b]} Hz");
+        }
+    }
+
+    /// <summary>
     /// Nothing boosted, nothing cut, nothing moves.
     /// </summary>
     [Fact]

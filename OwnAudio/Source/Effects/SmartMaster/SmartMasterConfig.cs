@@ -13,6 +13,12 @@ namespace OwnaudioNET.Effects.SmartMaster
         public const int EqBands = 30;
 
         /// <summary>
+        /// Q of every graphic EQ bell. The native chain sets the same (GRAPHIC_Q in smartmaster/mod.rs) —
+        /// change both or neither. A gain in GraphicEQGains is the curve at the band centre.
+        /// </summary>
+        public const float GraphicBandQ = 2.5f;
+
+        /// <summary>
         /// Channels the phase alignment stage handles - L, R and the summed sub.
         /// </summary>
         public const int AlignChannels = 3;

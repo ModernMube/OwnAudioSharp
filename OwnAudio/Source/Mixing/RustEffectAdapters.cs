@@ -189,16 +189,8 @@ internal static class RustEffectAdapters
     private static void _mirrorEqualizer(IEffectProcessor e, ParamSink sink)
     {
         var q = (ME.EqualizerEffect)e;
-        sink(2, q.Band0Gain);
-        sink(3, q.Band1Gain);
-        sink(4, q.Band2Gain);
-        sink(5, q.Band3Gain);
-        sink(6, q.Band4Gain);
-        sink(7, q.Band5Gain);
-        sink(8, q.Band6Gain);
-        sink(9, q.Band7Gain);
-        sink(10, q.Band8Gain);
-        sink(11, q.Band9Gain);
+        for (int i = 0; i < 10; i++)
+            sink((uint)(2 + i), q.GetFilterGain(i));
     }
 
     private static void _mirrorEqualizer30(IEffectProcessor e, ParamSink sink)
@@ -206,9 +198,9 @@ internal static class RustEffectAdapters
         var q = (ME.Equalizer30BandEffect)e;
         for (int i = 0; i < 30; i++)
         {
-            sink((uint)(2 + i), q[i]);
+            sink((uint)(2 + i), q.GetFilterGain(i));
             //SetBandGain takes a Q and a centre too, and Matchering varies both
-            sink((uint)(32 + i), q.BandQAt(i));
+            sink((uint)(32 + i), q.GetBandQ(i));
             sink((uint)(62 + i), q.GetBandFrequency(i));
         }
     }
@@ -351,7 +343,7 @@ internal static class RustEffectAdapters
         var sm = (SM.SmartMasterEffect)e;
         SM.SmartMasterConfig cfg = sm.GetConfiguration();
 
-        float[] eqGains = cfg.GraphicEQGains;
+        float[] eqGains = sm.GraphicFilterGains();
         for (int i = 0; i < SM.SmartMasterConfig.EqBands; i++)
             sink((uint)(2 + i), eqGains[i]);
 

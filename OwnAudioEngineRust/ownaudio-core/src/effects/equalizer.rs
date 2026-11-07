@@ -20,7 +20,7 @@ use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
 use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
-/// Band gain parameter IDs (dB, -12 … +12).
+/// Band filter gain parameter IDs (dB, -18 … +18).
 pub const PARAM_BAND_0: u32 = 2; // 31.25 Hz
 /// See [`PARAM_BAND_0`]. 62.5 Hz.
 pub const PARAM_BAND_1: u32 = 3;
@@ -47,10 +47,11 @@ const FILTERS_PER_BAND: usize = 2;
 /// Total biquad filters across all bands.
 const TOTAL_FILTERS: usize = BANDS * FILTERS_PER_BAND;
 
-/// Per-band gain clamp, matching the reference C# (±12 dB).
-const GAIN_MIN_DB: f32 = -12.0;
+/// Per-band filter gain clamp. The C# faders stop at ±12 dB, but they are the curve at the
+/// band centre — the solved filter gain behind a lone +12 fader runs to about +14.
+const GAIN_MIN_DB: f32 = -18.0;
 /// See [`GAIN_MIN_DB`].
-const GAIN_MAX_DB: f32 = 12.0;
+const GAIN_MAX_DB: f32 = 18.0;
 
 /// A band is treated as active (and evaluated) only when its gain magnitude
 /// exceeds this threshold, mirroring the reference active-band optimization.

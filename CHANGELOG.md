@@ -3,6 +3,37 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.12 — unreleased
+
+### Changed
+
+- **Graphic EQ bands are the curve at their centre.** The 30-band EQ ran 1/3-octave bells
+  (Q 4.32): the summed curve rippled 2+ dB between the bands, and an even row of faders came out
+  1.3–1.6× as strong as set. `Equalizer30BandEffect` now runs 0.57-octave bells
+  (`DefaultBandQ` = 2.5) and solves the band gains against their overlap (ridge-regularised, so a
+  zigzag of faders does not ring into huge filters). The curve runs through the faders, also
+  between them, within ~0.3 dB. `EqualizerEffect` keeps its two Q=1 biquads per band and gets the
+  same solver; the Smart Master's graphic EQ runs the same bells (`SmartMasterConfig.GraphicBandQ`,
+  `GRAPHIC_Q` in the native chain). A lone fader lands within ~0.2 dB of its value.
+- The native 10-band EQ clamps its filter gains at ±18 dB instead of ±12 — the faders still stop at
+  ±12, but the solved filter behind a lone +12 fader runs to about +14.
+- **Behaviour change:** a saved band value now means the curve, not a raw bell. Settings saved
+  against 4.0.11 sound milder where neighbouring bands pushed the same way; convert them by summing
+  the old bells at each centre (`GraphicEq.BellDb`).
+- The built-in EQ presets were retuned for that: their numbers are now the curve you hear. They
+  are milder than before and boost by +6 dB at most. Bass no longer lifts the top, Voice is a
+  speech curve with the rumble cut, and Rock, Pop, Jazz, Electronic and Acoustic got clearer
+  shapes.
+
+### Added
+
+- Instrument presets for both graphic EQs (`EqualizerPreset`, `Equalizer30Preset`): `MaleVocal`,
+  `FemaleVocal`, `AcousticGuitar`, `BassGuitar`, `Piano`, `Drums`, `Brass`. They are added after the
+  existing members, so the enum values you have saved stay the same.
+- `GraphicEq.BellDb` (exact RBJ peaking magnitude), `Equalizer30BandEffect.GetFilterGain` /
+  `GetBandQ`, `EqualizerEffect.GetFilterGain` / `BandQ`, `SmartMasterEffect.GetGraphicFilterGains` —
+  draw a response off these, not off the band gains.
+
 ## 4.0.11 — 2026-11-01
 
 A dependency release: the engine and the OwnAudioSharp API are the same as in 4.0.10. What changes

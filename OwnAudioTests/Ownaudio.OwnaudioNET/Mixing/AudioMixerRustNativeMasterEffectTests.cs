@@ -134,12 +134,12 @@ public sealed class AudioMixerRustNativeMasterEffectTests : IDisposable
             (Action<IEffectProcessor>)(e => ((ReverbEffect)e).RoomSize = 0.7f),
             (uint)2, 0.7f,
         };
-        // Equalizer band 0 gain (native param 2, dB).
+        // Equalizer band 0 filter gain (native param 2, dB) — the solved one, not the fader.
         yield return new object[]
         {
             (Func<IEffectProcessor>)(() => new EqualizerEffect(sampleRate: SampleRate)),
             (Action<IEffectProcessor>)(e => ((EqualizerEffect)e).Band0Gain = 6.0f),
-            (uint)2, 6.0f,
+            (uint)2, new EqualizerEffect(sampleRate: SampleRate) { Band0Gain = 6.0f }.GetFilterGain(0),
         };
         // Delay time (native param 2, ms).
         yield return new object[]
@@ -224,8 +224,12 @@ public sealed class AudioMixerRustNativeMasterEffectTests : IDisposable
         sm.LoadSpeakerPreset(global::OwnaudioNET.Effects.SmartMaster.SpeakerType.Club);
         mixer.MirrorRustMasterEffectsOnce();
 
-        chain.GetParam(2).Should().BeApproximately(1.5f, 0.01f,
-            "loading the Club preset after attach must mirror its +1.5 dB 20 Hz band onto the native effect");
+        Span<float> _solved = stackalloc float[30];
+        sm.GetGraphicFilterGains(_solved);
+        _solved[0].Should().NotBe(0f, "the Club preset lifts the bottom of the curve");
+
+        chain.GetParam(2).Should().BeApproximately(_solved[0], 0.01f,
+            "loading the Club preset after attach must mirror its solved 20 Hz filter gain onto the native effect");
     }
 
     /// <summary>Reads native master effect params off the first (only) master effect under test.</summary>
