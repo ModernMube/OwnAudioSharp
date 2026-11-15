@@ -2012,3 +2012,86 @@ mod command_queue {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Fade ramps
+// ---------------------------------------------------------------------------
+
+mod fade {
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_fade::{
+        ownaudio_v1_mixer_get_master_fade, ownaudio_v1_mixer_master_fade, ownaudio_v1_track_fade,
+        ownaudio_v1_track_get_fade,
+    };
+    use ownaudio_ffi::ffi_track::{
+        ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_track_create,
+        ownaudio_v1_track_destroy,
+    };
+    use ownaudio_ffi::handles::{OwnAudioMixerHandle, OwnAudioTrackHandle};
+
+    /// Nothing renders here, so a ramp that was asked for stays pending — and the level
+    /// still reads unity, where it was.
+    #[test]
+    fn a_requested_fade_is_pending_until_rendered() {
+        unsafe {
+            let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+                OwnAudioErrorCode::Success as i32
+            );
+            let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_track_create(mixer, &mut track),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            let (mut level, mut done) = (0.0f32, 0u8);
+            assert_eq!(
+                ownaudio_v1_track_get_fade(track, &mut level, &mut done),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!((level, done), (1.0, 1));
+
+            assert_eq!(
+                ownaudio_v1_track_fade(track, 0.0, 4800),
+                OwnAudioErrorCode::Success as i32
+            );
+            ownaudio_v1_track_get_fade(track, &mut level, &mut done);
+            assert_eq!((level, done), (1.0, 0));
+
+            assert_eq!(
+                ownaudio_v1_mixer_master_fade(mixer, 0.0, 4800),
+                OwnAudioErrorCode::Success as i32
+            );
+            ownaudio_v1_mixer_get_master_fade(mixer, &mut level, &mut done);
+            assert_eq!(done, 0);
+
+            ownaudio_v1_track_destroy(track);
+            ownaudio_v1_mixer_destroy(mixer);
+        }
+    }
+
+    #[test]
+    fn the_fade_getters_refuse_null() {
+        unsafe {
+            let mut level = 0.0f32;
+            let mut done = 0u8;
+            assert_eq!(
+                ownaudio_v1_track_get_fade(std::ptr::null_mut(), &mut level, &mut done),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_mixer_get_master_fade(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    &mut done
+                ),
+                OwnAudioErrorCode::NullPointer as i32
+            );
+            assert_eq!(
+                ownaudio_v1_track_fade(std::ptr::null_mut(), 0.0, 1),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+        }
+    }
+}

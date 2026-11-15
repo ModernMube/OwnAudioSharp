@@ -32,6 +32,7 @@ pub mod device;
 pub mod effects;
 pub mod engine;
 pub mod error;
+pub mod fade;
 pub mod format;
 pub mod load;
 pub mod mixer;

@@ -7,6 +7,19 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Added
 
+- **Fades the engine runs itself.** `AudioMixer.FadeMaster(target, duration)` /
+  `FadeMasterAsync` and `FadeSource(source, target, duration)` ramp the master (inside the
+  master scope, before the master gain) or one source's track (after its effects, so a reverb
+  tail fades with it) frame by frame on the audio thread, straight in dB with silence at −60 dB.
+  The fade is a multiplier of its own: `MasterVolume` and a source's volume stay where the user
+  put them. `IsMasterFadeDone` / `IsSourceFadeDone` turn true once the audio thread has rendered
+  the end of the ramp, and `FadeMasterAsync` returns then — a stop after a fade out no longer
+  has to guess how long to wait. A master fade asked for before the session exists (a fade in
+  armed before the first source) lands on it when it is built. Rust-native only; the managed mix
+  throws `NotSupportedException`. Underneath: `ownaudio_v1_track_fade`, `_track_get_fade`,
+  `_mixer_master_fade`, `_mixer_get_master_fade`, `AudioTrack.FadeTo` / `FadeState` and
+  `MultiTrackSession.FadeMaster` / `MasterFadeState`.
+
 - **A full command queue has its own error.** The native side answers with
   `OwnAudioErrorCode::CommandQueueFull` (16) wherever the mixer's command queue refuses a change,
   instead of `InternalError` plus a sentence, and the managed side throws

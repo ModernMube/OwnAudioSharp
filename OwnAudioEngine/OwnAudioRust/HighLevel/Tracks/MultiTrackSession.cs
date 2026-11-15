@@ -99,6 +99,33 @@ public sealed partial class MultiTrackSession : IDisposable
     }
 
     /// <summary>
+    /// Ramps the master to target (0 silence, 1 unity) over duration, straight in dB, on the
+    /// audio thread: inside the master scope, before the master gain, which it leaves alone.
+    /// </summary>
+    public void FadeMaster(float target, TimeSpan duration)
+    {
+        _throwIfDisposed();
+        int code = OwnAudioNative.ownaudio_v1_mixer_master_fade(
+            _mixerHandle.DangerousGetHandle(), target, AudioTrack.FadeFrames(duration, _sampleRate));
+        ErrorCodeMapper.ThrowIfError(code, nameof(FadeMaster));
+    }
+
+    /// <summary>
+    /// The master fade's level after the last rendered block, and whether the last FadeMaster landed.
+    /// </summary>
+    public (float Level, bool Done) MasterFadeState
+    {
+        get
+        {
+            _throwIfDisposed();
+            int code = OwnAudioNative.ownaudio_v1_mixer_get_master_fade(
+                _mixerHandle.DangerousGetHandle(), out float level, out byte done);
+            ErrorCodeMapper.ThrowIfError(code, nameof(MasterFadeState));
+            return (level, done != 0);
+        }
+    }
+
+    /// <summary>
     /// Master pan, -1..+1, equal-power law normalized at center so a centered master
     /// leaves the mix alone. Ramped too.
     /// </summary>

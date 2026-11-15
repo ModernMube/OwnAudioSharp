@@ -7,6 +7,7 @@ use std::sync::atomic::{
 use std::sync::Arc;
 
 use crate::effects::EffectChain;
+use crate::fade::{FadeShared, FadeStage};
 use crate::multitrack::fx_tap::FxTap;
 use crate::ringbuffer::RingBufferReader;
 use crate::smoothing::SmoothedParam;
@@ -273,6 +274,8 @@ pub struct TrackShared {
     /// an eight-channel bus still costs a stereo decode, stretch and effect chain, and
     /// only the final summation touches eight channels.
     src_channels: AtomicU16,
+    /// The fade ramp asked for on this track, a multiplier of its own on top of the gain.
+    fade: FadeShared,
 }
 
 impl TrackShared {
@@ -302,7 +305,14 @@ impl TrackShared {
             out_route_map: std::array::from_fn(|_| AtomicI32::new(ROUTE_UNBOUND)),
             out_route_gain: std::array::from_fn(|_| AtomicU32::new(1.0f32.to_bits())),
             src_channels: AtomicU16::new(0),
+            fade: FadeShared::new(),
         }
+    }
+
+    /// The track's fade ramp: ask it to move, see when it got there.
+    #[inline]
+    pub fn fade(&self) -> &FadeShared {
+        &self.fade
     }
 
     /// Installs a per-track output-channel routing map: source channel `i` is
@@ -814,6 +824,8 @@ pub struct Track {
     /// Has the track rendered a block since it last went quiet? While false the gain and pan
     /// smoothers snap instead of ramping — see [`Track::process_additive`].
     entered: bool,
+    /// The fade ramp in flight, run on the processed block before gain and pan.
+    fade: FadeStage,
 }
 
 /// Output peak below which a block counts as effectively silent, so releasing the always-on
@@ -897,6 +909,7 @@ impl Track {
             fx_tap: None,
             routing: RouteSnapshot::new(),
             entered: false,
+            fade: FadeStage::new(),
         }
     }
 
@@ -1056,6 +1069,11 @@ impl Track {
         // sample-accurately with the highest-latency track. A zero delay (the
         // common case) is a passthrough.
         self.pdc.process(buf, src_channels);
+
+        // The fade goes on the processed block, so an effect tail fades with the dry signal and
+        // the meters read what is heard.
+        self.fade
+            .apply(&self.shared.fade, buf, src_channels as usize);
 
         // A track entering the mix takes its gain and pan as they stand instead of sliding into
         // them from wherever the smoother was left. That slide is a ~5 ms fade down from unity

@@ -790,4 +790,28 @@ internal static partial class OwnAudioNative
     internal static partial void ownaudio_v1_input_source_destroy(IntPtr input);
 
     #endregion
+
+    #region Fades
+
+    /// <summary>
+    /// Ramps the track's fade to target (0 silence, 1 unity) over frames, straight in dB. 0 frames jumps.
+    /// </summary>
+    /// <param name="track"></param>
+    /// <param name="target"></param>
+    /// <param name="frames"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_fade(IntPtr track, float target, uint frames);
+
+    /// <summary>Fade level after the last rendered block, done = 1 once the last request landed.</summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_get_fade(IntPtr track, out float level, out byte done);
+
+    /// <summary>Same ramp on the master, inside the master scope, before the master gain.</summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_master_fade(IntPtr mixer, float target, uint frames);
+
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_get_master_fade(IntPtr mixer, out float level, out byte done);
+
+    #endregion
 }

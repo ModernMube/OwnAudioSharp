@@ -1753,12 +1753,14 @@ namespace OwnaudioNET.Mixing
     {
         public AudioMixer(Ownaudio.Core.IAudioEngine engine, int bufferSizeInFrames = 512) { }
         public Ownaudio.Core.AudioConfig Config { get; }
+        public bool IsMasterFadeDone { get; }
         public bool IsRecording { get; }
         public bool IsRunning { get; }
         public int LastRecordingLatencyOffsetFrames { get; }
         public float LeftPeak { get; }
         public int[] MasterChannelScope { get; set; }
         public OwnaudioNET.Synchronization.MasterClock MasterClock { get; }
+        public float MasterFadeLevel { get; }
         public float MasterPan { get; set; }
         public float MasterVolume { get; set; }
         public System.Guid MixerId { get; }
@@ -1792,8 +1794,12 @@ namespace OwnaudioNET.Mixing
         public OwnaudioNET.Monitoring.EffectTap CreateEffectTap(System.Guid sourceId, int capacitySamples = 0) { }
         public OwnaudioNET.Monitoring.EffectTap CreateMasterEffectTap(int capacitySamples = 0) { }
         public void Dispose() { }
+        public void FadeMaster(float target, System.TimeSpan duration) { }
+        public System.Threading.Tasks.Task FadeMasterAsync(float target, System.TimeSpan duration, System.Threading.CancellationToken cancellationToken = default) { }
+        public bool FadeSource(OwnaudioNET.Interfaces.IAudioSource source, float target, System.TimeSpan duration) { }
         public OwnaudioNET.Interfaces.IEffectProcessor[] GetMasterEffects() { }
         public OwnaudioNET.Interfaces.IAudioSource[] GetSources() { }
+        public bool IsSourceFadeDone(OwnaudioNET.Interfaces.IAudioSource source) { }
         public void Pause() { }
         public bool RemoveMasterEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
         public bool RemoveSource(OwnaudioNET.Interfaces.IAudioSource source) { }

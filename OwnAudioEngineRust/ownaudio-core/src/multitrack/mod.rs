@@ -22,6 +22,7 @@ pub use track::{
 };
 
 use crate::effects::{EffectChain, EffectEntry};
+use crate::fade::{FadeShared, FadeStage};
 use crate::smoothing::{SmoothedParam, DEFAULT_SMOOTH_MS};
 use rtrb::Producer;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -63,6 +64,8 @@ pub struct MixerShared {
     /// length last with `Release`) and read length-first with `Acquire` on the audio
     /// thread, so a half-written scope is never observed.
     master_scope: [AtomicU32; MAX_ROUTE_CHANNELS],
+    /// The master fade ramp, on top of the master gain and confined to the master scope.
+    master_fade: FadeShared,
 }
 
 impl MixerShared {
@@ -75,7 +78,15 @@ impl MixerShared {
             master_peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
             master_scope_len: AtomicUsize::new(0),
             master_scope: std::array::from_fn(|_| AtomicU32::new(0)),
+            master_fade: FadeShared::new(),
         }
+    }
+
+    /// The master fade: a fade in on start, a fade out into a stop, without moving the
+    /// master gain the user set.
+    #[inline]
+    pub fn master_fade(&self) -> &FadeShared {
+        &self.master_fade
     }
 
     /// Confines the master effect chain, master gain and master pan to `channels` of the
@@ -238,6 +249,8 @@ pub struct MultiTrackMixer {
     /// cleared through [`MixerCommand::SetCaptureSink`]; overflow is dropped so a
     /// slow drain never blocks rendering.
     capture_sink: Option<crate::ringbuffer::RingBufferWriter>,
+    /// The master fade ramp in flight.
+    master_fade: FadeStage,
     /// Optional pre/post tap around the master effect chain, feeding a control-side
     /// analyser. Installed and cleared through [`MixerCommand::SetFxTap`] addressed
     /// with [`MASTER_EFFECT_TARGET`].
@@ -271,6 +284,7 @@ impl MultiTrackMixer {
             master_gain_smoother: SmoothedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
             master_pan_smoother: SmoothedParam::new(0.0, sample_rate, DEFAULT_SMOOTH_MS),
             capture_sink: None,
+            master_fade: FadeStage::new(),
             master_fx_tap: None,
             scope_scratch: vec![0.0f32; max_buffer_size.max(1)],
         }
@@ -458,8 +472,8 @@ impl MultiTrackMixer {
         self.clock.advance(frames);
     }
 
-    /// Applies the master gain and pan over `buf` (already through the master chain) and
-    /// returns the block's left/right peaks.
+    /// Applies the master fade, gain and pan over `buf` (already through the master chain)
+    /// and returns the block's left/right peaks.
     ///
     /// Both are ramped per frame — like a track's — so a live master change fades rather
     /// than clicks; at unity gain and center pan the smoothers rest at their neutral values
@@ -469,6 +483,9 @@ impl MultiTrackMixer {
     fn master_stage(&mut self, buf: &mut [f32], ch: usize) -> (f32, f32) {
         const MASTER_GAIN_SETTLE_EPS: f32 = 1.0e-6;
         const MASTER_PAN_SETTLE_EPS: f32 = 1.0e-6;
+
+        self.master_fade
+            .apply(self.master_shared.master_fade(), buf, ch);
 
         self.master_gain_smoother
             .set_target(self.master_shared.master_gain());
@@ -1142,6 +1159,52 @@ mod tests {
         assert!((tail[1] - 0.5).abs() < 1e-3, "R not scoped: {}", tail[1]);
         assert_eq!(tail[2], 1.0, "channel 2 must bypass the master stage");
         assert_eq!(tail[3], 1.0, "channel 3 must bypass the master stage");
+    }
+
+    #[test]
+    fn a_master_fade_out_silences_the_scope_and_leaves_the_direct_out() {
+        let mut mixer = MultiTrackMixer::new(48_000.0, 4);
+        let (a, shared) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0f32; 8192]))));
+        shared.set_state(TrackState::Playing);
+        mixer.master_shared().set_master_channel_scope(&[0, 1]);
+        mixer.master_shared().master_fade().request(0.0, 1024);
+
+        let mut out = vec![0.0f32; 8192];
+        mixer.mix(&mut out);
+
+        let tail = &out[out.len() - 4..];
+        assert_eq!(tail[0], 0.0);
+        assert_eq!(tail[1], 0.0);
+        assert_eq!(tail[2], 1.0, "a direct out does not fade with the master");
+        assert!(mixer.master_shared().master_fade().is_done());
+        assert_eq!(
+            mixer.master_shared().master_gain(),
+            1.0,
+            "the user's gain stays put"
+        );
+    }
+
+    #[test]
+    fn a_track_fade_leaves_the_other_tracks_alone() {
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let (a, sa) = mixer.add_track();
+        let (b, _) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0; 4096]))));
+        mixer.set_track_source(b, Some(Box::new(VecSource::new(vec![0.25; 4096]))));
+        play(&mut mixer, a);
+        play(&mut mixer, b);
+        sa.fade().request(0.0, 256);
+
+        let mut out = vec![0.0f32; 4096];
+        mixer.mix(&mut out);
+
+        assert!(
+            (out[4000] - 0.25).abs() < 1e-6,
+            "only b is left: {}",
+            out[4000]
+        );
+        assert!(sa.fade().is_done());
     }
 
     #[test]

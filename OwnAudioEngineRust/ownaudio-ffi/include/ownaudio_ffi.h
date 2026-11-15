@@ -1213,6 +1213,49 @@ int32_t ownaudio_v1_effect_get_param(struct OwnAudioMixerHandle *mixer,
                                      float *out_value);
 
 /**
+ * Ramps the track's fade from where it stands to `target` (linear, 0 = silence, 1 = unity)
+ * over `frames`, straight in dB; 0 frames jumps. The track gain is not touched.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ */
+int32_t ownaudio_v1_track_fade(struct OwnAudioTrackHandle *track, float target, uint32_t frames);
+
+/**
+ * Where the track's fade stands after the last rendered block, and whether the latest
+ * request has landed (`out_done` = 1). A track that does not render does not move.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `out_level` and `out_done` must be writable.
+ */
+int32_t ownaudio_v1_track_get_fade(struct OwnAudioTrackHandle *track,
+                                   float *out_level,
+                                   uint8_t *out_done);
+
+/**
+ * Same for the master: the fade runs inside the master scope, after the master chain and
+ * before the master gain, so a direct out outside the scope keeps playing.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ */
+int32_t ownaudio_v1_mixer_master_fade(struct OwnAudioMixerHandle *mixer,
+                                      float target,
+                                      uint32_t frames);
+
+/**
+ * The master fade's level and done-flag, see [`ownaudio_v1_track_get_fade`].
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `out_level` and `out_done` must be writable.
+ */
+int32_t ownaudio_v1_mixer_get_master_fade(struct OwnAudioMixerHandle *mixer,
+                                          float *out_level,
+                                          uint8_t *out_done);
+
+/**
  * Opens `path`, installs a decoding source on `track`, and writes the control
  * handle to `*out_source`.
  *

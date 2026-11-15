@@ -394,6 +394,35 @@ public sealed class AudioTrack : IDisposable
     #region Transport
 
     /// <summary>
+    /// Ramps the track down or up to target (0 silence, 1 unity) over duration, straight in dB,
+    /// frame by frame on the audio thread. Gain stays where the user put it; a new call takes
+    /// over from wherever the last one got to. A track that does not render does not move.
+    /// </summary>
+    public void FadeTo(float target, TimeSpan duration)
+    {
+        _throwIfDisposed();
+        int code = OwnAudioNative.ownaudio_v1_track_fade(_handle.DangerousGetHandle(), target, FadeFrames(duration, _sampleRate));
+        ErrorCodeMapper.ThrowIfError(code, nameof(FadeTo));
+    }
+
+    /// <summary>
+    /// Where the fade stands after the last rendered block, and whether the last FadeTo landed.
+    /// </summary>
+    public (float Level, bool Done) FadeState
+    {
+        get
+        {
+            _throwIfDisposed();
+            int code = OwnAudioNative.ownaudio_v1_track_get_fade(_handle.DangerousGetHandle(), out float level, out byte done);
+            ErrorCodeMapper.ThrowIfError(code, nameof(FadeState));
+            return (level, done != 0);
+        }
+    }
+
+    internal static uint FadeFrames(TimeSpan duration, float sampleRate)
+        => (uint)Math.Clamp(duration.TotalSeconds * sampleRate, 0.0, uint.MaxValue);
+
+    /// <summary>
     /// Starts or resumes this track.
     /// </summary>
     public void Play()

@@ -318,8 +318,8 @@ public sealed partial class AudioMixer
         source as T ?? (source as SourceWithEffects)?.InnerSource as T;
 
     /// <summary>
-    /// Builds the shared session on first use and hands the master scope down with it, so a
-    /// scope set before any source was attached isn't lost. Call under _rustSessionLock.
+    /// Builds the shared session on first use and hands the master scope and fade down with it,
+    /// so neither is lost when set before any source was attached. Call under _rustSessionLock.
     /// </summary>
     [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_rustSession))]
     private void _ensureRustSession()
@@ -328,6 +328,8 @@ public sealed partial class AudioMixer
         _rustSession = new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
         if (_masterChannelScope.Length > 0)
             _rustSession.MasterChannelScope = _masterChannelScope;
+        if (_masterFadeTarget != 1f)
+            _rustSession.FadeMaster(_masterFadeTarget, TimeSpan.Zero);
     }
 
     /// <summary>
