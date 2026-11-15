@@ -73,7 +73,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_ring_source(
             .is_err()
         {
             set_last_error("mixer command queue is full; track source not set");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
 
         let boxed = Box::new(TrackSourceWrapper { writer });
@@ -224,7 +224,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_clear_source(
             .is_err()
         {
             set_last_error("mixer command queue is full; track source not cleared");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
 
         OwnAudioErrorCode::Success as i32

@@ -23,6 +23,7 @@ public sealed partial class MultiTrackSession : IDisposable
     public AudioTrack AddTrack()
     {
         _throwIfDisposed();
+        _settleRemovalsOwed();
 
         int code = OwnAudioNative.ownaudio_v1_track_create(
             _mixerHandle.DangerousGetHandle(),
@@ -293,6 +294,7 @@ public sealed partial class MultiTrackSession : IDisposable
     {
         _throwIfDisposed();
         ArgumentNullException.ThrowIfNull(track);
+        _settleRemovalsOwed();
 
         if (_tracks.Remove(track))
         {
@@ -332,13 +334,45 @@ public sealed partial class MultiTrackSession : IDisposable
                 }
             }
 
-            OwnAudioNative.ownaudio_v1_track_remove(
-                _mixerHandle.DangerousGetHandle(),
-                track.GetNativeHandle());
+            _removeNative(track);
+        }
+    }
 
+    /// <summary>
+    /// Takes the track out of the native mixer and lets its handle go. A full command queue
+    /// keeps the handle: destroyed first, the track would sit in the mixer for good, so the
+    /// removal is owed and goes out with the next track call.
+    /// </summary>
+    private void _removeNative(AudioTrack track)
+    {
+        if (_queueRefused(OwnAudioNative.ownaudio_v1_track_remove(_mixerHandle.DangerousGetHandle(), track.GetNativeHandle())))
+        {
+            _removalsOwed.Add(track);
+            return;
+        }
+
+        track.Dispose();
+    }
+
+    private void _settleRemovalsOwed()
+    {
+        while (_removalsOwed.Count > 0)
+        {
+            AudioTrack track = _removalsOwed[^1];
+            if (_queueRefused(OwnAudioNative.ownaudio_v1_track_remove(_mixerHandle.DangerousGetHandle(), track.GetNativeHandle())))
+                return;
+
+            _removalsOwed.RemoveAt(_removalsOwed.Count - 1);
             track.Dispose();
         }
     }
+
+    /// <summary>
+    /// A binary from before CommandQueueFull answers a full queue with InternalError, and that
+    /// is the only InternalError a remove has.
+    /// </summary>
+    private static bool _queueRefused(int code)
+        => code == (int)NativeErrorCode.CommandQueueFull || code == (int)NativeErrorCode.InternalError;
 
     #endregion
 }

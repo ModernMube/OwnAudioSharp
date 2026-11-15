@@ -162,7 +162,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_input(
             .is_err()
         {
             set_last_error("mixer command queue is full; input source not set");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
 
         let boxed = Box::new(InputSourceWrapper { stream, peaks });

@@ -1961,3 +1961,54 @@ mod standalone_effect {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Command queue back-pressure
+// ---------------------------------------------------------------------------
+
+mod command_queue {
+    use ownaudio_core::effects::EffectType;
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_effects::{
+        ownaudio_v1_effect_destroy, ownaudio_v1_effect_reset, ownaudio_v1_mixer_add_master_effect,
+    };
+    use ownaudio_ffi::ffi_track::{ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy};
+    use ownaudio_ffi::handles::{OwnAudioEffectHandle, OwnAudioMixerHandle};
+
+    /// Nothing renders here, so nothing drains the queue: the call that finds it full must say
+    /// so with its own code, not as an internal error a caller can only tell apart by the text.
+    #[test]
+    fn a_full_queue_answers_with_its_own_code() {
+        unsafe {
+            let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            let mut effect: *mut OwnAudioEffectHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_mixer_add_master_effect(
+                    mixer,
+                    EffectType::Reverb as u32,
+                    48_000.0,
+                    &mut effect
+                ),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            let mut code = OwnAudioErrorCode::Success as i32;
+            for _ in 0..4096 {
+                code = ownaudio_v1_effect_reset(mixer, effect);
+                if code != OwnAudioErrorCode::Success as i32 {
+                    break;
+                }
+            }
+
+            assert_eq!(code, OwnAudioErrorCode::CommandQueueFull as i32);
+
+            ownaudio_v1_effect_destroy(effect);
+            ownaudio_v1_mixer_destroy(mixer);
+        }
+    }
+}

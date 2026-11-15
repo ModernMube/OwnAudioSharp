@@ -143,6 +143,7 @@ public class FfiStructLayoutParityTests
         Assert.AreEqual(13, (int)NativeErrorCode.DecoderUnsupportedFormat);
         Assert.AreEqual(14, (int)NativeErrorCode.DecoderReadFailed);
         Assert.AreEqual(15, (int)NativeErrorCode.DecoderSeekFailed);
+        Assert.AreEqual(16, (int)NativeErrorCode.CommandQueueFull);
     }
 
     [TestMethod]

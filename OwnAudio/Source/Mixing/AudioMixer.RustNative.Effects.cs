@@ -137,7 +137,7 @@ public sealed partial class AudioMixer
                 foreach (var pair in _rustMasterEffects)
                     _mirrorPair(pair);
             }
-            catch (OwnAudioException ex) when (_isQueueFull(ex)) { }
+            catch (CommandQueueFullException) { }
         }
     }
 
@@ -145,8 +145,6 @@ public sealed partial class AudioMixer
     /// Set while the track effect pass keeps bouncing off a full queue, so the log gets one line a streak.
     /// </summary>
     private bool _rustQueueWasFull;
-
-    private static bool _isQueueFull(OwnAudioException ex) => ex.Message.Contains("command queue is full");
 
     private void _noteQueueFull()
     {
@@ -205,7 +203,7 @@ public sealed partial class AudioMixer
                     foreach (var pair in routing.Pairs)
                         _mirrorPair(pair);
                 }
-                catch (OwnAudioException ex) when (_isQueueFull(ex))
+                catch (CommandQueueFullException)
                 {
                     _full = true;
                 }

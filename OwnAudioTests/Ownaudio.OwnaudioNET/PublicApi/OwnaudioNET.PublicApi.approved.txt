@@ -1782,6 +1782,7 @@ namespace OwnaudioNET.Mixing
         public void AddMasterEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
         public bool AddSource(OwnaudioNET.Interfaces.IAudioSource source) { }
         public bool AddSourcePrepared(OwnaudioNET.Interfaces.IAudioSource source) { }
+        public int AddSourcesPrepared(System.Collections.Generic.IEnumerable<OwnaudioNET.Interfaces.IAudioSource> sources) { }
         [System.Obsolete("The PDC ring it sets up only runs in the managed SourceWithEffects.ReadSamples pa" +
             "th, which the rust-native chain bypasses — calling this changes nothing you can " +
             "hear. A hosted VST3 stays time-aligned on its own through the native bypass.")]

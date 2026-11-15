@@ -3,6 +3,31 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## Unreleased
+
+### Added
+
+- **A full command queue has its own error.** The native side answers with
+  `OwnAudioErrorCode::CommandQueueFull` (16) wherever the mixer's command queue refuses a change,
+  instead of `InternalError` plus a sentence, and the managed side throws
+  `CommandQueueFullException` (`AudioEngineErrorCode.CommandQueueFull`). The call changed nothing,
+  so it can be retried once the output has rendered a block. A native binary from before the code
+  still maps to the same exception through its message.
+- `AudioMixer.AddSourcesPrepared(sources)`: the whole line-up in one call, each source left stopped
+  as `AddSourcePrepared` leaves it. A full queue is waited out a device block at a time while the
+  output drains it (up to a second), so a big song no longer needs the caller to pace its adds.
+
+### Fixed
+
+- **A refused source is not left on the mixer.** `AddSource` / `AddSourcePrepared` registered the
+  source and attached its clock before the engine got its say; when the native attach threw, the
+  source stayed on the mixer with nothing behind it and had to be removed before it could be asked
+  for again. Now the mixer forgets it, takes it off the clock and drops whatever native track it
+  had got, then rethrows.
+- A track whose rollback removal hit a full queue was destroyed without leaving the native mixer, so
+  it stayed there, silent, taking a track slot for the life of the session. The removal is now owed
+  and goes out with the next track call (`MultiTrackSession`).
+
 ## 4.0.12 — 2026-11-08
 
 ### Changed

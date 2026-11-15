@@ -214,6 +214,7 @@ fn error_code_discriminants() {
     assert_eq!(OwnAudioErrorCode::DecoderUnsupportedFormat as i32, 13);
     assert_eq!(OwnAudioErrorCode::DecoderReadFailed as i32, 14);
     assert_eq!(OwnAudioErrorCode::DecoderSeekFailed as i32, 15);
+    assert_eq!(OwnAudioErrorCode::CommandQueueFull as i32, 16);
 }
 
 #[test]

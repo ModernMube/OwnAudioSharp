@@ -62,4 +62,10 @@ public enum AudioEngineErrorCode
 
     /// Seek failed inside the stream.
     DecoderSeekFailed = 16,
+
+    /// <summary>
+    /// The mixer's command queue had no room and nothing was applied. It drains at the top of
+    /// every render block, so a retry after one block goes through while the output runs.
+    /// </summary>
+    CommandQueueFull = 17,
 }

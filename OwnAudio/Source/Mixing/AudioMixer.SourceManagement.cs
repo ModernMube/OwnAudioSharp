@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Logger;
 using Ownaudio.Core;
+using Ownaudio.Safe.Exceptions;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
@@ -32,14 +34,7 @@ public sealed partial class AudioMixer
 
         if (_added)
         {
-            if (source is IMasterClockSource clockSource)
-                clockSource.AttachToClock(_masterClock);
-
-            if (_rustNative)
-            {
-                _attachSourceToRustSession(source);
-                _ensureRustOutputAfterAttach();
-            }
+            _attachOrForget(source);
 
             source.Error += _onSourceError;
             _rebuildSourcesCache();
@@ -86,14 +81,7 @@ public sealed partial class AudioMixer
         bool _added = _sources.TryAdd(source.Id, source);
         if (_added)
         {
-            if (source is IMasterClockSource clockSource)
-                clockSource.AttachToClock(_masterClock);
-
-            if (_rustNative)
-            {
-                _attachSourceToRustSession(source);
-                _ensureRustOutputAfterAttach();
-            }
+            _attachOrForget(source);
 
             source.Error += _onSourceError;
             _rebuildSourcesCache();
@@ -106,6 +94,78 @@ public sealed partial class AudioMixer
         }
 
         return _added;
+    }
+
+    /// <summary>
+    /// The whole line-up at once, each source left stopped as AddSourcePrepared leaves it. A full
+    /// command queue is waited out a device block at a time while the output drains it, so a big
+    /// song goes on without the caller pacing it. Returns how many were added.
+    /// </summary>
+    /// <param name="sources"></param>
+    public int AddSourcesPrepared(IEnumerable<IAudioSource> sources)
+    {
+        _throwIfDisposed();
+        ArgumentNullException.ThrowIfNull(sources);
+
+        int _added = 0;
+        foreach (IAudioSource source in sources)
+            if (_withQueueRoom(() => AddSourcePrepared(source))) _added++;
+
+        return _added;
+    }
+
+    /// <summary>
+    /// Longest a full queue is waited out before the refusal goes to the caller.
+    /// </summary>
+    private const int QueueRoomWaitMs = 1000;
+
+    /// <summary>
+    /// Tries again a block later while something drains the queue — the output stream renders,
+    /// and each render empties it. Without an output nothing would, so it fails straight away.
+    /// </summary>
+    private bool _withQueueRoom(Func<bool> add)
+    {
+        var _waited = Stopwatch.StartNew();
+
+        while (true)
+        {
+            try { return add(); }
+            catch (CommandQueueFullException) when (_rustOutputStream is not null && _waited.ElapsedMilliseconds < QueueRoomWaitMs)
+            {
+                Thread.Sleep(Math.Max(1, _config.BufferSize * 1000 / Math.Max(1, _config.SampleRate)));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clock and native track for a freshly registered source. When the engine refuses it, the
+    /// mixer forgets it again, so the caller can simply ask again — nothing to take off first.
+    /// </summary>
+    /// <param name="source"></param>
+    private void _attachOrForget(IAudioSource source)
+    {
+        if (source is IMasterClockSource clockSource)
+            clockSource.AttachToClock(_masterClock);
+
+        if (!_rustNative) return;
+
+        try
+        {
+            _attachSourceToRustSession(source);
+            _ensureRustOutputAfterAttach();
+        }
+        catch
+        {
+            _sources.TryRemove(source.Id, out _);
+
+            if (source is IMasterClockSource clock)
+                clock.DetachFromClock();
+
+            try { _detachSourceFromRustSession(source); }
+            catch (Exception ex) { Log.Error($"[Mixer] Refused source '{source.Id}' left a native track behind", ex); }
+
+            throw;
+        }
     }
 
     /// <summary>

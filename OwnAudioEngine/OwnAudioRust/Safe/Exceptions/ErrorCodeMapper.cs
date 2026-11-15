@@ -47,6 +47,12 @@ internal static class ErrorCodeMapper
                 or NativeErrorCode.DecoderSeekFailed
                     => new DecoderException(code, message),
 
+            NativeErrorCode.CommandQueueFull => new CommandQueueFullException(message),
+
+            //A native binary from before the code existed still says it in words
+            NativeErrorCode.InternalError when detail.Contains("command queue is full", StringComparison.Ordinal)
+                => new CommandQueueFullException(message),
+
             _ => new OwnAudioException(code, message)
         };
     }
@@ -71,6 +77,7 @@ internal static class ErrorCodeMapper
             NativeErrorCode.DecoderUnsupportedFormat => AudioEngineErrorCode.DecoderUnsupportedFormat,
             NativeErrorCode.DecoderReadFailed       => AudioEngineErrorCode.DecoderReadFailed,
             NativeErrorCode.DecoderSeekFailed       => AudioEngineErrorCode.DecoderSeekFailed,
+            NativeErrorCode.CommandQueueFull        => AudioEngineErrorCode.CommandQueueFull,
             _                                       => AudioEngineErrorCode.InternalError,
         };
     }
@@ -104,6 +111,7 @@ internal static class ErrorCodeMapper
             NativeErrorCode.DecoderUnsupportedFormat => "audio file format or codec is not supported",
             NativeErrorCode.DecoderReadFailed       => "error while decoding audio data",
             NativeErrorCode.DecoderSeekFailed       => "failed to seek within the audio stream",
+            NativeErrorCode.CommandQueueFull        => "mixer command queue is full",
             _                                       => $"unknown error code {(int)code}",
         };
     }

@@ -255,7 +255,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_attach_capture(
             .is_err()
         {
             set_last_error("capture command queue is full; tap not attached");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
 
         // The track works at the tap's width, and only takes the source once the tap is in
@@ -268,7 +268,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_attach_capture(
         {
             let _ = capture_wrapper.controller.detach(track_id);
             set_last_error("mixer command queue is full; capture source not set");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
 
         OwnAudioErrorCode::Success as i32

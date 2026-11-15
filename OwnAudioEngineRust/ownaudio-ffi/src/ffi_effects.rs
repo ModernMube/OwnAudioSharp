@@ -112,7 +112,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_add_effect(
             Ok(id) => id,
             Err(_) => {
                 set_last_error("mixer command queue is full; effect not added");
-                return OwnAudioErrorCode::InternalError as i32;
+                return OwnAudioErrorCode::CommandQueueFull as i32;
             }
         };
 
@@ -186,7 +186,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_add_master_effect(
             Ok(id) => id,
             Err(_) => {
                 set_last_error("mixer command queue is full; master effect not added");
-                return OwnAudioErrorCode::InternalError as i32;
+                return OwnAudioErrorCode::CommandQueueFull as i32;
             }
         };
 
@@ -247,7 +247,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_remove_master_effect(
 
         if remove.is_err() {
             set_last_error("mixer command queue is full; master effect not removed");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
 
         unsafe {
@@ -308,7 +308,7 @@ fn add_vst_effect_to(
         Ok(id) => id,
         Err(_) => {
             set_last_error("mixer command queue is full; VST effect not added");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
     };
 
@@ -500,7 +500,7 @@ pub unsafe extern "C" fn ownaudio_v1_effect_remove(
 
         if remove.is_err() {
             set_last_error("mixer command queue is full; effect not removed");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
 
         unsafe {
@@ -568,7 +568,7 @@ pub unsafe extern "C" fn ownaudio_v1_effect_set_param(
             }
             Err(_) => {
                 set_last_error("mixer command queue is full; parameter not set");
-                OwnAudioErrorCode::InternalError as i32
+                OwnAudioErrorCode::CommandQueueFull as i32
             }
         }
     }));
@@ -612,7 +612,7 @@ pub unsafe extern "C" fn ownaudio_v1_effect_reset(
             Ok(()) => OwnAudioErrorCode::Success as i32,
             Err(_) => {
                 set_last_error("mixer command queue is full; effect not reset");
-                OwnAudioErrorCode::InternalError as i32
+                OwnAudioErrorCode::CommandQueueFull as i32
             }
         }
     }));

@@ -55,4 +55,7 @@ internal enum NativeErrorCode : int
 
     /// <summary>Seek inside the stream failed.</summary>
     DecoderSeekFailed = 15,
+
+    /// <summary>The mixer's command queue had no room, nothing was applied.</summary>
+    CommandQueueFull = 16,
 }

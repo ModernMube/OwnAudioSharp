@@ -25,7 +25,7 @@ fn start(wrapper: &mut MixerState, track_id: u64, capacity_samples: usize) -> i3
         }
         Err(_) => {
             set_last_error("mixer command queue is full; effect tap not started");
-            OwnAudioErrorCode::InternalError as i32
+            OwnAudioErrorCode::CommandQueueFull as i32
         }
     }
 }
@@ -75,7 +75,7 @@ fn stop(wrapper: &mut MixerState, track_id: u64) -> i32 {
         Ok(()) => OwnAudioErrorCode::Success as i32,
         Err(_) => {
             set_last_error("mixer command queue is full; effect tap stop deferred");
-            OwnAudioErrorCode::InternalError as i32
+            OwnAudioErrorCode::CommandQueueFull as i32
         }
     }
 }

@@ -42,6 +42,10 @@ pub enum OwnAudioErrorCode {
     DecoderReadFailed = 14,
     /// Seeking within the audio stream failed.
     DecoderSeekFailed = 15,
+    /// The mixer's command queue had no room; nothing was applied. The audio thread drains it
+    /// at the top of every render block, so retrying after a block succeeds while the output
+    /// stream runs.
+    CommandQueueFull = 16,
 }
 
 impl From<ownaudio_core::AudioError> for OwnAudioErrorCode {

@@ -641,6 +641,7 @@ OwnAudioException               ← base for all OwnAudio errors
  ├─ DecoderException            ← decoder errors (code 20+)
  ├─ HostApiNotAvailableException   ← requested host API unavailable (code 10)
  ├─ AsioDriverNotFoundException    ← ASIO driver not installed (code 11)
+ ├─ CommandQueueFullException      ← mixer command queue full, nothing applied, retry after a block (code 17)
  └─ AbiVersionMismatchException    ← native binary version mismatch (code 12)
 ```
 

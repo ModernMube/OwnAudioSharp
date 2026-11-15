@@ -319,7 +319,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_capture_start(
             }
             Err(_) => {
                 set_last_error("mixer command queue is full; capture not started");
-                OwnAudioErrorCode::InternalError as i32
+                OwnAudioErrorCode::CommandQueueFull as i32
             }
         }
     }));
@@ -400,7 +400,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_capture_stop(mixer: *mut OwnAudioMixe
             Ok(()) => OwnAudioErrorCode::Success as i32,
             Err(_) => {
                 set_last_error("mixer command queue is full; capture stop deferred");
-                OwnAudioErrorCode::InternalError as i32
+                OwnAudioErrorCode::CommandQueueFull as i32
             }
         }
     }));
@@ -440,7 +440,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_create(
             Ok(pair) => pair,
             Err(_) => {
                 set_last_error("mixer command queue is full; track not added");
-                return OwnAudioErrorCode::InternalError as i32;
+                return OwnAudioErrorCode::CommandQueueFull as i32;
             }
         };
 
@@ -517,7 +517,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_remove(
             Ok(_) => OwnAudioErrorCode::Success as i32,
             Err(_) => {
                 set_last_error("mixer command queue is full; track not removed");
-                OwnAudioErrorCode::InternalError as i32
+                OwnAudioErrorCode::CommandQueueFull as i32
             }
         }
     }));

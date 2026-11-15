@@ -23,6 +23,11 @@ public sealed partial class MultiTrackSession : IDisposable
     private readonly float _sampleRate;
     private readonly ushort _channels;
     private readonly List<AudioTrack> _tracks = new();
+
+    /// <summary>
+    /// Tracks a full command queue would not let go of yet, see _removeNative.
+    /// </summary>
+    private readonly List<AudioTrack> _removalsOwed = new();
     private readonly IReadOnlyList<AudioTrack> _tracksView;
     private readonly List<FileTrack> _fileTracks = new();
     private readonly List<MemoryTrack> _memoryTracks = new();
@@ -191,8 +196,10 @@ public sealed partial class MultiTrackSession : IDisposable
         _captureBridges.Clear();
 
         foreach (AudioTrack track in _tracks) track.Dispose();
+        foreach (AudioTrack track in _removalsOwed) track.Dispose();
 
         _tracks.Clear();
+        _removalsOwed.Clear();
         _mixerHandle.Dispose();
     }
 

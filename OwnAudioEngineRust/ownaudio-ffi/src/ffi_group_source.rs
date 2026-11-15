@@ -165,7 +165,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_group(
             .is_err()
         {
             set_last_error("mixer command queue is full; group source not set");
-            return OwnAudioErrorCode::InternalError as i32;
+            return OwnAudioErrorCode::CommandQueueFull as i32;
         }
 
         let boxed = Box::new(GroupSourceWrapper { control });
