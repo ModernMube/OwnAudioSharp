@@ -7,6 +7,20 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Added
 
+- **When a removed effect may be disposed.** `AudioMixer.WhenEffectReleasedAsync(effect)` returns
+  once the audio thread can no longer call into the effect: its native twin is off every chain and
+  the output has rendered two whole blocks since (the one rendering while the removal was queued,
+  and the next, which drains the queue first thing). Straight away while no output runs. A VST3
+  effect is called straight from the native chain, so unloading one before that is a crash —
+  callers no longer have to guess with a fixed delay after `RemoveEffect` / `RemoveMasterEffect`.
+  Rust-native only.
+- **A count-in in front of a start.** `AudioMixer.StartPreparedSources(startPosition, preRoll)`
+  holds every file and clip track silent for `preRoll`, sample for sample, then lets them enter at
+  `startPosition`, the master clock standing there all the while. Generator sources (a click, a
+  synth) render from the first block and count for themselves. Built on the native start silence
+  the start offsets already use; `MultiTrackSession.HasRemovalsOwed` / `SettleRemovals()` came
+  with the release wait. Rust-native only.
+
 - **Fades the engine runs itself.** `AudioMixer.FadeMaster(target, duration)` /
   `FadeMasterAsync` and `FadeSource(source, target, duration)` ramp the master (inside the
   master scope, before the master gain) or one source's track (after its effects, so a reverb
@@ -32,6 +46,11 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Fixed
 
+- **A refused effect removal is no longer lost.** Taking an effect off the master or a track chain
+  while the command queue was full logged a warning and dropped the removal: the native twin stayed
+  on its chain until the session died, and a VST3 behind it kept being called after its host was
+  unloaded. The removal is now owed and retried on the control tick, and a track removal owed by the
+  session goes out on the tick too instead of waiting for the next track call.
 - **A refused source is not left on the mixer.** `AddSource` / `AddSourcePrepared` registered the
   source and attached its clock before the engine got its say; when the native attach threw, the
   source stayed on the mixer with nothing behind it and had to be removed before it could be asked

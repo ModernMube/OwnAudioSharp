@@ -321,11 +321,11 @@ public sealed partial class AudioMixer
                 {
                     if (_fs.StartOffset != 0.0)
                     {
-                        _applyRustStartOffset(_fs, _project);
+                        _applyRustStartOffset(_fs, _project, _rustPreRollFrames);
                     }
                     else
                     {
-                        _fs.RustTrack.SetStartDelayFrames(0);
+                        _fs.RustTrack.SetStartDelayFrames(_rustPreRollFrames);
                         _rustAppliedStartOffsets[_fs.Id] = 0.0;
                     }
                 }
@@ -335,6 +335,7 @@ public sealed partial class AudioMixer
                 }
             }
 
+            _rustPreRollFrames = 0;
             _rustSession?.PlayAll();
         }
     }
@@ -395,6 +396,7 @@ public sealed partial class AudioMixer
 
             //Native effects live on the session mixer, disposing it frees them — just drop the pairings
             _rustMasterEffects.Clear();
+            _rustRemovalsOwed.Clear();
 
             foreach (var routing in _rustEffectSources)
                 routing.Source.NativeChainReconciler = SourceWithEffects.NoNativeChain;

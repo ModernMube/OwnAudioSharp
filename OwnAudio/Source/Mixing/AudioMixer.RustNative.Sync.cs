@@ -80,7 +80,8 @@ public sealed partial class AudioMixer
     /// </summary>
     /// <param name="fs"></param>
     /// <param name="projectPosition">project timeline position in seconds</param>
-    private void _applyRustStartOffset(IRustClockedSource fs, double projectPosition)
+    /// <param name="preRollFrames">silence on top of whatever the offset asks, a count-in's</param>
+    private void _applyRustStartOffset(IRustClockedSource fs, double projectPosition, long preRollFrames = 0)
     {
         AudioTrack? _track = fs.RustTrack;
         if (_track is null)
@@ -94,15 +95,38 @@ public sealed partial class AudioMixer
             //Seek target is wall-clock but the decoder speaks content time, so scale by tempo
             float _tempo = fs.Tempo <= 0f ? 1f : fs.Tempo;
             fs.Seek(Math.Clamp(_local * _tempo, 0.0, fs.Duration));
-            _track.SetStartDelayFrames(0);
+            _track.SetStartDelayFrames(preRollFrames);
         }
         else
         {
             fs.Seek(0.0);
-            _track.SetStartDelayFrames((long)Math.Round(-_local * _config.SampleRate));
+            _track.SetStartDelayFrames((long)Math.Round(-_local * _config.SampleRate) + preRollFrames);
         }
 
         _rustAppliedStartOffsets[fs.Id] = _offset;
+    }
+
+    /// <summary>
+    /// Count-in silence on every file and clip track, before any of them is told to play — a
+    /// track already playing would have rendered a block of the song first. The next Start
+    /// applies it once more with the offsets and lets it go.
+    /// </summary>
+    private void _holdForPreRoll(double startPosition, long frames)
+    {
+        lock (_rustSessionLock)
+        {
+            _rustPreRollFrames = frames;
+            if (frames == 0) return;
+
+            foreach (IAudioSource source in _sources.Values)
+            {
+                IRustClockedSource? _fs = _resolve<IRustClockedSource>(source);
+                if (_fs?.RustTrack is null) continue;
+
+                try { _applyRustStartOffset(_fs, startPosition, frames); }
+                catch (Exception ex) { Log.Error($"[Mixer] Track '{_fs.Id}' could not be held for the count-in", ex); }
+            }
+        }
     }
 
     /// <summary>

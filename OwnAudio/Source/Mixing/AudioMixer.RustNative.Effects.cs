@@ -95,7 +95,7 @@ public sealed partial class AudioMixer
             if (_index < 0)
                 return;
 
-            if (_rustSession is not null) _rustMasterEffects[_index].RemoveNativeBestEffort();
+            if (_rustSession is not null) _removeNative(_rustMasterEffects[_index]);
 
             _rustMasterEffects.RemoveAt(_index);
         }
@@ -114,7 +114,7 @@ public sealed partial class AudioMixer
             if (_rustSession is not null)
             {
                 foreach (var pair in _rustMasterEffects)
-                    pair.RemoveNativeBestEffort();
+                    _removeNative(pair);
             }
 
             _rustMasterEffects.Clear();
@@ -138,6 +138,28 @@ public sealed partial class AudioMixer
                     _mirrorPair(pair);
             }
             catch (CommandQueueFullException) { }
+        }
+    }
+
+    /// <summary>
+    /// Takes a native twin off its chain, or owes the removal when the queue is full. Call under
+    /// _rustSessionLock.
+    /// </summary>
+    private void _removeNative(RustEffectPair pair)
+    {
+        if (pair.TryRemoveNative()) return;
+
+        if (_rustRemovalsOwed.Count == 0)
+            Log.Info($"[Mixer] Command queue full, the removal of '{pair.Managed.Name}' goes out on the next tick");
+        _rustRemovalsOwed.Add(pair);
+    }
+
+    private void _settleRemovalsOwed()
+    {
+        for (int i = _rustRemovalsOwed.Count - 1; i >= 0; i--)
+        {
+            if (!_rustRemovalsOwed[i].TryRemoveNative()) return;
+            _rustRemovalsOwed.RemoveAt(i);
         }
     }
 
@@ -184,6 +206,9 @@ public sealed partial class AudioMixer
     {
         lock (_rustSessionLock)
         {
+            _settleRemovalsOwed();
+            _rustSession?.SettleRemovals();
+
             bool _full = false;
 
             foreach (RustTrackEffectRouting routing in _rustEffectSources)
@@ -233,7 +258,7 @@ public sealed partial class AudioMixer
         }
 
         for (int i = _keep; i < routing.Pairs.Count; i++)
-            routing.Pairs[i].RemoveNativeBestEffort();
+            _removeNative(routing.Pairs[i]);
 
         routing.Pairs.RemoveRange(_keep, routing.Pairs.Count - _keep);
 

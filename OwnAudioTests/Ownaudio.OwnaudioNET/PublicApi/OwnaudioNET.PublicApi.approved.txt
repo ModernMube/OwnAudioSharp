@@ -1808,10 +1808,12 @@ namespace OwnaudioNET.Mixing
         public void Seek(double positionInSeconds) { }
         public void Start() { }
         public void StartPreparedSources(double startPosition = 0) { }
+        public void StartPreparedSources(double startPosition, System.TimeSpan preRoll) { }
         public void StartRecording(string filePath, bool compensateInputLatency = false) { }
         public void Stop() { }
         public void StopRecording() { }
         public override string ToString() { }
+        public System.Threading.Tasks.Task WhenEffectReleasedAsync(OwnaudioNET.Interfaces.IEffectProcessor effect, System.Threading.CancellationToken cancellationToken = default) { }
         public static OwnaudioNET.Mixing.AudioMixer Create(OwnaudioNET.Engine.AudioEngineWrapper engineWrapper, int bufferSizeInFrames = 512) { }
     }
     public sealed class WaveFileWriter : System.IDisposable

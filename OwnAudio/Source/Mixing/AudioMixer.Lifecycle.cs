@@ -182,7 +182,30 @@ public sealed partial class AudioMixer
     public void StartPreparedSources(double startPosition = 0.0)
     {
         _throwIfDisposed();
+        _startPrepared(startPosition);
+    }
 
+    /// <summary>
+    /// The same start with a count-in in front: every file and clip track holds silence for
+    /// preRoll first, sample for sample, then enters at startPosition — the master clock stands
+    /// at startPosition all the while. Generator sources (a click, a synth) are not held: they
+    /// render from the first block, and it is theirs to count. Rust-native only; the hold lands
+    /// on the next Start, so call it on a paused mixer, as the plain one.
+    /// </summary>
+    /// <param name="startPosition"></param>
+    /// <param name="preRoll"></param>
+    public void StartPreparedSources(double startPosition, TimeSpan preRoll)
+    {
+        _throwIfDisposed();
+        _throwUnlessRustNative(nameof(StartPreparedSources));
+
+        long _frames = preRoll <= TimeSpan.Zero ? 0 : (long)Math.Round(preRoll.TotalSeconds * _config.SampleRate);
+        _holdForPreRoll(startPosition, _frames);
+        _startPrepared(startPosition);
+    }
+
+    private void _startPrepared(double startPosition)
+    {
         _masterClock.SeekTo(startPosition);
 
         int _started = 0;

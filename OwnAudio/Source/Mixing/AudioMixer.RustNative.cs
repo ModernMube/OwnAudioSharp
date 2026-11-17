@@ -4,6 +4,7 @@ using System.Threading;
 using Logger;
 using Ownaudio.Audio.Tracks;
 using Ownaudio.Safe;
+using Ownaudio.Safe.Exceptions;
 using OwnaudioNET.Core;
 using OwnaudioNET.Effects.VST;
 using OwnaudioNET.Engine;
@@ -132,10 +133,11 @@ public sealed partial class AudioMixer
         }
 
         /// <summary>
-        /// Drops the native twin off its chain, shrugging off a transient failure
-        /// (full command queue). Worst case it lives until the session dies.
+        /// Drops the native twin off its chain. False when the command queue was full: the twin
+        /// is still on the chain, and a VST3 behind it still gets called, so the removal is owed
+        /// (<see cref="AudioMixer._removeNative"/>). Any other failure means the chain is gone.
         /// </summary>
-        public void RemoveNativeBestEffort()
+        public bool TryRemoveNative()
         {
             try
             {
@@ -144,10 +146,16 @@ public sealed partial class AudioMixer
                 else
                     _trackChain?.Remove(Native);
             }
-            catch (Ownaudio.Safe.Exceptions.OwnAudioException ex)
+            catch (CommandQueueFullException)
             {
-                Log.Warning($"[Mixer] Native effect twin stayed on its chain until the session dies: {ex.Message}");
+                return false;
             }
+            catch (Exception ex) when (ex is Ownaudio.Safe.Exceptions.OwnAudioException or ObjectDisposedException)
+            {
+                Log.Warning($"[Mixer] Native effect twin of '{Managed.Name}' could not be removed, its chain is gone: {ex.Message}");
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -176,6 +184,19 @@ public sealed partial class AudioMixer
     /// Guarded by _rustSessionLock.
     /// </summary>
     private readonly List<RustTrackEffectRouting> _rustEffectSources = new List<RustTrackEffectRouting>();
+
+    /// <summary>
+    /// Native twins whose removal a full queue refused. Still on their chain and still called
+    /// by the audio thread, so the tick retries them and WhenEffectReleasedAsync waits for them.
+    /// Guarded by _rustSessionLock.
+    /// </summary>
+    private readonly List<RustEffectPair> _rustRemovalsOwed = new List<RustEffectPair>();
+
+    /// <summary>
+    /// A count-in's silence for the next Start to put in front of every file and clip track.
+    /// Guarded by _rustSessionLock.
+    /// </summary>
+    private long _rustPreRollFrames;
 
     /// <summary>
     /// StartOffset last applied per source id, so the tick can spot an edit and realign.

@@ -354,6 +354,21 @@ public sealed partial class MultiTrackSession : IDisposable
         track.Dispose();
     }
 
+    /// <summary>
+    /// A track removal a full queue refused: that track, and every effect on it, is still in the
+    /// native mixer.
+    /// </summary>
+    public bool HasRemovalsOwed => _removalsOwed.Count > 0;
+
+    /// <summary>
+    /// Sends the owed removals now, as far as the queue takes them. Otherwise they go out with
+    /// the next track call, which may be a while.
+    /// </summary>
+    public void SettleRemovals()
+    {
+        if (!_disposed && _removalsOwed.Count > 0) _settleRemovalsOwed();
+    }
+
     private void _settleRemovalsOwed()
     {
         while (_removalsOwed.Count > 0)
