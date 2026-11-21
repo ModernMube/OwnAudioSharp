@@ -56,8 +56,10 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   stretch stage), then all
   are let go on the same block. Live inputs are left out (`AudioTrack.SetGated(false)`), so
   monitoring never drops out. It gives up after 0.5 s and says so in the log. A seek's silence now
-  lasts as long as the slowest track needs instead of one block, without the flam. (preview.3
-  waited for a full prefetch ring, about two seconds of audio a track: 320 ms on 30 tracks.) New:
+  lasts as long as the slowest track needs instead of one block, without the flam. (preview.3 and
+  preview.4 held 320 ms on 30 tracks: the gate stopped asking at the first source not ready, and
+  it is the asking that drops the ring a seek left behind, so the sources became ready one per
+  block. preview.3 also waited for a full prefetch ring, two seconds of audio a track.) New:
   `MultiTrackSession.ArmResumeGate`, `TakeResumeGateReport`, `AudioTrack.SetGated`.
 - A seek's leftover ring samples are dropped without being copied anywhere (`RingBufferReader::skip`).
 - **A refused effect removal is no longer lost.** Taking an effect off the master or a track chain

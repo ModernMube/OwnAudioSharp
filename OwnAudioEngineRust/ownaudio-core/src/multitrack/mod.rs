@@ -530,6 +530,8 @@ impl MultiTrackMixer {
             return false;
         }
 
+        // every source is asked, every block: the asking is what lets a file source drop the
+        // ring a seek left behind, so stopping at the first one not ready queued them one per block
         let (mut any, mut waiting) = (false, false);
         for track in self
             .tracks
@@ -537,10 +539,7 @@ impl MultiTrackMixer {
             .filter(|t| t.is_active(any_soloed) && t.shared.gated())
         {
             any = true;
-            if !track.source_ready() {
-                waiting = true;
-                break;
-            }
+            waiting |= !track.source_ready();
         }
         if !any {
             return false;
@@ -1552,6 +1551,49 @@ mod tests {
             Some((3 * GATE_BLOCK as u64, false))
         );
         assert!(!shared.resume_gate_armed());
+    }
+
+    /// Ready only after it has been asked `asks` times — a file source drops what the seek left
+    /// in its ring when asked, and its prefetch can refill only after that.
+    struct AskedSource {
+        asks: u32,
+    }
+
+    impl TrackSource for AskedSource {
+        fn read(&mut self, out: &mut [f32]) -> usize {
+            out.fill(1.0);
+            out.len()
+        }
+
+        fn ready(&mut self) -> bool {
+            self.asks = self.asks.saturating_sub(1);
+            self.asks == 0
+        }
+    }
+
+    /// Thirty sources that each need two asks are ready after two blocks, not sixty: the gate
+    /// asks all of them every block instead of stopping at the first one still waiting.
+    #[test]
+    fn resume_gate_asks_every_source_every_block() {
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        for _ in 0..30 {
+            let (id, _) = mixer.add_track();
+            mixer.set_track_source(id, Some(Box::new(AskedSource { asks: 2 })));
+            play(&mut mixer, id);
+        }
+        let shared = mixer.master_shared();
+        let mut out = [0.0f32; GATE_BLOCK];
+
+        shared.arm_resume_gate();
+        mixer.mix(&mut out);
+        mixer.mix(&mut out);
+
+        assert!(!shared.resume_gate_armed());
+        assert_eq!(
+            shared.take_resume_gate_report(),
+            Some((GATE_BLOCK as u64, false))
+        );
+        assert_eq!(out[0], 30.0, "all thirty come in on the releasing block");
     }
 
     #[test]
