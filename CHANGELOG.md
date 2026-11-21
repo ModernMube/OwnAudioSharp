@@ -14,9 +14,14 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   armed track took it, or (`Late`) that its moment passed without that, and the caller seeks
   there itself. A track's `Position` moves with the jump (`AudioTrack.JumpShiftFrames`), so the
   master clock follows on its own. One jump at a time; arming again replaces it, a seek takes it
-  back, a tempo change needs a re-arm. For now only a `GroupSource` (clip track) takes it — a
-  streamed `FileSource` answers that it cannot (`ArmJump` returns false) until its landing buffer
-  comes. Native: `GroupSourceControl::arm_jump` / `disarm_jump` / `jump_taken`,
+  back, a tempo change needs a re-arm. A `GroupSource` (clip track) takes it in its cursor. A
+  `FileSource` takes it on a second stream of its file: the first jump armed opens the file again
+  (on the caller's thread, so arm ahead), every arm seeks that spare stream to the target, and at
+  the frame the two swap roles — nobody ever seeks the stream that is playing, so a decoder that
+  cannot seek to the exact frame cannot click it. If the moment comes before the spare is ready
+  the file does not jump and `JumpTaken` reports `Late` at once. `ArmJump` returns false when a
+  track cannot take it at all (its target past the file's end). Native:
+  `GroupSourceControl` / `FileSourceControl::arm_jump` / `disarm_jump`, `jump_taken`, `jump_missed`,
   `TrackSource::take_jump`, `TrackShared::jump_shift_frames`.
 
 - **When a removed effect may be disposed.** `AudioMixer.WhenEffectReleasedAsync(effect)` returns

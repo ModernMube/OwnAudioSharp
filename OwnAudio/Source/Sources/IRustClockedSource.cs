@@ -38,4 +38,10 @@ internal interface IRustClockedSource : IMasterClockSource
     /// Id of the last jump carried out, 0 for none.
     /// </summary>
     ulong RustNativeJumpTaken { get; }
+
+    /// <summary>
+    /// Id of the last jump whose moment came before the source was ready for it, so it did not
+    /// happen; 0 for none.
+    /// </summary>
+    ulong RustNativeJumpMissed { get; }
 }

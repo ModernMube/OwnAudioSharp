@@ -758,6 +758,22 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_group_source_arm_jump(IntPtr source, ulong id, ulong at, ulong to);
 
+    /// <summary>
+    /// The same on a file: a second stream of it is opened on the first call (may block on the
+    /// file) and seeked to `to` on every one.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_file_source_arm_jump(IntPtr source, ulong id, ulong at, ulong to);
+
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_file_source_disarm_jump(IntPtr source);
+
+    /// <summary>
+    /// Last jump carried out, and last one missed because its target was not ready; 0 for none.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_file_source_jump_state(IntPtr source, out ulong taken, out ulong missed);
+
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_group_source_disarm_jump(IntPtr source);
 

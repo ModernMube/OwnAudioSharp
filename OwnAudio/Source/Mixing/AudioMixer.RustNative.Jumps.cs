@@ -35,8 +35,9 @@ public partial class AudioMixer
     /// seek takes it back. Re-arm after a tempo change, the frames move with the tempo.
     /// </summary>
     /// <returns>
-    /// True when every track carries it out itself. False when one of them cannot (a streamed file
-    /// track, for now): the rest still jump, and the caller seeks there at the boundary.
+    /// True when every track carries it out itself. False when one of them cannot (its target lies
+    /// beyond the file, say): the rest still jump, and the caller seeks there at the boundary. A
+    /// file track opens a second stream of its file on the first jump armed, so arm ahead.
     /// </returns>
     public bool ArmJump(double atProjectSeconds, double toProjectSeconds)
     {
@@ -97,11 +98,14 @@ public partial class AudioMixer
         {
             if (_jumpId == 0) return;
 
-            bool _taken = _jumpSources.Length > 0;
+            bool _taken = _jumpSources.Length > 0, _missed = false;
             foreach (IRustClockedSource source in _jumpSources)
-                if (source.RustNativeJumpTaken != _jumpId) { _taken = false; break; }
+            {
+                if (source.RustNativeJumpMissed == _jumpId) _missed = true;
+                if (source.RustNativeJumpTaken != _jumpId) _taken = false;
+            }
 
-            bool _late = !_taken && _masterClock.CurrentTimestamp > _jumpAt + JumpLateSeconds;
+            bool _late = _missed || (!_taken && _masterClock.CurrentTimestamp > _jumpAt + JumpLateSeconds);
             if (!_taken && !_late) return;
 
             _done = new JumpTakenEventArgs(_jumpId, _jumpAt, _jumpTo, _late);

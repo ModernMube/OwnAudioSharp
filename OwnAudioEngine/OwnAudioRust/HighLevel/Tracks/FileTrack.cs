@@ -120,6 +120,55 @@ public sealed class FileTrack : IDisposable
     /// position separately with <see cref="AudioTrack.Seek"/>.
     /// </summary>
     /// <param name="position"></param>
+    /// <summary>
+    /// When the cursor reaches at, the file goes on from to — inside the block, by swapping to a
+    /// second stream of it prefetched at to. That one is opened on the first call (it may block on
+    /// the file) and seeked on every one, so arm well ahead: a jump whose moment comes before it
+    /// is ready does not happen and shows in JumpMissed.
+    /// </summary>
+    public void ArmJump(ulong id, TimeSpan at, TimeSpan to)
+    {
+        ulong atFrame = (ulong)Math.Round(Math.Max(0.0, at.TotalSeconds) * _sampleRate);
+        ulong toFrame = (ulong)Math.Round(Math.Max(0.0, to.TotalSeconds) * _sampleRate);
+
+        lock (_sync)
+        {
+            if (_disposed) { return; }
+
+            int code = OwnAudioNative.ownaudio_v1_file_source_arm_jump(_sourceHandle.DangerousGetHandle(), id, atFrame, toFrame);
+            ErrorCodeMapper.ThrowIfError(code, nameof(ArmJump));
+        }
+    }
+
+    public void DisarmJump()
+    {
+        lock (_sync)
+        {
+            if (_disposed) { return; }
+
+            int code = OwnAudioNative.ownaudio_v1_file_source_disarm_jump(_sourceHandle.DangerousGetHandle());
+            ErrorCodeMapper.ThrowIfError(code, nameof(DisarmJump));
+        }
+    }
+
+    /// <summary>
+    /// The last jump carried out and the last one missed, 0 for none.
+    /// </summary>
+    public (ulong Taken, ulong Missed) JumpState
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (_disposed) { return (0, 0); }
+
+                int code = OwnAudioNative.ownaudio_v1_file_source_jump_state(_sourceHandle.DangerousGetHandle(), out ulong taken, out ulong missed);
+                ErrorCodeMapper.ThrowIfError(code, nameof(JumpState));
+                return (taken, missed);
+            }
+        }
+    }
+
     public void Seek(TimeSpan position)
     {
         double seconds = Math.Max(0.0, position.TotalSeconds);

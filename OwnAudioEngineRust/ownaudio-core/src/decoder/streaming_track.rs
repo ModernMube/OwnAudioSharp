@@ -189,6 +189,11 @@ impl StreamingTrack {
         Arc::clone(&self.seek)
     }
 
+    /// Where the last seek asked to go, output frames.
+    pub(crate) fn seek_target(&self) -> u64 {
+        self.seek.frame.load(Ordering::Acquire)
+    }
+
     /// Decoded output format metadata.
     pub fn stream_info(&self) -> AudioStreamInfo {
         self.stream_info

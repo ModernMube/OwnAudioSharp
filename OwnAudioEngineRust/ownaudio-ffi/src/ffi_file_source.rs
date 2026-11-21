@@ -240,6 +240,81 @@ pub unsafe extern "C" fn ownaudio_v1_file_source_seek(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Arms a jump: when the file's cursor reaches content frame `at` it goes on from `to`, inside
+/// the block, by swapping to a second stream of the same file prefetched at `to`. That stream is
+/// opened on the first call — this one may block on the file — and seeked on every one, so arm
+/// well ahead. One at a time, a new one replaces it; `id` is new each time, 0 arms nothing.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_file_source_arm_jump(
+    source: *mut OwnAudioFileSourceHandle,
+    id: u64,
+    at: u64,
+    to: u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(wrapper) = (unsafe { file_source_from_ptr(source) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        match wrapper.control.arm_jump(id, at, to) {
+            Ok(()) => OwnAudioErrorCode::Success as i32,
+            Err(e) => OwnAudioErrorCode::from(e) as i32,
+        }
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Takes back an armed jump that has not happened yet.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_file_source_disarm_jump(
+    source: *mut OwnAudioFileSourceHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(wrapper) = (unsafe { file_source_from_ptr(source) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        wrapper.control.disarm_jump();
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Writes the id of the last jump carried out to `*out_taken`, and of the last one whose frame
+/// came before its target was ready (so it did not happen) to `*out_missed`; `0` for none.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+/// - Both out pointers must be writable; nulls are rejected.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_file_source_jump_state(
+    source: *mut OwnAudioFileSourceHandle,
+    out_taken: *mut u64,
+    out_missed: *mut u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_taken.is_null() || out_missed.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let Some(wrapper) = (unsafe { file_source_from_ptr(source) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        unsafe {
+            *out_taken = wrapper.control.jump_taken();
+            *out_missed = wrapper.control.jump_missed();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Destroys a file-source control handle.
 ///
 /// Passing `null` is safe and has no effect.  Dropping this handle only releases

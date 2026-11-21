@@ -202,11 +202,11 @@ public sealed class GroupSourceRustNativeTests : IDisposable
     }
 
     /// <summary>
-    /// A streamed file track cannot take a jump inside a block yet: the mixer says so, and the
-    /// caller seeks there at the boundary.
+    /// A file track takes a jump too, on a second stream of its file; one whose target lies past
+    /// the file's end it cannot, and the mixer says not every track takes it.
     /// </summary>
     [Fact]
-    public void ArmJump_WithAFileTrack_SaysNotEveryTrackTakesIt()
+    public void ArmJump_WithAFileTrack_ArmsIt_UnlessTheTargetIsPastItsEnd()
     {
         using var mixer = new AudioMixer(_engine, MixerBufferFrames);
         using var group = new GroupSource(SampleRate, Channels);
@@ -215,7 +215,8 @@ public sealed class GroupSourceRustNativeTests : IDisposable
         mixer.AddSource(group);
         mixer.AddSource(file);
 
-        mixer.ArmJump(1.5, 0.5).Should().BeFalse();
+        mixer.ArmJump(1.5, 0.5).Should().BeTrue();
+        mixer.ArmJump(1.5, 5.0).Should().BeFalse("the file ends at 2 s");
     }
 
     [Fact]

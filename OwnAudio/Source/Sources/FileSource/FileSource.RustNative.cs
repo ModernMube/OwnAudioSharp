@@ -28,11 +28,44 @@ public partial class FileSource : IRustNativeChainSource, IRustClockedSource
     /// <inheritdoc/>
     void IRustClockedSource.ApplyRustNativeSync() => ApplyRustNativeSync();
 
-    bool IRustClockedSource.ArmRustNativeJump(ulong id, double atProject, double toProject) => false;
+    bool IRustClockedSource.ArmRustNativeJump(ulong id, double atProject, double toProject)
+    {
+        lock (_rustBackendLock)
+        {
+            if (_rustFileTrack is null) return false;
 
-    void IRustClockedSource.DisarmRustNativeJump() { }
+            float _tempoNow = _tempo <= 0f ? 1f : _tempo;
+            double _at = (atProject - StartOffset) * _tempoNow;
+            double _to = (toProject - StartOffset) * _tempoNow;
+            if (_at < 0.0 || _to < 0.0 || _to >= Duration) return false;
 
-    ulong IRustClockedSource.RustNativeJumpTaken => 0;
+            try
+            {
+                _rustFileTrack.ArmJump(id, TimeSpan.FromSeconds(_at), TimeSpan.FromSeconds(_to));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[FileSource] '{_filePath}' could not arm a jump to {_to:F3}s, it seeks instead", ex);
+                return false;
+            }
+        }
+    }
+
+    void IRustClockedSource.DisarmRustNativeJump()
+    {
+        lock (_rustBackendLock) { _rustFileTrack?.DisarmJump(); }
+    }
+
+    ulong IRustClockedSource.RustNativeJumpTaken
+    {
+        get { lock (_rustBackendLock) { return _rustFileTrack?.JumpState.Taken ?? 0; } }
+    }
+
+    ulong IRustClockedSource.RustNativeJumpMissed
+    {
+        get { lock (_rustBackendLock) { return _rustFileTrack?.JumpState.Missed ?? 0; } }
+    }
 
     /// <summary>
     /// Rust-native mode flag, fixed at construction.

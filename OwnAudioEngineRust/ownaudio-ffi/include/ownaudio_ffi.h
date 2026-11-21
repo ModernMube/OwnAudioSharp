@@ -1355,6 +1355,40 @@ int32_t ownaudio_v1_file_source_seek(struct OwnAudioFileSourceHandle *source,
                                      uint64_t frame_position);
 
 /**
+ * Arms a jump: when the file's cursor reaches content frame `at` it goes on from `to`, inside
+ * the block, by swapping to a second stream of the same file prefetched at `to`. That stream is
+ * opened on the first call — this one may block on the file — and seeked on every one, so arm
+ * well ahead. One at a time, a new one replaces it; `id` is new each time, 0 arms nothing.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+ */
+int32_t ownaudio_v1_file_source_arm_jump(struct OwnAudioFileSourceHandle *source,
+                                         uint64_t id,
+                                         uint64_t at,
+                                         uint64_t to);
+
+/**
+ * Takes back an armed jump that has not happened yet.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+ */
+int32_t ownaudio_v1_file_source_disarm_jump(struct OwnAudioFileSourceHandle *source);
+
+/**
+ * Writes the id of the last jump carried out to `*out_taken`, and of the last one whose frame
+ * came before its target was ready (so it did not happen) to `*out_missed`; `0` for none.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+ * - Both out pointers must be writable; nulls are rejected.
+ */
+int32_t ownaudio_v1_file_source_jump_state(struct OwnAudioFileSourceHandle *source,
+                                           uint64_t *out_taken,
+                                           uint64_t *out_missed);
+
+/**
  * Destroys a file-source control handle.
  *
  * Passing `null` is safe and has no effect.  Dropping this handle only releases

@@ -53,6 +53,8 @@ public sealed partial class GroupSource : IRustNativeChainSource
         get { lock (_rustBackendLock) { return _rustGroupTrack?.JumpTaken ?? 0; } }
     }
 
+    ulong IRustClockedSource.RustNativeJumpMissed => 0;
+
     private readonly bool _rustNative;
     private readonly object _rustBackendLock = new object();
 
