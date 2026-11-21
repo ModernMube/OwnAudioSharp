@@ -52,10 +52,12 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   that far behind the others until the next seek — a 10.7 ms flam at 512 frames, measured on 4 of
   30 tracks. The native mixer now has a resume gate: `AudioMixer.Seek` and `StartPreparedSources`
   arm it, and every gated track is held, silent and not moving, until each one's source is ready
-  (`TrackSource::ready`; a file source once its prefetch ring is as full as it keeps it), then all
+  (`TrackSource::ready`; a file source once its prefetch holds 8192 fresh frames, enough for a cold
+  stretch stage), then all
   are let go on the same block. Live inputs are left out (`AudioTrack.SetGated(false)`), so
   monitoring never drops out. It gives up after 0.5 s and says so in the log. A seek's silence now
-  lasts as long as the slowest track needs instead of one block, without the flam. New:
+  lasts as long as the slowest track needs instead of one block, without the flam. (preview.3
+  waited for a full prefetch ring, about two seconds of audio a track: 320 ms on 30 tracks.) New:
   `MultiTrackSession.ArmResumeGate`, `TakeResumeGateReport`, `AudioTrack.SetGated`.
 - A seek's leftover ring samples are dropped without being copied anywhere (`RingBufferReader::skip`).
 - **A refused effect removal is no longer lost.** Taking an effect off the master or a track chain

@@ -18,6 +18,11 @@ const MIN_PREFETCH_FRAMES: usize = 4_096;
 /// Number of interleaved samples decoded per prefetch iteration.
 const DECODE_CHUNK_SAMPLES: usize = 8_192;
 
+/// Fresh frames after a seek at which the source counts as caught up: enough for a cold stretch
+/// stage to fill its first block from (it pulls a few thousand), far less than a full ring. The
+/// whole ring (two seconds by default) took 30 tracks a third of a second to decode.
+const PRIMED_FRAMES: usize = 8_192;
+
 /// Idle sleep when the ring buffer is full (avoids busy-spinning the CPU).
 const FULL_SLEEP: Duration = Duration::from_micros(500);
 
@@ -84,8 +89,8 @@ pub struct StreamingTrack {
     /// Stale samples the consumer must drop from the ring after a seek, set by
     /// the prefetch thread once it has repositioned the backend.
     discard_samples: Arc<AtomicU64>,
-    /// Fresh samples in the ring at which the prefetch counts as caught up: as full as the
-    /// prefetch thread keeps it, never below half the ring.
+    /// Fresh samples in the ring at which the prefetch counts as caught up: [`PRIMED_FRAMES`],
+    /// or as full as the prefetch keeps a smaller ring.
     primed_samples: u64,
 
     stream_info: AudioStreamInfo,
@@ -135,9 +140,11 @@ impl StreamingTrack {
             stop_signal,
             eof_reached,
             discard_samples,
-            primed_samples: capacity_samples
-                .saturating_sub(DECODE_CHUNK_SAMPLES)
-                .max(capacity_samples / 2) as u64,
+            primed_samples: (PRIMED_FRAMES * channels).min(
+                capacity_samples
+                    .saturating_sub(DECODE_CHUNK_SAMPLES)
+                    .max(capacity_samples / 2),
+            ) as u64,
             stream_info,
             prefetch_thread: Some(prefetch_thread),
         })
@@ -188,9 +195,9 @@ impl StreamingTrack {
     }
 
     /// The prefetch has caught up at the current place: no seek in flight, and the ring holds
-    /// as much fresh audio as the prefetch thread keeps in it — enough for a cold stretch
-    /// stage to fill from in one block. Or the file has nothing more to give. Drops what the
-    /// seek left behind on the way, since nothing reads while the mixer waits on this.
+    /// [`PRIMED_FRAMES`] of fresh audio — enough for a cold stretch stage to fill its first block
+    /// from. Or the file has nothing more to give. Drops what the seek left behind on the way,
+    /// since nothing reads while the mixer waits on this.
     pub fn primed(&mut self) -> bool {
         if self.seek.is_pending() {
             return false;
