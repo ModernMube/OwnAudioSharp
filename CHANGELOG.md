@@ -7,8 +7,9 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Added
 
-- **Jumps the tracks carry out themselves.** `AudioMixer.ArmJump(atProjectSeconds, toProjectSeconds)`
-  arms a jump ahead of time — a loop's way back, a skipped section, a queued jump — and every track
+- **Jumps the tracks carry out themselves.** `AudioMixer.ArmJump(atSongSeconds, toSongSeconds)`
+  arms a jump ahead of time, in song (content) seconds — the markers' own, which a tempo change
+  leaves where they are — — a loop's way back, a skipped section, a queued jump — and every track
   that can carries it out inside the block, on the exact frame, with a 5 ms equal-power crossfade:
   no seek, no hole, no cold stretch refill, the effect tails ring on. `JumpTaken` says when every
   armed track took it, or (`Late`) that its moment passed without that, and the caller seeks

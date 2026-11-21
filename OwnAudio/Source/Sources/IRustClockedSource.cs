@@ -27,10 +27,16 @@ internal interface IRustClockedSource : IMasterClockSource
     void ApplyRustNativeSync();
 
     /// <summary>
-    /// Arms a jump in project seconds on the native side, worked out to this source's own content
-    /// frames. False when the source cannot carry one out itself (yet) or the frames fall before it.
+    /// Arms a jump given in song (content) seconds on the native side, worked out to this source's
+    /// own place (content less its start offset at the tempo). Back: the source's own frame of it,
+    /// or null when the source cannot carry one out or the frames fall outside it.
     /// </summary>
-    bool ArmRustNativeJump(ulong id, double atProject, double toProject);
+    double? ArmRustNativeJump(ulong id, double atContent, double toContent);
+
+    /// <summary>
+    /// The source's own content position, seconds — what an armed jump's frame is counted on.
+    /// </summary>
+    double RustNativeContentPosition { get; }
 
     void DisarmRustNativeJump();
 

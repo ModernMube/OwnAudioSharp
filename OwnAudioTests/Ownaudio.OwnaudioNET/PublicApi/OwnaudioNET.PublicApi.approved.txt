@@ -1178,11 +1178,11 @@ namespace OwnaudioNET.Events
     }
     public sealed class JumpTakenEventArgs : System.EventArgs
     {
-        public JumpTakenEventArgs(ulong id, double atProjectSeconds, double toProjectSeconds, bool late) { }
-        public double AtProjectSeconds { get; }
+        public JumpTakenEventArgs(ulong id, double atSongSeconds, double toSongSeconds, bool late) { }
+        public double AtSongSeconds { get; }
         public ulong Id { get; }
         public bool Late { get; }
-        public double ToProjectSeconds { get; }
+        public double ToSongSeconds { get; }
     }
     public class TrackDropoutEventArgs : System.EventArgs
     {
@@ -1798,7 +1798,7 @@ namespace OwnaudioNET.Mixing
             "th, which the rust-native chain bypasses — calling this changes nothing you can " +
             "hear. A hosted VST3 stays time-aligned on its own through the native bypass.")]
         public void ApplyPluginDelayCompensation() { }
-        public bool ArmJump(double atProjectSeconds, double toProjectSeconds) { }
+        public bool ArmJump(double atSongSeconds, double toSongSeconds) { }
         public void ClearMasterEffects() { }
         public void ClearSources() { }
         public OwnaudioNET.Monitoring.EffectTap CreateEffectTap(System.Guid sourceId, int capacitySamples = 0) { }

@@ -28,29 +28,31 @@ public partial class FileSource : IRustNativeChainSource, IRustClockedSource
     /// <inheritdoc/>
     void IRustClockedSource.ApplyRustNativeSync() => ApplyRustNativeSync();
 
-    bool IRustClockedSource.ArmRustNativeJump(ulong id, double atProject, double toProject)
+    double? IRustClockedSource.ArmRustNativeJump(ulong id, double atContent, double toContent)
     {
         lock (_rustBackendLock)
         {
-            if (_rustFileTrack is null) return false;
+            if (_rustFileTrack is null) return null;
 
-            float _tempoNow = _tempo <= 0f ? 1f : _tempo;
-            double _at = (atProject - StartOffset) * _tempoNow;
-            double _to = (toProject - StartOffset) * _tempoNow;
-            if (_at < 0.0 || _to < 0.0 || _to >= Duration) return false;
+            double _offset = StartOffset * (_tempo <= 0f ? 1f : _tempo);
+            double _at = atContent - _offset;
+            double _to = toContent - _offset;
+            if (_at < 0.0 || _to < 0.0 || _to >= Duration) return null;
 
             try
             {
                 _rustFileTrack.ArmJump(id, TimeSpan.FromSeconds(_at), TimeSpan.FromSeconds(_to));
-                return true;
+                return _at;
             }
             catch (Exception ex)
             {
                 Log.Error($"[FileSource] '{_filePath}' could not arm a jump to {_to:F3}s, it seeks instead", ex);
-                return false;
+                return null;
             }
         }
     }
+
+    double IRustClockedSource.RustNativeContentPosition => _rustNativePosition;
 
     void IRustClockedSource.DisarmRustNativeJump()
     {

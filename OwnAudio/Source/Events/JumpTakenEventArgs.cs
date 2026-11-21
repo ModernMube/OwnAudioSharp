@@ -8,19 +8,22 @@ namespace OwnaudioNET.Events
     /// </summary>
     public sealed class JumpTakenEventArgs : EventArgs
     {
-        public JumpTakenEventArgs(ulong id, double atProjectSeconds, double toProjectSeconds, bool late)
+        public JumpTakenEventArgs(ulong id, double atSongSeconds, double toSongSeconds, bool late)
         {
             Id = id;
-            AtProjectSeconds = atProjectSeconds;
-            ToProjectSeconds = toProjectSeconds;
+            AtSongSeconds = atSongSeconds;
+            ToSongSeconds = toSongSeconds;
             Late = late;
         }
 
         public ulong Id { get; }
 
-        public double AtProjectSeconds { get; }
+        /// <summary>
+        /// Song (content) seconds, as armed.
+        /// </summary>
+        public double AtSongSeconds { get; }
 
-        public double ToProjectSeconds { get; }
+        public double ToSongSeconds { get; }
 
         /// <summary>
         /// The boundary went by and not every armed track carried the jump out (or none could
