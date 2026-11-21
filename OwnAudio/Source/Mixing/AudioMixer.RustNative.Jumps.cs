@@ -24,9 +24,9 @@ public partial class AudioMixer
     private IRustClockedSource[] _jumpSources = Array.Empty<IRustClockedSource>();
 
     /// <summary>
-    /// The armed jump's frame on the first armed source's own timeline, what lateness is told by.
+    /// The armed jump's frame on each armed source's own timeline, what its lateness is told by.
     /// </summary>
-    private double _jumpWatchAt;
+    private double[] _jumpOwnAt = Array.Empty<double>();
 
     /// <summary>
     /// The armed jump happened on every track that took it, or its moment went by without it
@@ -56,8 +56,8 @@ public partial class AudioMixer
 
             ulong _id = ++_nextJumpId;
             var _armed = new List<IRustClockedSource>();
+            var _ownAt = new List<double>();
             bool _every = true;
-            double _watch = double.NaN;
 
             lock (_rustSessionLock)
             {
@@ -68,8 +68,8 @@ public partial class AudioMixer
 
                     if (_fs.ArmRustNativeJump(_id, atSongSeconds, toSongSeconds) is { } _own)
                     {
-                        if (_armed.Count == 0) _watch = _own;
                         _armed.Add(_fs);
+                        _ownAt.Add(_own);
                     }
                     else _every = false;
                 }
@@ -80,7 +80,7 @@ public partial class AudioMixer
             _jumpId = _id;
             _jumpAt = atSongSeconds;
             _jumpTo = toSongSeconds;
-            _jumpWatchAt = _watch;
+            _jumpOwnAt = _ownAt.ToArray();
             _jumpSources = _armed.ToArray();
             return _every;
         }
@@ -98,6 +98,7 @@ public partial class AudioMixer
     {
         foreach (IRustClockedSource source in _jumpSources) source.DisarmRustNativeJump();
         _jumpSources = Array.Empty<IRustClockedSource>();
+        _jumpOwnAt = Array.Empty<double>();
         _jumpId = 0;
     }
 
@@ -112,14 +113,20 @@ public partial class AudioMixer
         {
             if (_jumpId == 0) return;
 
-            bool _taken = _jumpSources.Length > 0, _missed = false;
-            foreach (IRustClockedSource source in _jumpSources)
+            // a source that has not taken it yet is late once its own, unjumped position is well past
+            // its frame — the others may well be past it already: the stretch stages read ahead by
+            // different amounts, so the tracks take a jump a block or two apart
+            bool _taken = true, _late = false;
+            for (int i = 0; i < _jumpSources.Length; i++)
             {
-                if (source.RustNativeJumpMissed == _jumpId) _missed = true;
-                if (source.RustNativeJumpTaken != _jumpId) _taken = false;
+                IRustClockedSource source = _jumpSources[i];
+                if (source.RustNativeJumpMissed == _jumpId) _late = true;
+                else if (source.RustNativeJumpTaken != _jumpId)
+                {
+                    _taken = false;
+                    if (source.RustNativeContentPosition > _jumpOwnAt[i] + JumpLateSeconds) _late = true;
+                }
             }
-
-            bool _late = _missed || (!_taken && _jumpSources[0].RustNativeContentPosition > _jumpWatchAt + JumpLateSeconds);
             if (!_taken && !_late) return;
 
             _done = new JumpTakenEventArgs(_jumpId, _jumpAt, _jumpTo, _late);
