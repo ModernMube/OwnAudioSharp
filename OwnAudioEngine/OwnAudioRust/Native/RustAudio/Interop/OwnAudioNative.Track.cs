@@ -81,6 +81,24 @@ internal static partial class OwnAudioNative
         out float outRight);
 
     /// <summary>
+    /// Holds every gated track after a seek or a start until all of them have their source
+    /// ready, then lets them go on one block.
+    /// </summary>
+    /// <param name="mixer"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_arm_resume_gate(IntPtr mixer);
+
+    /// <summary>
+    /// The gate's last release, once. released is 1 when it let go since the previous call.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_take_resume_gate_report(
+        IntPtr mixer,
+        out int released,
+        out ulong heldFrames,
+        out int gaveUp);
+
+    /// <summary>
     /// Starts tapping the master output into a ring so the control thread can write it out somewhere.
     /// Overflow just gets dropped, a lazy reader never stalls the render.
     /// </summary>
@@ -327,6 +345,12 @@ internal static partial class OwnAudioNative
     /// <param name="frames"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_set_start_delay_frames(IntPtr track, ulong frames);
+
+    /// <summary>
+    /// 1 (default): the resume gate holds the track after a seek. 0: it is left alone, a live input.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_gated(IntPtr track, int gated);
 
     /// <summary>
     /// Per track channel routing: source channel i lands on physical output map[i], and any output

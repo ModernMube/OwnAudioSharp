@@ -90,6 +90,7 @@ public sealed partial class AudioMixer
                 _advanceMasterClockFromTracks();
                 PollRustPlaybackEndedOnce();
                 PollRustStreamFaultOnce();
+                _pollResumeGate();
 
                 _rustSyncConsecutiveErrors = 0;
                 _rustApplyErrors = 0;
@@ -246,7 +247,26 @@ public sealed partial class AudioMixer
                 try { _applyRustStartOffset(_fs, projectSeconds); }
                 catch (Exception ex) { Log.Error($"[Mixer] Seek of native track '{_fs.Id}' to {projectSeconds:F3}s failed", ex); }
             }
+
+            _rustSession?.ArmResumeGate();
         }
+    }
+
+    /// <summary>
+    /// What the resume gate did after a seek or a start, told when it is worth telling: it
+    /// waited longer than a block for the slowest track, or gave up on one.
+    /// </summary>
+    private void _pollResumeGate()
+    {
+        MultiTrackSession? _session;
+        lock (_rustSessionLock) { _session = _rustSession; }
+        if (_session?.TakeResumeGateReport() is not { } report) return;
+
+        double _ms = report.HeldFrames * 1000.0 / _config.SampleRate;
+        if (report.GaveUp)
+            Log.Warning($"[Mixer] Resume gate gave up after {_ms:F0} ms, a track was still not ready and comes in late");
+        else if (report.HeldFrames > _config.BufferSize)
+            Log.Info($"[Mixer] Resume gate held {_ms:F0} ms for the slowest track");
     }
 
     /// <summary>

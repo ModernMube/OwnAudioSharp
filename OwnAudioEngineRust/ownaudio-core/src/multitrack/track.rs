@@ -131,6 +131,14 @@ pub trait TrackSource: Send {
     fn is_eof(&self) -> bool {
         false
     }
+
+    /// Can the source serve from where it stands now? A file source after a seek only once its
+    /// prefetch caught up at the new place. The mixer's resume gate holds every gated track until
+    /// all of them say yes, so they come back on the same block.
+    #[inline]
+    fn ready(&mut self) -> bool {
+        true
+    }
 }
 
 impl TrackSource for RingBufferReader {
@@ -227,6 +235,9 @@ pub struct TrackShared {
     /// Latch: `true` when the control thread has written a new
     /// [`TrackShared::pending_start_silence`] the audio thread has not yet taken.
     start_silence_pending: AtomicBool,
+    /// Held by the mixer's resume gate after a seek or a start. Off for a live input, whose
+    /// monitoring must not drop out because a file track is still decoding.
+    gated: AtomicBool,
     /// Seqlock guarding both routing tables: odd while the control thread is rewriting
     /// one, even when it is settled. The audio thread reads it either side of its
     /// snapshot and retries when the two differ, so it never renders a block from half
@@ -298,6 +309,7 @@ impl TrackShared {
             peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
             pending_start_silence: AtomicU64::new(0),
             start_silence_pending: AtomicBool::new(false),
+            gated: AtomicBool::new(true),
             route_version: AtomicU32::new(0),
             route_len: AtomicUsize::new(0),
             route_map: std::array::from_fn(|_| AtomicU32::new(0)),
@@ -677,6 +689,17 @@ impl TrackShared {
             None
         }
     }
+
+    /// See [`MixerShared::arm_resume_gate`](super::MixerShared::arm_resume_gate).
+    #[inline]
+    pub fn set_gated(&self, gated: bool) {
+        self.gated.store(gated, Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn gated(&self) -> bool {
+        self.gated.load(Ordering::Relaxed)
+    }
 }
 
 impl Default for TrackShared {
@@ -918,6 +941,12 @@ impl Track {
     #[inline]
     pub(crate) fn stand_down(&mut self) {
         self.entered = false;
+    }
+
+    /// No source counts as ready: there is nothing to wait for.
+    #[inline]
+    pub(crate) fn source_ready(&mut self) -> bool {
+        self.source.as_mut().map_or(true, |s| s.ready())
     }
 
     /// Sets this track's plugin delay compensation in frames (the mixer computes

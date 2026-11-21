@@ -46,6 +46,18 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Fixed
 
+- **Tracks come back together after a seek or a start.** Every file track repositions on its own
+  prefetch thread, and until it has audio at the new place it renders silence while its position
+  keeps counting. A track whose prefetch took longer than a block came in a block late and stayed
+  that far behind the others until the next seek — a 10.7 ms flam at 512 frames, measured on 4 of
+  30 tracks. The native mixer now has a resume gate: `AudioMixer.Seek` and `StartPreparedSources`
+  arm it, and every gated track is held, silent and not moving, until each one's source is ready
+  (`TrackSource::ready`; a file source once its prefetch ring is as full as it keeps it), then all
+  are let go on the same block. Live inputs are left out (`AudioTrack.SetGated(false)`), so
+  monitoring never drops out. It gives up after 0.5 s and says so in the log. A seek's silence now
+  lasts as long as the slowest track needs instead of one block, without the flam. New:
+  `MultiTrackSession.ArmResumeGate`, `TakeResumeGateReport`, `AudioTrack.SetGated`.
+- A seek's leftover ring samples are dropped without being copied anywhere (`RingBufferReader::skip`).
 - **A refused effect removal is no longer lost.** Taking an effect off the master or a track chain
   while the command queue was full logged a warning and dropped the removal: the native twin stayed
   on its chain until the session died, and a VST3 behind it kept being called after its host was

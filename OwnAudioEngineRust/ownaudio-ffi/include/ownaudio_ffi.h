@@ -2729,6 +2729,29 @@ int32_t ownaudio_v1_mixer_get_master_peaks(struct OwnAudioMixerHandle *mixer,
                                            float *out_right);
 
 /**
+ * Arms the mixer's resume gate: after a seek or a start, every gated track is held — silent,
+ * its position not moving — until all of them have their source ready, then let go on the
+ * same block. Call it once the tracks have been seeked.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ */
+int32_t ownaudio_v1_mixer_arm_resume_gate(struct OwnAudioMixerHandle *mixer);
+
+/**
+ * The resume gate's last release, once: `*out_released` is 1 when it let go since the previous
+ * call, with the output frames it held for and whether it gave up on a source that never came.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - The three out pointers must be writable; nulls are rejected.
+ */
+int32_t ownaudio_v1_mixer_take_resume_gate_report(struct OwnAudioMixerHandle *mixer,
+                                                  int32_t *out_released,
+                                                  uint64_t *out_held_frames,
+                                                  int32_t *out_gave_up);
+
+/**
  * Starts capturing the mixer's master output into a ring buffer so the control
  * thread can persist the rendered mix (e.g. record to a file).
  *
@@ -2978,6 +3001,15 @@ int32_t ownaudio_v1_track_get_peaks(struct OwnAudioTrackHandle *track,
  */
 int32_t ownaudio_v1_track_set_start_delay_frames(struct OwnAudioTrackHandle *track,
                                                  uint64_t frames);
+
+/**
+ * Whether the mixer's resume gate holds this track after a seek (`1`, the default) or leaves
+ * it alone (`0`) — a live input, whose monitoring must not drop out.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ */
+int32_t ownaudio_v1_track_set_gated(struct OwnAudioTrackHandle *track, int32_t gated);
 
 /**
  * Installs a per-track output-channel routing map: source channel `i` is summed

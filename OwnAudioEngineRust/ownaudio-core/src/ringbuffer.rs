@@ -133,6 +133,19 @@ impl RingBufferReader {
         self.consumer.slots()
     }
 
+    /// Drops up to `n` readable samples without copying them anywhere; how many went.
+    pub fn skip(&mut self, n: usize) -> usize {
+        let n = n.min(self.consumer.slots());
+        if n > 0 {
+            // SAFETY: `n <= slots()`.
+            self.consumer
+                .read_chunk(n)
+                .expect("slots checked")
+                .commit_all();
+        }
+        n
+    }
+
     /// Drops everything currently readable, returning how many samples went.
     ///
     /// Only touches the read side, so a writer running concurrently is safe — its

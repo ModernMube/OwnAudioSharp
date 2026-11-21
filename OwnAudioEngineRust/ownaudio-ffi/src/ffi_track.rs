@@ -281,6 +281,59 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_get_master_peaks(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Arms the mixer's resume gate: after a seek or a start, every gated track is held — silent,
+/// its position not moving — until all of them have their source ready, then let go on the
+/// same block. Call it once the tracks have been seeked.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_mixer_arm_resume_gate(mixer: *mut OwnAudioMixerHandle) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(wrapper) = (unsafe { mixer_from_ptr(mixer) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        wrapper.master_shared.arm_resume_gate();
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// The resume gate's last release, once: `*out_released` is 1 when it let go since the previous
+/// call, with the output frames it held for and whether it gave up on a source that never came.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - The three out pointers must be writable; nulls are rejected.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_mixer_take_resume_gate_report(
+    mixer: *mut OwnAudioMixerHandle,
+    out_released: *mut i32,
+    out_held_frames: *mut u64,
+    out_gave_up: *mut i32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_released.is_null() || out_held_frames.is_null() || out_gave_up.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let Some(wrapper) = (unsafe { mixer_from_ptr(mixer) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+
+        let report = wrapper.master_shared.take_resume_gate_report();
+        let (held, gave_up) = report.unwrap_or((0, false));
+        unsafe {
+            *out_released = report.is_some() as i32;
+            *out_held_frames = held;
+            *out_gave_up = gave_up as i32;
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 // Master-output capture (recording)
 
 /// Starts capturing the mixer's master output into a ring buffer so the control
@@ -810,6 +863,27 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_start_delay_frames(
 
         wrapper.shared.request_start_silence(frames);
 
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Whether the mixer's resume gate holds this track after a seek (`1`, the default) or leaves
+/// it alone (`0`) — a live input, whose monitoring must not drop out.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_track_set_gated(
+    track: *mut OwnAudioTrackHandle,
+    gated: i32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(wrapper) = (unsafe { track_from_ptr(track) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        wrapper.shared.set_gated(gated != 0);
         OwnAudioErrorCode::Success as i32
     }));
 

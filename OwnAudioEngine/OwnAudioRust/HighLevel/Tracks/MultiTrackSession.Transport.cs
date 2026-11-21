@@ -69,6 +69,33 @@ public sealed partial class MultiTrackSession : IDisposable
     }
 
     /// <summary>
+    /// After a seek or a start: holds every gated track, silent and not moving, until each one's
+    /// source is ready, then lets them all go on the same block — a track whose prefetch is slow
+    /// would otherwise come in a block late and stay that far behind. Arm it once the tracks
+    /// are seeked; with nothing playing yet it waits for the start.
+    /// </summary>
+    public void ArmResumeGate()
+    {
+        _throwIfDisposed();
+
+        int code = OwnAudioNative.ownaudio_v1_mixer_arm_resume_gate(_mixerHandle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(ArmResumeGate));
+    }
+
+    /// <summary>
+    /// The gate's last release since the previous call, null if it has not let go since.
+    /// </summary>
+    public (long HeldFrames, bool GaveUp)? TakeResumeGateReport()
+    {
+        _throwIfDisposed();
+
+        int code = OwnAudioNative.ownaudio_v1_mixer_take_resume_gate_report(
+            _mixerHandle.DangerousGetHandle(), out int released, out ulong held, out int gaveUp);
+        ErrorCodeMapper.ThrowIfError(code, nameof(TakeResumeGateReport));
+        return released != 0 ? ((long)held, gaveUp != 0) : null;
+    }
+
+    /// <summary>
     /// Starts tapping the master output into a lock-free ring so the control thread can
     /// write it out somewhere (a WAV, say). Drain it with ReadCapture. If the drain falls
     /// behind we drop samples rather than stall rendering. Calling it again replaces the ring.

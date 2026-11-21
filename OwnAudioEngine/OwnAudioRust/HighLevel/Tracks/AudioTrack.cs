@@ -280,6 +280,18 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
+    /// Whether the session's resume gate holds this track after a seek (the default). Off for
+    /// a live input, so its monitoring never drops out while a file track is still decoding.
+    /// </summary>
+    public void SetGated(bool gated)
+    {
+        if (_disposed) { return; }
+
+        int code = OwnAudioNative.ownaudio_v1_track_set_gated(_handle.DangerousGetHandle(), gated ? 1 : 0);
+        ErrorCodeMapper.ThrowIfError(code, nameof(SetGated));
+    }
+
+    /// <summary>
     /// Per-track output routing: source channel i lands on output mapping[i], every
     /// other output gets nothing from us. Empty span clears the routing.
     /// </summary>

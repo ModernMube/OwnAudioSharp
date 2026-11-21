@@ -207,6 +207,7 @@ public sealed partial class AudioMixer
     private void _startPrepared(double startPosition)
     {
         _masterClock.SeekTo(startPosition);
+        if (_rustNative) lock (_rustSessionLock) { _rustSession?.ArmResumeGate(); }
 
         int _started = 0;
         foreach (var source in _sources.Values.ToArray())

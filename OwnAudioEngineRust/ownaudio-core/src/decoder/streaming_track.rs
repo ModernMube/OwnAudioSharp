@@ -84,6 +84,9 @@ pub struct StreamingTrack {
     /// Stale samples the consumer must drop from the ring after a seek, set by
     /// the prefetch thread once it has repositioned the backend.
     discard_samples: Arc<AtomicU64>,
+    /// Fresh samples in the ring at which the prefetch counts as caught up: as full as the
+    /// prefetch thread keeps it, never below half the ring.
+    primed_samples: u64,
 
     stream_info: AudioStreamInfo,
 
@@ -132,6 +135,9 @@ impl StreamingTrack {
             stop_signal,
             eof_reached,
             discard_samples,
+            primed_samples: capacity_samples
+                .saturating_sub(DECODE_CHUNK_SAMPLES)
+                .max(capacity_samples / 2) as u64,
             stream_info,
             prefetch_thread: Some(prefetch_thread),
         })
@@ -150,23 +156,17 @@ impl StreamingTrack {
             return 0;
         }
 
-        // Drop any stale samples left in the ring by a seek before returning data.
-        let pending = self.discard_samples.load(Ordering::Acquire);
-        if pending > 0 {
-            let mut remaining = pending;
-            while remaining > 0 {
-                let chunk = remaining.min(dst.len() as u64) as usize;
-                let dropped = self.reader.read(&mut dst[..chunk]);
-                if dropped == 0 {
-                    break;
-                }
-                remaining -= dropped as u64;
-            }
-            self.discard_samples
-                .fetch_sub(pending - remaining, Ordering::Release);
-        }
-
+        self.drop_stale();
         self.reader.read(dst)
+    }
+
+    /// Drops what a seek left behind in the ring, so the next read is from the new position.
+    fn drop_stale(&mut self) {
+        let stale = self.discard_samples.load(Ordering::Acquire);
+        if stale > 0 {
+            let dropped = self.reader.skip(stale as usize) as u64;
+            self.discard_samples.fetch_sub(dropped, Ordering::Release);
+        }
     }
 
     /// Requests a seek to `frame_position` (output frames).  Non-blocking — the
@@ -185,6 +185,20 @@ impl StreamingTrack {
     /// Decoded output format metadata.
     pub fn stream_info(&self) -> AudioStreamInfo {
         self.stream_info
+    }
+
+    /// The prefetch has caught up at the current place: no seek in flight, and the ring holds
+    /// as much fresh audio as the prefetch thread keeps in it — enough for a cold stretch
+    /// stage to fill from in one block. Or the file has nothing more to give. Drops what the
+    /// seek left behind on the way, since nothing reads while the mixer waits on this.
+    pub fn primed(&mut self) -> bool {
+        if self.seek.is_pending() {
+            return false;
+        }
+        self.drop_stale();
+        let fresh = (self.reader.available() as u64)
+            .saturating_sub(self.discard_samples.load(Ordering::Acquire));
+        fresh >= self.primed_samples || self.eof_reached.load(Ordering::Acquire)
     }
 
     /// Returns `true` once the source has been fully decoded and the ring

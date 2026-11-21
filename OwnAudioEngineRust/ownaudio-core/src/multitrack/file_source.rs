@@ -141,6 +141,11 @@ impl TrackSource for FileTrackSource {
         // the stretch stage does not flush its FIFO tail on those.
         self.streaming.is_eof()
     }
+
+    #[inline]
+    fn ready(&mut self) -> bool {
+        self.streaming.primed()
+    }
 }
 
 #[cfg(test)]

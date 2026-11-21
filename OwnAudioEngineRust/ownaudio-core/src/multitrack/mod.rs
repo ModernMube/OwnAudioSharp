@@ -25,7 +25,7 @@ use crate::effects::{EffectChain, EffectEntry};
 use crate::fade::{FadeShared, FadeStage};
 use crate::smoothing::{SmoothedParam, DEFAULT_SMOOTH_MS};
 use rtrb::Producer;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use self::track::MAX_EFFECTS_PER_TRACK;
@@ -66,6 +66,13 @@ pub struct MixerShared {
     master_scope: [AtomicU32; MAX_ROUTE_CHANNELS],
     /// The master fade ramp, on top of the master gain and confined to the master scope.
     master_fade: FadeShared,
+    /// See [`MixerShared::arm_resume_gate`].
+    resume_gate: AtomicBool,
+    /// The last release: output frames the gate held for, and whether it gave up waiting.
+    /// `gate_report` is set by the audio thread once both are written, taken by the control side.
+    gate_held_frames: AtomicU64,
+    gate_gave_up: AtomicBool,
+    gate_report: AtomicBool,
 }
 
 impl MixerShared {
@@ -79,7 +86,43 @@ impl MixerShared {
             master_scope_len: AtomicUsize::new(0),
             master_scope: std::array::from_fn(|_| AtomicU32::new(0)),
             master_fade: FadeShared::new(),
+            resume_gate: AtomicBool::new(false),
+            gate_held_frames: AtomicU64::new(0),
+            gate_gave_up: AtomicBool::new(false),
+            gate_report: AtomicBool::new(false),
         }
+    }
+
+    /// After a seek or a start: every gated track (all but live inputs) is held — silent, its
+    /// position not moving — until each of them has its source ready, and then all are let go
+    /// on the same block. Without it a track whose prefetch is slow comes in a block later than
+    /// the rest and stays that far behind until the next seek. Waits for the tracks to play when
+    /// none does yet; gives up after [`RESUME_GATE_MAX_SECONDS`].
+    #[inline]
+    pub fn arm_resume_gate(&self) {
+        self.resume_gate.store(true, Ordering::Release);
+    }
+
+    #[inline]
+    pub fn resume_gate_armed(&self) -> bool {
+        self.resume_gate.load(Ordering::Acquire)
+    }
+
+    fn release_resume_gate(&self, held_frames: u64, gave_up: bool) {
+        self.gate_held_frames.store(held_frames, Ordering::Relaxed);
+        self.gate_gave_up.store(gave_up, Ordering::Relaxed);
+        self.gate_report.store(true, Ordering::Release);
+        self.resume_gate.store(false, Ordering::Release);
+    }
+
+    /// The last release since the previous call, as (frames held, gave up waiting).
+    pub fn take_resume_gate_report(&self) -> Option<(u64, bool)> {
+        self.gate_report.swap(false, Ordering::Acquire).then(|| {
+            (
+                self.gate_held_frames.load(Ordering::Relaxed),
+                self.gate_gave_up.load(Ordering::Relaxed),
+            )
+        })
     }
 
     /// The master fade: a fade in on start, a fade out into a stop, without moving the
@@ -189,6 +232,9 @@ pub const MASTER_EFFECT_TARGET: u64 = u64::MAX;
 /// blocks grow the scratch once (amortised, never in steady state).
 const DEFAULT_MAX_BUFFER: usize = 4096 * 2;
 
+/// The longest the resume gate waits for a slow source before it lets everyone go anyway.
+pub const RESUME_GATE_MAX_SECONDS: f32 = 0.5;
+
 /// Maximum number of simultaneous tracks the mixer pre-allocates room for, so
 /// adding a track (even via a drained command on the audio thread) never
 /// reallocates the track vector.  Exceeding it is reported as an error rather
@@ -259,6 +305,8 @@ pub struct MultiTrackMixer {
     /// construction and grown only if a bigger block than any seen before arrives, so the
     /// scoped path costs two memcpys per block and no allocation.
     scope_scratch: Vec<f32>,
+    /// Output frames the armed resume gate has held so far.
+    gate_held: u64,
 }
 
 impl MultiTrackMixer {
@@ -287,6 +335,7 @@ impl MultiTrackMixer {
             master_fade: FadeStage::new(),
             master_fx_tap: None,
             scope_scratch: vec![0.0f32; max_buffer_size.max(1)],
+            gate_held: 0,
         }
     }
 
@@ -434,12 +483,14 @@ impl MultiTrackMixer {
             .iter()
             .any(|t| t.shared.soloed() && t.shared.state() == TrackState::Playing);
 
+        let held = self.resume_gate_holds(any_soloed, frames);
+
         let channels = self.channels;
         for track in &mut self.tracks {
-            if track.is_active(any_soloed) {
-                track.process_additive(output, channels);
-            } else {
+            if !track.is_active(any_soloed) {
                 track.stand_down();
+            } else if !(held && track.shared.gated()) {
+                track.process_additive(output, channels);
             }
         }
 
@@ -470,6 +521,41 @@ impl MultiTrackMixer {
         }
 
         self.clock.advance(frames);
+    }
+
+    /// Whether this block holds the gated tracks back. Nothing playing yet leaves the gate armed
+    /// for when they start; all ready, or waited too long, releases it.
+    fn resume_gate_holds(&mut self, any_soloed: bool, frames: u64) -> bool {
+        if !self.master_shared.resume_gate_armed() {
+            return false;
+        }
+
+        let (mut any, mut waiting) = (false, false);
+        for track in self
+            .tracks
+            .iter_mut()
+            .filter(|t| t.is_active(any_soloed) && t.shared.gated())
+        {
+            any = true;
+            if !track.source_ready() {
+                waiting = true;
+                break;
+            }
+        }
+        if !any {
+            return false;
+        }
+
+        let limit = (RESUME_GATE_MAX_SECONDS * self.sample_rate) as u64;
+        if waiting && self.gate_held < limit {
+            self.gate_held += frames;
+            return true;
+        }
+
+        self.master_shared
+            .release_resume_gate(self.gate_held, waiting);
+        self.gate_held = 0;
+        false
     }
 
     /// Applies the master fade, gain and pan over `buf` (already through the master chain)
@@ -761,7 +847,7 @@ impl MultiTrackMixer {
 mod tests {
     use super::track::TrackSource;
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
     /// In-memory test source that yields a fixed buffer once, then silence.
     struct VecSource {
@@ -1383,5 +1469,156 @@ mod tests {
                 "track {t} consumed a different sample count than the clock → drift"
             );
         }
+    }
+
+    /// A ramp that is not ready until the test says so, like a file source whose prefetch is
+    /// still decoding at the new place.
+    struct LateSource {
+        ramp: RampSource,
+        ready: Arc<AtomicBool>,
+    }
+
+    impl TrackSource for LateSource {
+        fn read(&mut self, out: &mut [f32]) -> usize {
+            self.ramp.read(out)
+        }
+
+        fn ready(&mut self) -> bool {
+            self.ready.load(Ordering::Relaxed)
+        }
+    }
+
+    const GATE_BLOCK: usize = 64;
+
+    /// One ready ramp and one late one, both playing. Back: the mixer, the late one's switch,
+    /// and the samples each has been asked for.
+    fn gate_rig(
+        gated_first: bool,
+    ) -> (
+        MultiTrackMixer,
+        Arc<AtomicBool>,
+        Arc<AtomicU64>,
+        Arc<AtomicU64>,
+    ) {
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let (early_read, late_read) = (Arc::new(AtomicU64::new(0)), Arc::new(AtomicU64::new(0)));
+        let ready = Arc::new(AtomicBool::new(false));
+
+        let (early, shared) = mixer.add_track();
+        shared.set_gated(gated_first);
+        mixer.set_track_source(early, Some(Box::new(RampSource::new(early_read.clone()))));
+        let (late, _) = mixer.add_track();
+        let source = LateSource {
+            ramp: RampSource::new(late_read.clone()),
+            ready: ready.clone(),
+        };
+        mixer.set_track_source(late, Some(Box::new(source)));
+
+        play(&mut mixer, early);
+        play(&mut mixer, late);
+        (mixer, ready, early_read, late_read)
+    }
+
+    #[test]
+    fn resume_gate_brings_every_track_back_on_the_same_block() {
+        let (mut mixer, ready, early_read, late_read) = gate_rig(true);
+        let shared = mixer.master_shared();
+        let mut out = [0.0f32; GATE_BLOCK];
+
+        shared.arm_resume_gate();
+        for _ in 0..3 {
+            mixer.mix(&mut out);
+            assert!(out.iter().all(|&s| s == 0.0), "held blocks are silent");
+        }
+        assert_eq!(
+            early_read.load(Ordering::Relaxed),
+            0,
+            "the ready track waited, its source untouched"
+        );
+        assert!(shared.take_resume_gate_report().is_none());
+
+        ready.store(true, Ordering::Relaxed);
+        mixer.mix(&mut out);
+
+        for (i, &sample) in out.iter().enumerate() {
+            assert_eq!(sample, 2.0 * i as f32, "both ramps start on the same frame");
+        }
+        assert_eq!(
+            late_read.load(Ordering::Relaxed),
+            early_read.load(Ordering::Relaxed)
+        );
+        assert_eq!(
+            shared.take_resume_gate_report(),
+            Some((3 * GATE_BLOCK as u64, false))
+        );
+        assert!(!shared.resume_gate_armed());
+    }
+
+    #[test]
+    fn resume_gate_gives_up_on_a_source_that_never_comes() {
+        let (mut mixer, _never, early_read, _) = gate_rig(true);
+        let shared = mixer.master_shared();
+        let mut out = [0.0f32; GATE_BLOCK];
+        let limit = (RESUME_GATE_MAX_SECONDS * 48_000.0) as u64;
+
+        shared.arm_resume_gate();
+        let mut blocks = 0u64;
+        while shared.resume_gate_armed() && blocks < 10_000 {
+            mixer.mix(&mut out);
+            blocks += 1;
+        }
+
+        let (held, gave_up) = shared
+            .take_resume_gate_report()
+            .expect("a release was reported");
+        assert!(gave_up);
+        assert!(held >= limit && held < limit + GATE_BLOCK as u64);
+        assert!(
+            early_read.load(Ordering::Relaxed) > 0,
+            "the block it gave up on already plays"
+        );
+    }
+
+    #[test]
+    fn resume_gate_leaves_a_live_input_alone() {
+        let (mut mixer, ready, early_read, late_read) = gate_rig(false);
+        let shared = mixer.master_shared();
+        let mut out = [0.0f32; GATE_BLOCK];
+
+        shared.arm_resume_gate();
+        mixer.mix(&mut out);
+        mixer.mix(&mut out);
+
+        assert_eq!(
+            early_read.load(Ordering::Relaxed),
+            2 * GATE_BLOCK as u64,
+            "the input kept playing"
+        );
+        assert_eq!(out[1], (GATE_BLOCK + 1) as f32);
+        assert_eq!(late_read.load(Ordering::Relaxed), 0);
+
+        ready.store(true, Ordering::Relaxed);
+        mixer.mix(&mut out);
+        assert!(!shared.resume_gate_armed());
+    }
+
+    #[test]
+    fn an_armed_gate_with_nothing_playing_waits_for_the_start() {
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let read = Arc::new(AtomicU64::new(0));
+        let (id, _) = mixer.add_track();
+        mixer.set_track_source(id, Some(Box::new(RampSource::new(read.clone()))));
+        let shared = mixer.master_shared();
+        let mut out = [0.0f32; GATE_BLOCK];
+
+        shared.arm_resume_gate();
+        mixer.mix(&mut out);
+        assert!(shared.resume_gate_armed(), "stopped tracks leave it armed");
+
+        play(&mut mixer, id);
+        mixer.mix(&mut out);
+        assert!(!shared.resume_gate_armed());
+        assert_eq!(shared.take_resume_gate_report(), Some((0, false)));
+        assert_eq!(out[5], 5.0);
     }
 }

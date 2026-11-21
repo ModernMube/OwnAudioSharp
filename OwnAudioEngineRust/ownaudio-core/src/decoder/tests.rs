@@ -227,6 +227,42 @@ fn streaming_track_seek_then_read() {
     );
 }
 
+/// What the mixer's resume gate waits on: not primed while a seek is in flight, primed once the
+/// prefetch filled the ring at the new place — and the first read then lands on the target.
+#[test]
+fn streaming_track_is_primed_only_once_the_seek_has_refilled() {
+    let wav = TempWav::write(1, SR, &linear_ramp(30_000));
+    let mut track = open_streaming(wav.path_str(), 0, 0, 8_192).expect("open streaming");
+
+    let wait_primed = |track: &mut crate::decoder::StreamingTrack| {
+        (0..1_000).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            track.primed()
+        })
+    };
+    assert!(wait_primed(&mut track), "the opening fill primes it");
+
+    let target = 20_000u64;
+    track.seek(target);
+    assert!(!track.primed(), "a seek in flight is never primed");
+    assert!(
+        wait_primed(&mut track),
+        "the stale ring is dropped while waiting, so it refills"
+    );
+
+    let mut buf = vec![0.0f32; 64];
+    assert_eq!(
+        track.read(&mut buf),
+        64,
+        "primed means there is audio to read"
+    );
+    let landed = (buf[0] * 32768.0).round() as i64;
+    assert!(
+        (landed - target as i64).abs() <= 64,
+        "landed at {landed}, expected {target}"
+    );
+}
+
 #[test]
 fn a_seek_after_eof_is_not_eof() {
     let wav = TempWav::write(1, SR, &mono_ramp(2_000));

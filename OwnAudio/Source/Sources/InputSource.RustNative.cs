@@ -78,6 +78,7 @@ public sealed partial class InputSource : IRustNativeChainSource
         {
             _rustTrack = track;
             _rustInputTrack = inputTrack;
+            _rustTrack.SetGated(false);
             _rustTrack.Gain = Volume;
             _rustTrack.Pan = Pan;
 
@@ -103,6 +104,7 @@ public sealed partial class InputSource : IRustNativeChainSource
         {
             _rustTrack = track;
             _rustCapture = bridge;
+            _rustTrack.SetGated(false);
             _rustTrack.Gain = Volume;
             _rustTrack.Pan = Pan;
 
