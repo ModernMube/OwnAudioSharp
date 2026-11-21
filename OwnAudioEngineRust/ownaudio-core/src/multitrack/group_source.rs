@@ -17,7 +17,7 @@
 //! frame, so all three are safe while the track plays. Removed clips travel back to the control
 //! thread for deallocation — nothing is freed on the real-time path.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{fence, AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use rtrb::{Consumer, Producer, RingBuffer};
@@ -41,6 +41,9 @@ const MAX_STREAM_LAG_FRAMES: u64 = 12_000;
 /// Scratch the streamed clips read through, in frames. Blocks longer than this are simply read
 /// in several passes.
 const SCRATCH_FRAMES: usize = 4_096;
+
+/// How long a jump crossfades what would have followed into where it lands.
+const JUMP_FADE_MS: u32 = 5;
 
 /// Samples decoded per pass when a clip is loaded into memory.
 const MEMORY_DECODE_CHUNK: usize = 16_384;
@@ -192,6 +195,13 @@ pub struct GroupSourceControl {
     finished: AtomicBool,
     /// Content frame the cursor stood at after the last block.
     position: AtomicU64,
+    /// The armed jump, `jump_id` 0 for none. Written id last, read with the id either side
+    /// (a seqlock), so a jump re-armed mid-block is never taken half old, half new.
+    jump_id: AtomicU64,
+    jump_at: AtomicU64,
+    jump_to: AtomicU64,
+    /// Id of the last jump the audio thread carried out.
+    jump_taken: AtomicU64,
     controller: Mutex<GroupController>,
 }
 
@@ -309,6 +319,39 @@ impl GroupSourceControl {
         self.position.load(Ordering::Relaxed)
     }
 
+    /// When the cursor reaches content frame `at`, it goes on from `to` — in the middle of the
+    /// block, sample for sample, the first few milliseconds crossfaded with what would have
+    /// followed. One at a time, a new one replaces it. `id` is non-zero and new every time;
+    /// [`GroupSourceControl::jump_taken`] answers with it. A jump whose frame the cursor is
+    /// already past never happens.
+    pub fn arm_jump(&self, id: u64, at: u64, to: u64) {
+        self.jump_id.store(0, Ordering::Relaxed);
+        fence(Ordering::Release);
+        self.jump_at.store(at, Ordering::Relaxed);
+        self.jump_to.store(to, Ordering::Relaxed);
+        self.jump_id.store(id, Ordering::Release);
+    }
+
+    pub fn disarm_jump(&self) {
+        self.jump_id.store(0, Ordering::Release);
+    }
+
+    /// Id of the last jump carried out, 0 before the first.
+    pub fn jump_taken(&self) -> u64 {
+        self.jump_taken.load(Ordering::Acquire)
+    }
+
+    fn armed_jump(&self) -> Option<(u64, u64, u64)> {
+        let id = self.jump_id.load(Ordering::Acquire);
+        if id == 0 {
+            return None;
+        }
+        let at = self.jump_at.load(Ordering::Relaxed);
+        let to = self.jump_to.load(Ordering::Relaxed);
+        fence(Ordering::Acquire);
+        (self.jump_id.load(Ordering::Relaxed) == id).then_some((id, at, to))
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, GroupController> {
         self.controller.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -336,6 +379,13 @@ pub struct GroupTrackSource {
     channels: usize,
     cursor: u64,
     scratch: Vec<f32>,
+    /// The last jump carried out, and the content frames it moved by that the track has not
+    /// taken yet.
+    taken: u64,
+    jumped: i64,
+    /// What would have followed a jump's frame, for the crossfade. Sized once, never grown.
+    fade: Vec<f32>,
+    fade_frames: usize,
 }
 
 impl GroupTrackSource {
@@ -353,6 +403,10 @@ impl GroupTrackSource {
             seek_pending: AtomicBool::new(false),
             finished: AtomicBool::new(false),
             position: AtomicU64::new(0),
+            jump_id: AtomicU64::new(0),
+            jump_at: AtomicU64::new(0),
+            jump_to: AtomicU64::new(0),
+            jump_taken: AtomicU64::new(0),
             controller: Mutex::new(GroupController {
                 commands: command_tx,
                 retired: retire_rx,
@@ -369,9 +423,80 @@ impl GroupTrackSource {
             channels: channels as usize,
             cursor: 0,
             scratch: vec![0.0f32; SCRATCH_FRAMES * channels as usize],
+            taken: 0,
+            jumped: 0,
+            fade: vec![
+                0.0f32;
+                (sample_rate * JUMP_FADE_MS / 1000).max(1) as usize * channels as usize
+            ],
+            fade_frames: (sample_rate * JUMP_FADE_MS / 1000).max(1) as usize,
         };
 
         (source, control)
+    }
+
+    /// Sums every clip overlapping `[from, from + dst frames)` into `dst`.
+    fn mix_span(&mut self, from: u64, dst: &mut [f32]) {
+        let ch = self.channels;
+        let span_end = from + (dst.len() / ch) as u64;
+
+        for clip in self.clips.iter_mut() {
+            let start = clip.placement.start_frame.load(Ordering::Acquire);
+            let clip_end = start + clip.length_frames;
+
+            if let ClipBody::Streaming(s) = &mut clip.body {
+                s.align(from.saturating_sub(start), clip.length_frames);
+            }
+
+            let lo = from.max(start);
+            let hi = span_end.min(clip_end);
+            if lo >= hi {
+                continue;
+            }
+
+            let local = (lo - start) as usize;
+            let n = (hi - lo) as usize;
+            let offset = (lo - from) as usize * ch;
+            let part = &mut dst[offset..offset + n * ch];
+
+            match &mut clip.body {
+                ClipBody::Memory(samples) => {
+                    let begin = (local * ch).min(samples.len());
+                    let stop = ((local + n) * ch).min(samples.len());
+                    for (o, &s) in part.iter_mut().zip(samples[begin..stop].iter()) {
+                        *o += s;
+                    }
+                }
+                ClipBody::Streaming(s) => s.mix_into(part, n, ch, &mut self.scratch),
+            }
+        }
+    }
+
+    /// The first `k` frames of the block as they were, the rest from `to` on, its first few
+    /// milliseconds crossfaded (equal power) with what would have followed.
+    fn splice(&mut self, out: &mut [f32], block_start: u64, k: usize, to: u64) {
+        let ch = self.channels;
+        let (before, after) = out.split_at_mut(k * ch);
+        self.mix_span(block_start, before);
+
+        let fade = self.fade_frames.min(after.len() / ch);
+        let mut old = std::mem::take(&mut self.fade);
+        old[..fade * ch].fill(0.0);
+        self.mix_span(block_start + k as u64, &mut old[..fade * ch]);
+        self.mix_span(to, after);
+
+        let frames = after
+            .chunks_exact_mut(ch)
+            .zip(old.chunks_exact(ch))
+            .take(fade);
+        for (f, (new, was)) in frames.enumerate() {
+            let t = (f as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
+            let (fade_in, fade_out) = (t.sin(), t.cos());
+            for (n, &w) in new.iter_mut().zip(was) {
+                *n = *n * fade_in + w * fade_out;
+            }
+        }
+        self.fade = old;
     }
 
     /// Takes on every queued add and remove.
@@ -476,41 +601,31 @@ impl TrackSource for GroupTrackSource {
 
         let block_start = self.cursor;
         let block_end = block_start + frames as u64;
-        out[..frames * ch].fill(0.0);
+        let out = &mut out[..frames * ch];
+        out.fill(0.0);
 
-        for clip in self.clips.iter_mut() {
-            let start = clip.placement.start_frame.load(Ordering::Acquire);
-            let clip_end = start + clip.length_frames;
+        let jump = self
+            .control
+            .armed_jump()
+            .filter(|&(id, at, _)| id != self.taken && at >= block_start && at < block_end);
 
-            if let ClipBody::Streaming(s) = &mut clip.body {
-                s.align(block_start.saturating_sub(start), clip.length_frames);
+        let produced = match jump {
+            Some((id, at, to)) => {
+                let k = (at - block_start) as usize;
+                self.splice(out, block_start, k, to);
+                self.cursor = to + (frames - k) as u64;
+                self.jumped += to as i64 - at as i64;
+                self.taken = id;
+                self.control.jump_taken.store(id, Ordering::Release);
+                frames
             }
-
-            let from = block_start.max(start);
-            let to = block_end.min(clip_end);
-            if from >= to {
-                continue;
+            None => {
+                self.mix_span(block_start, out);
+                let produced = (end.min(block_end) - block_start) as usize;
+                self.cursor += produced as u64;
+                produced
             }
-
-            let local = (from - start) as usize;
-            let n = (to - from) as usize;
-            let offset = (from - block_start) as usize * ch;
-            let dst = &mut out[offset..offset + n * ch];
-
-            match &mut clip.body {
-                ClipBody::Memory(samples) => {
-                    let begin = (local * ch).min(samples.len());
-                    let stop = ((local + n) * ch).min(samples.len());
-                    for (o, &s) in dst.iter_mut().zip(samples[begin..stop].iter()) {
-                        *o += s;
-                    }
-                }
-                ClipBody::Streaming(s) => s.mix_into(dst, n, ch, &mut self.scratch),
-            }
-        }
-
-        let produced = (end.min(block_end) - block_start) as usize;
-        self.cursor += produced as u64;
+        };
         self.control.position.store(self.cursor, Ordering::Relaxed);
 
         produced * ch
@@ -518,6 +633,10 @@ impl TrackSource for GroupTrackSource {
 
     fn is_eof(&self) -> bool {
         self.control.finished.load(Ordering::Relaxed)
+    }
+
+    fn take_jump(&mut self) -> i64 {
+        std::mem::take(&mut self.jumped)
     }
 }
 
@@ -747,5 +866,121 @@ mod tests {
         let out = read_frames(&mut src, 256);
         assert_eq!(out.len(), 256 * 2);
         assert_eq!(ctl.position_frames(), 10_256);
+    }
+    /// A stereo ramp: frame `f` holds `f / 32768` on both sides, so a frame tells where it came from.
+    fn ramp_wav(frames: usize) -> TempWav {
+        let samples: Vec<i16> = (0..frames as i16).flat_map(|f| [f, f]).collect();
+        TempWav::write(2, RATE, &samples)
+    }
+
+    fn ramp(frame: u64) -> f32 {
+        frame as f32 / 32_768.0
+    }
+
+    /// A group holding one ramp clip at the timeline's start.
+    fn ramp_group(frames: usize) -> (GroupTrackSource, Arc<GroupSourceControl>, TempWav) {
+        let wav = ramp_wav(frames);
+        let (src, control) = GroupTrackSource::new(RATE, 2);
+        control.add_clip(&memory_clip(&wav), 0).unwrap();
+        (src, control, wav)
+    }
+
+    /// Plays `blocks` blocks of 512 and hands back every frame's left sample.
+    fn play_blocks(src: &mut GroupTrackSource, blocks: usize) -> Vec<f32> {
+        (0..blocks)
+            .flat_map(|_| read_frames(src, 512))
+            .step_by(2)
+            .collect()
+    }
+
+    #[test]
+    fn an_armed_jump_lands_on_its_frame_with_a_crossfade() {
+        let (mut src, control, _wav) = ramp_group(20_000);
+        control.arm_jump(7, 10_000, 2_000);
+
+        let heard = play_blocks(&mut src, 30);
+        let fade = (RATE * JUMP_FADE_MS / 1000) as usize;
+
+        assert_eq!(heard[9_999], ramp(9_999), "up to the frame as it was");
+        for f in 0..fade {
+            let (new, old) = (ramp(2_000 + f as u64), ramp(10_000 + f as u64));
+            let got = heard[10_000 + f];
+            assert!(
+                got >= new.min(old) - 1e-6 && got <= new.max(old) * 1.42,
+                "frame {f} of the fade"
+            );
+        }
+        for f in fade..2_000 {
+            assert_eq!(
+                heard[10_000 + f],
+                ramp(2_000 + f as u64),
+                "on from the target, frame {f}"
+            );
+        }
+        assert_eq!(control.jump_taken(), 7);
+        assert_eq!(src.take_jump(), -8_000);
+        assert_eq!(src.take_jump(), 0, "told once");
+    }
+
+    #[test]
+    fn a_jump_is_taken_once_and_a_disarmed_one_not_at_all() {
+        let (mut src, control, _wav) = ramp_group(20_000);
+
+        control.arm_jump(1, 1_000, 0);
+        let first = play_blocks(&mut src, 4);
+        assert_eq!(control.jump_taken(), 1);
+        assert_eq!(
+            first[2_047],
+            ramp(2_047 - 1_000),
+            "back at frame 1000 a second time, the jump it already took is not taken again"
+        );
+
+        control.arm_jump(2, 5_000, 0);
+        control.disarm_jump();
+        let third = play_blocks(&mut src, 8);
+        assert!(third.windows(2).all(|w| w[1] > w[0]), "disarmed: no jump");
+        assert_eq!(control.jump_taken(), 1);
+    }
+
+    #[test]
+    fn a_jump_whose_frame_is_behind_the_cursor_never_happens() {
+        let (mut src, control, _wav) = ramp_group(20_000);
+        play_blocks(&mut src, 4);
+
+        control.arm_jump(3, 1_000, 0);
+        let heard = play_blocks(&mut src, 4);
+
+        assert_eq!(control.jump_taken(), 0);
+        assert_eq!(heard[0], ramp(2_048));
+    }
+
+    /// On a mixer track the jump moves the position with it: the content position by the jump,
+    /// the project position (rendered frames plus the shift) by the same at unity tempo.
+    #[test]
+    fn a_track_carries_its_sources_jump_into_its_position() {
+        use crate::multitrack::{MultiTrackMixer, TrackState};
+
+        let (src, control, _wav) = ramp_group(20_000);
+        let mut mixer = MultiTrackMixer::new(RATE as f32, 2);
+        let (id, shared) = mixer.add_track();
+        mixer.set_track_source(id, Some(Box::new(src)));
+        shared.set_state(TrackState::Playing);
+
+        control.arm_jump(9, 10_000, 2_000);
+        let mut out = vec![0.0f32; 512 * 2];
+        for _ in 0..30 {
+            mixer.mix(&mut out);
+        }
+
+        let played = 30 * 512_i64;
+        assert_eq!(control.jump_taken(), 9);
+        assert_eq!(shared.jump_shift_frames(), -8_000);
+        assert_eq!(
+            shared.rendered_frames() as i64,
+            played,
+            "wall time is not touched"
+        );
+        assert_eq!(shared.content_frames() as i64, played - 8_000);
+        assert_eq!(control.position_frames() as i64, played - 8_000);
     }
 }

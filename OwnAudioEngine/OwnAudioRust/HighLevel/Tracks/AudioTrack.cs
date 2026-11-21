@@ -201,15 +201,32 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
-    /// Wall-clock playback position: advances at the real rate no matter the tempo.
-    /// This is the one to drive a shared master clock with.
+    /// Project frames the source jumped by since the last reset — an armed jump it carried out
+    /// inside a block. Position already counts it in.
+    /// </summary>
+    public long JumpShiftFrames
+    {
+        get
+        {
+            if (_disposed) { return 0; }
+
+            int code = OwnAudioNative.ownaudio_v1_track_get_jump_shift_frames(_handle.DangerousGetHandle(), out long frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(JumpShiftFrames));
+            return frames;
+        }
+    }
+
+    /// <summary>
+    /// Wall-clock playback position, advancing at the real rate no matter the tempo, plus any jump
+    /// the source made. This is the one to drive a shared master clock with.
     /// </summary>
     public TimeSpan Position
     {
         get
         {
             if (_sampleRate <= 0f) return TimeSpan.Zero;
-            return TimeSpan.FromSeconds(RenderedFrames / _sampleRate);
+            double frames = Math.Max(0.0, (double)RenderedFrames + JumpShiftFrames);
+            return TimeSpan.FromSeconds(frames / _sampleRate);
         }
     }
 

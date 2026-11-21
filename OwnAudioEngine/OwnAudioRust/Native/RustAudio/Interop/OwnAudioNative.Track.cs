@@ -353,6 +353,12 @@ internal static partial class OwnAudioNative
     internal static partial int ownaudio_v1_track_set_gated(IntPtr track, int gated);
 
     /// <summary>
+    /// Project frames the track's source jumped by since the last position reset.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_get_jump_shift_frames(IntPtr track, out long frames);
+
+    /// <summary>
     /// Per track channel routing: source channel i lands on physical output map[i], and any output
     /// the map doesn't name gets nothing from this track. len 0 clears the routing.
     /// </summary>
@@ -745,6 +751,21 @@ internal static partial class OwnAudioNative
     /// <param name="framePosition"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_group_source_seek(IntPtr source, ulong framePosition);
+
+    /// <summary>
+    /// At content frame at the cursor goes on from to, inside the block. id 0 arms nothing.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_arm_jump(IntPtr source, ulong id, ulong at, ulong to);
+
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_disarm_jump(IntPtr source);
+
+    /// <summary>
+    /// Id of the last jump carried out, 0 before the first.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_group_source_jump_taken(IntPtr source, out ulong id);
 
     /// <summary>
     /// 1 once the cursor ran past the last clip end.

@@ -333,6 +333,73 @@ pub unsafe extern "C" fn ownaudio_v1_group_source_seek(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Arms a jump: when the group's cursor reaches content frame `at` it goes on from `to`, inside
+/// the block, with a short crossfade. One at a time, a new one replaces it; `id` is new each
+/// time, [`ownaudio_v1_group_source_jump_taken`] answers with it. An `id` of 0 arms nothing.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_group_source_arm_jump(
+    source: *mut OwnAudioGroupSourceHandle,
+    id: u64,
+    at: u64,
+    to: u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(wrapper) = (unsafe { group_source_from_ptr(source) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        wrapper.control.arm_jump(id, at, to);
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Takes back an armed jump that has not happened yet.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_group_source_disarm_jump(
+    source: *mut OwnAudioGroupSourceHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(wrapper) = (unsafe { group_source_from_ptr(source) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        wrapper.control.disarm_jump();
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Writes the id of the last jump the group carried out to `*out_id`, `0` before the first.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+/// - `out_id` must point to a writable `u64`; null is rejected.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_group_source_jump_taken(
+    source: *mut OwnAudioGroupSourceHandle,
+    out_id: *mut u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_id.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let Some(wrapper) = (unsafe { group_source_from_ptr(source) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        unsafe { *out_id = wrapper.control.jump_taken() };
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Writes `1` to `*out_finished` once the group's cursor has run past the end of
 /// its last clip, `0` otherwise.  Cleared by a seek, and by a clip added or moved
 /// ahead of the cursor.

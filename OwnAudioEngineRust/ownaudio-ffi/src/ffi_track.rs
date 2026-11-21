@@ -869,6 +869,31 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_start_delay_frames(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Project frames the track's sources jumped by since its last position reset (an armed jump
+/// carried out inside a block). Rendered frames plus this is where the song stands.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `out_frames` must point to a writable `i64`; null is rejected.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_track_get_jump_shift_frames(
+    track: *mut OwnAudioTrackHandle,
+    out_frames: *mut i64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let Some(wrapper) = (unsafe { track_from_ptr(track) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        unsafe { *out_frames = wrapper.shared.jump_shift_frames() };
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Whether the mixer's resume gate holds this track after a seek (`1`, the default) or leaves
 /// it alone (`0`) — a live input, whose monitoring must not drop out.
 ///

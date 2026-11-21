@@ -7,6 +7,18 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Added
 
+- **Jumps the tracks carry out themselves.** `AudioMixer.ArmJump(atProjectSeconds, toProjectSeconds)`
+  arms a jump ahead of time — a loop's way back, a skipped section, a queued jump — and every track
+  that can carries it out inside the block, on the exact frame, with a 5 ms equal-power crossfade:
+  no seek, no hole, no cold stretch refill, the effect tails ring on. `JumpTaken` says when every
+  armed track took it, or (`Late`) that its moment passed without that, and the caller seeks
+  there itself. A track's `Position` moves with the jump (`AudioTrack.JumpShiftFrames`), so the
+  master clock follows on its own. One jump at a time; arming again replaces it, a seek takes it
+  back, a tempo change needs a re-arm. For now only a `GroupSource` (clip track) takes it — a
+  streamed `FileSource` answers that it cannot (`ArmJump` returns false) until its landing buffer
+  comes. Native: `GroupSourceControl::arm_jump` / `disarm_jump` / `jump_taken`,
+  `TrackSource::take_jump`, `TrackShared::jump_shift_frames`.
+
 - **When a removed effect may be disposed.** `AudioMixer.WhenEffectReleasedAsync(effect)` returns
   once the audio thread can no longer call into the effect: its native twin is off every chain and
   the output has rendered two whole blocks since (the one rendering while the removal was queued,

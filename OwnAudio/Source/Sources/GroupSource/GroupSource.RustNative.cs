@@ -27,6 +27,32 @@ public sealed partial class GroupSource : IRustNativeChainSource
     /// <inheritdoc/>
     void IRustClockedSource.ApplyRustNativeSync() => ApplyRustNativeSync();
 
+    bool IRustClockedSource.ArmRustNativeJump(ulong id, double atProject, double toProject)
+    {
+        lock (_rustBackendLock)
+        {
+            if (_rustGroupTrack is null) return false;
+
+            float _tempoNow = _tempo <= 0f ? 1f : _tempo;
+            double _at = (atProject - StartOffset) * _tempoNow;
+            double _to = (toProject - StartOffset) * _tempoNow;
+            if (_at < 0.0 || _to < 0.0) return false;
+
+            _rustGroupTrack.ArmJump(id, TimeSpan.FromSeconds(_at), TimeSpan.FromSeconds(_to));
+            return true;
+        }
+    }
+
+    void IRustClockedSource.DisarmRustNativeJump()
+    {
+        lock (_rustBackendLock) { _rustGroupTrack?.DisarmJump(); }
+    }
+
+    ulong IRustClockedSource.RustNativeJumpTaken
+    {
+        get { lock (_rustBackendLock) { return _rustGroupTrack?.JumpTaken ?? 0; } }
+    }
+
     private readonly bool _rustNative;
     private readonly object _rustBackendLock = new object();
 

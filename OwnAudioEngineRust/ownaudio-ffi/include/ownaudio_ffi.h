@@ -1603,6 +1603,37 @@ int32_t ownaudio_v1_group_source_seek(struct OwnAudioGroupSourceHandle *source,
                                       uint64_t frame_position);
 
 /**
+ * Arms a jump: when the group's cursor reaches content frame `at` it goes on from `to`, inside
+ * the block, with a short crossfade. One at a time, a new one replaces it; `id` is new each
+ * time, [`ownaudio_v1_group_source_jump_taken`] answers with it. An `id` of 0 arms nothing.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ */
+int32_t ownaudio_v1_group_source_arm_jump(struct OwnAudioGroupSourceHandle *source,
+                                          uint64_t id,
+                                          uint64_t at,
+                                          uint64_t to);
+
+/**
+ * Takes back an armed jump that has not happened yet.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ */
+int32_t ownaudio_v1_group_source_disarm_jump(struct OwnAudioGroupSourceHandle *source);
+
+/**
+ * Writes the id of the last jump the group carried out to `*out_id`, `0` before the first.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.
+ * - `out_id` must point to a writable `u64`; null is rejected.
+ */
+int32_t ownaudio_v1_group_source_jump_taken(struct OwnAudioGroupSourceHandle *source,
+                                            uint64_t *out_id);
+
+/**
  * Writes `1` to `*out_finished` once the group's cursor has run past the end of
  * its last clip, `0` otherwise.  Cleared by a seek, and by a clip added or moved
  * ahead of the cursor.
@@ -3001,6 +3032,17 @@ int32_t ownaudio_v1_track_get_peaks(struct OwnAudioTrackHandle *track,
  */
 int32_t ownaudio_v1_track_set_start_delay_frames(struct OwnAudioTrackHandle *track,
                                                  uint64_t frames);
+
+/**
+ * Project frames the track's sources jumped by since its last position reset (an armed jump
+ * carried out inside a block). Rendered frames plus this is where the song stands.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `out_frames` must point to a writable `i64`; null is rejected.
+ */
+int32_t ownaudio_v1_track_get_jump_shift_frames(struct OwnAudioTrackHandle *track,
+                                                int64_t *out_frames);
 
 /**
  * Whether the mixer's resume gate holds this track after a seek (`1`, the default) or leaves

@@ -25,4 +25,17 @@ internal interface IRustClockedSource : IMasterClockSource
     /// Puts the clock's network tempo trim onto the native track, from the mixer's control tick.
     /// </summary>
     void ApplyRustNativeSync();
+
+    /// <summary>
+    /// Arms a jump in project seconds on the native side, worked out to this source's own content
+    /// frames. False when the source cannot carry one out itself (yet) or the frames fall before it.
+    /// </summary>
+    bool ArmRustNativeJump(ulong id, double atProject, double toProject);
+
+    void DisarmRustNativeJump();
+
+    /// <summary>
+    /// Id of the last jump carried out, 0 for none.
+    /// </summary>
+    ulong RustNativeJumpTaken { get; }
 }

@@ -206,6 +206,52 @@ public sealed class GroupTrack : IDisposable
         }
     }
 
+    /// <summary>
+    /// When the cursor reaches at, it goes on from to — sample for sample, inside the block, the
+    /// first few milliseconds crossfaded. One at a time, a new one replaces it. id is new every
+    /// time and comes back in JumpTaken once it happened; a frame the cursor is past never comes.
+    /// </summary>
+    public void ArmJump(ulong id, TimeSpan at, TimeSpan to)
+    {
+        lock (_sync)
+        {
+            if (_disposed) { return; }
+
+            int code = OwnAudioNative.ownaudio_v1_group_source_arm_jump(
+                _sourceHandle.DangerousGetHandle(), id, _toFrames(at), _toFrames(to));
+            ErrorCodeMapper.ThrowIfError(code, nameof(ArmJump));
+        }
+    }
+
+    public void DisarmJump()
+    {
+        lock (_sync)
+        {
+            if (_disposed) { return; }
+
+            int code = OwnAudioNative.ownaudio_v1_group_source_disarm_jump(_sourceHandle.DangerousGetHandle());
+            ErrorCodeMapper.ThrowIfError(code, nameof(DisarmJump));
+        }
+    }
+
+    /// <summary>
+    /// Id of the last jump carried out, 0 before the first.
+    /// </summary>
+    public ulong JumpTaken
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (_disposed) { return 0; }
+
+                int code = OwnAudioNative.ownaudio_v1_group_source_jump_taken(_sourceHandle.DangerousGetHandle(), out ulong id);
+                ErrorCodeMapper.ThrowIfError(code, nameof(JumpTaken));
+                return id;
+            }
+        }
+    }
+
     #endregion
 
     #region Finished polling

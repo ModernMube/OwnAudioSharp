@@ -2,7 +2,8 @@
 //! an effect chain.
 
 use std::sync::atomic::{
-    fence, AtomicBool, AtomicI32, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
+    fence, AtomicBool, AtomicI32, AtomicI64, AtomicU16, AtomicU32, AtomicU64, AtomicU8,
+    AtomicUsize, Ordering,
 };
 use std::sync::Arc;
 
@@ -139,6 +140,13 @@ pub trait TrackSource: Send {
     fn ready(&mut self) -> bool {
         true
     }
+
+    /// Content frames the source jumped by since the last call, on an armed jump it carried
+    /// out inside a block (negative for a loop going back). The track moves its position by it.
+    #[inline]
+    fn take_jump(&mut self) -> i64 {
+        0
+    }
 }
 
 impl TrackSource for RingBufferReader {
@@ -218,6 +226,9 @@ pub struct TrackShared {
     /// fractional; written only by the audio thread, so the load/store round-trip needs
     /// no CAS.
     content_frames_bits: AtomicU64,
+    /// Project frames the track's sources jumped by since the last position reset. The
+    /// rendered frames stay wall time; rendered plus this is where the song is.
+    jump_shift_frames: AtomicI64,
     /// Most recent left-channel output peak of this track's own contribution
     /// (post effect-chain and post-gain) as `f32` bits. Written by the audio
     /// thread every rendered block; read from the control thread for per-track
@@ -305,6 +316,7 @@ impl TrackShared {
             stretch_pinned: AtomicBool::new(false),
             rendered_frames: AtomicU64::new(0),
             content_frames_bits: AtomicU64::new(0.0f64.to_bits()),
+            jump_shift_frames: AtomicI64::new(0),
             peak_l_bits: AtomicU32::new(0.0f32.to_bits()),
             peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
             pending_start_silence: AtomicU64::new(0),
@@ -622,6 +634,22 @@ impl TrackShared {
     #[inline]
     pub fn reset_rendered_frames(&self) {
         self.rendered_frames.store(0, Ordering::Relaxed);
+        self.jump_shift_frames.store(0, Ordering::Relaxed);
+    }
+
+    /// See [`TrackShared::jump_shift_frames`].
+    #[inline]
+    pub fn jump_shift_frames(&self) -> i64 {
+        self.jump_shift_frames.load(Ordering::Relaxed)
+    }
+
+    /// A jump of `content` frames the source carried out at `tempo`: the content position
+    /// takes it as it is, the project position at the tempo's rate.
+    #[inline]
+    pub(crate) fn add_jump(&self, content: i64, tempo: f32) {
+        self.add_content_frames(content as f64);
+        let project = (content as f64 / tempo.max(f32::EPSILON) as f64).round() as i64;
+        self.jump_shift_frames.fetch_add(project, Ordering::Relaxed);
     }
 
     /// Returns the content (source-timeline) frames advanced since the last position reset.
@@ -1084,6 +1112,14 @@ impl Track {
         };
         for s in &mut buf[read..] {
             *s = 0.0;
+        }
+        if let Some(jumped) = self
+            .source
+            .as_mut()
+            .map(|s| s.take_jump())
+            .filter(|&j| j != 0)
+        {
+            self.shared.add_jump(jumped, tempo);
         }
 
         if let Some(tap) = self.fx_tap.as_mut() {

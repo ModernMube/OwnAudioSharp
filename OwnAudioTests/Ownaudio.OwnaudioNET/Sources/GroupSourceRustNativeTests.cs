@@ -182,6 +182,42 @@ public sealed class GroupSourceRustNativeTests : IDisposable
         group.RustTrack!.PitchSemitones.Should().BeApproximately(-3.0f, 1e-4f);
     }
 
+    /// <summary>
+    /// A group carries an armed jump out itself, so the mixer arms it there and says every track
+    /// takes it; nothing has happened yet on a mixer that renders nothing.
+    /// </summary>
+    [Fact]
+    public void ArmJump_OnAGroup_IsArmedOnTheNativeGroup()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        using var group = new GroupSource(SampleRate, Channels);
+        group.AddClip(_wav(2.0), 0.0);
+        mixer.AddSource(group);
+
+        mixer.ArmJump(1.5, 0.5).Should().BeTrue();
+        group.RustGroupTrack!.JumpTaken.Should().Be(0UL);
+
+        mixer.DisarmJump();
+        mixer.ArmJump(1.0, 0.0).Should().BeTrue("arming again replaces the last one");
+    }
+
+    /// <summary>
+    /// A streamed file track cannot take a jump inside a block yet: the mixer says so, and the
+    /// caller seeks there at the boundary.
+    /// </summary>
+    [Fact]
+    public void ArmJump_WithAFileTrack_SaysNotEveryTrackTakesIt()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        using var group = new GroupSource(SampleRate, Channels);
+        group.AddClip(_wav(2.0), 0.0);
+        using var file = new FileSource(_wav(2.0), 8192, SampleRate, Channels);
+        mixer.AddSource(group);
+        mixer.AddSource(file);
+
+        mixer.ArmJump(1.5, 0.5).Should().BeFalse();
+    }
+
     [Fact]
     public void Seek_StaysInsideTheTimeline()
     {

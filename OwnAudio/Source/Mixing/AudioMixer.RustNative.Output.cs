@@ -91,6 +91,7 @@ public sealed partial class AudioMixer
                 PollRustPlaybackEndedOnce();
                 PollRustStreamFaultOnce();
                 _pollResumeGate();
+                _pollJump();
 
                 _rustSyncConsecutiveErrors = 0;
                 _rustApplyErrors = 0;
@@ -233,6 +234,8 @@ public sealed partial class AudioMixer
     internal void SeekRustNative(double projectSeconds)
     {
         if (projectSeconds < 0.0) projectSeconds = 0.0;
+
+        DisarmJump();
 
         _masterClock.SeekTo(projectSeconds);
 

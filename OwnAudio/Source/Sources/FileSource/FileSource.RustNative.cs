@@ -28,6 +28,12 @@ public partial class FileSource : IRustNativeChainSource, IRustClockedSource
     /// <inheritdoc/>
     void IRustClockedSource.ApplyRustNativeSync() => ApplyRustNativeSync();
 
+    bool IRustClockedSource.ArmRustNativeJump(ulong id, double atProject, double toProject) => false;
+
+    void IRustClockedSource.DisarmRustNativeJump() { }
+
+    ulong IRustClockedSource.RustNativeJumpTaken => 0;
+
     /// <summary>
     /// Rust-native mode flag, fixed at construction.
     /// </summary>
