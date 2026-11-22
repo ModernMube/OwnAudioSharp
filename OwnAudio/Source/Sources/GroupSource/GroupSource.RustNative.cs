@@ -43,6 +43,20 @@ public sealed partial class GroupSource : IRustNativeChainSource
         }
     }
 
+    double? IRustClockedSource.ArmRustNativeStop(ulong id, double atContent)
+    {
+        lock (_rustBackendLock)
+        {
+            if (_rustGroupTrack is null) return null;
+
+            double _at = atContent - StartOffset * (_tempo <= 0f ? 1f : _tempo);
+            if (_at < 0.0) return double.NaN;
+
+            _rustGroupTrack.ArmStop(id, TimeSpan.FromSeconds(_at));
+            return _at;
+        }
+    }
+
     double IRustClockedSource.RustNativeContentPosition => _rustNativePosition;
 
     void IRustClockedSource.DisarmRustNativeJump()

@@ -1359,6 +1359,7 @@ int32_t ownaudio_v1_file_source_seek(struct OwnAudioFileSourceHandle *source,
  * the block, by swapping to a second stream of the same file prefetched at `to`. That stream is
  * opened on the first call — this one may block on the file — and seeked on every one, so arm
  * well ahead. One at a time, a new one replaces it; `id` is new each time, 0 arms nothing.
+ * A `to` of `u64::MAX` is a stop: at `at` the source fades out and stays silent until a seek.
  *
  * # Safety
  * - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
@@ -1640,6 +1641,7 @@ int32_t ownaudio_v1_group_source_seek(struct OwnAudioGroupSourceHandle *source,
  * Arms a jump: when the group's cursor reaches content frame `at` it goes on from `to`, inside
  * the block, with a short crossfade. One at a time, a new one replaces it; `id` is new each
  * time, [`ownaudio_v1_group_source_jump_taken`] answers with it. An `id` of 0 arms nothing.
+ * A `to` of `u64::MAX` is a stop: at `at` the source fades out and stays silent until a seek.
  *
  * # Safety
  * - `source` must be a live handle from `ownaudio_v1_track_open_group` that has not been destroyed.

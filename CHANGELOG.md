@@ -24,6 +24,14 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   track cannot take it at all (its target past the file's end). Native:
   `GroupSourceControl` / `FileSourceControl::arm_jump` / `disarm_jump`, `jump_taken`, `jump_missed`,
   `TrackSource::take_jump`, `TrackShared::jump_shift_frames`.
+- **Stops the tracks carry out themselves.** `AudioMixer.ArmStop(atSongSeconds)` arms the end of
+  a song or an End marker the same way: at the frame every file and clip track fades out over 5 ms
+  (on into the next block when the frame falls near a block's end) and stays silent until the
+  next seek. No second stream is opened for it. `JumpTaken` answers with `IsStop`
+  (`ToSongSeconds` is NaN). The mixer and the clock keep running, so stopping the transport is
+  the caller's. `ArmStop` returns false when a track cannot take it, or when no track still
+  sounds at that moment (then nothing is armed). Native: a jump target of `u64::MAX`
+  (`file_source::STOP`), `FileSourceControl` / `GroupSourceControl::arm_stop`.
 
 - **When a removed effect may be disposed.** `AudioMixer.WhenEffectReleasedAsync(effect)` returns
   once the audio thread can no longer call into the effect: its native twin is off every chain and

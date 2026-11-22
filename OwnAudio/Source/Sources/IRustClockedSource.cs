@@ -34,6 +34,13 @@ internal interface IRustClockedSource : IMasterClockSource
     double? ArmRustNativeJump(ulong id, double atContent, double toContent);
 
     /// <summary>
+    /// The same for a stop: at atContent the source fades out and stays silent until a seek. Back:
+    /// its own frame, NaN when the moment falls outside the source (nothing there to stop), null
+    /// when it cannot.
+    /// </summary>
+    double? ArmRustNativeStop(ulong id, double atContent);
+
+    /// <summary>
     /// The source's own content position, seconds — what an armed jump's frame is counted on.
     /// </summary>
     double RustNativeContentPosition { get; }

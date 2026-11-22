@@ -244,6 +244,7 @@ pub unsafe extern "C" fn ownaudio_v1_file_source_seek(
 /// the block, by swapping to a second stream of the same file prefetched at `to`. That stream is
 /// opened on the first call — this one may block on the file — and seeked on every one, so arm
 /// well ahead. One at a time, a new one replaces it; `id` is new each time, 0 arms nothing.
+/// A `to` of `u64::MAX` is a stop: at `at` the source fades out and stays silent until a seek.
 ///
 /// # Safety
 /// - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.

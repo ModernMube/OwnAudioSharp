@@ -49,6 +49,32 @@ public partial class AudioMixer
     {
         _throwIfDisposed();
         _throwUnlessRustNative(nameof(ArmJump));
+        return _arm(atSongSeconds, toSongSeconds);
+    }
+
+    /// <summary>
+    /// When the song reaches atSongSeconds, every track fades out over a few milliseconds and
+    /// stays silent until the next seek — the end of a song, an End marker. Takes the armed
+    /// jump's place; <see cref="JumpTaken"/> answers it with <see cref="JumpTakenEventArgs.IsStop"/>.
+    /// The mixer keeps running and the clock keeps going: stopping the transport is the caller's.
+    /// </summary>
+    /// <returns>
+    /// True when every track that still sounds there stops itself. False when one cannot, or none
+    /// sounds there at all (no answer then): the caller stops at the boundary as before.
+    /// </returns>
+    public bool ArmStop(double atSongSeconds)
+    {
+        _throwIfDisposed();
+        _throwUnlessRustNative(nameof(ArmStop));
+        return _arm(atSongSeconds, double.NaN);
+    }
+
+    /// <summary>
+    /// toSongSeconds NaN: a stop.
+    /// </summary>
+    private bool _arm(double atSongSeconds, double toSongSeconds)
+    {
+        bool _stop = double.IsNaN(toSongSeconds);
 
         lock (_jumpLock)
         {
@@ -66,12 +92,16 @@ public partial class AudioMixer
                     IRustClockedSource? _fs = _resolve<IRustClockedSource>(source);
                     if (_fs is null) continue;
 
-                    if (_fs.ArmRustNativeJump(_id, atSongSeconds, toSongSeconds) is { } _own)
+                    double? _own = _stop
+                        ? _fs.ArmRustNativeStop(_id, atSongSeconds)
+                        : _fs.ArmRustNativeJump(_id, atSongSeconds, toSongSeconds);
+
+                    if (_own is not { } _frame) _every = false;
+                    else if (!double.IsNaN(_frame))
                     {
                         _armed.Add(_fs);
-                        _ownAt.Add(_own);
+                        _ownAt.Add(_frame);
                     }
-                    else _every = false;
                 }
             }
 

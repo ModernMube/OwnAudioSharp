@@ -219,6 +219,28 @@ public sealed class GroupSourceRustNativeTests : IDisposable
         mixer.ArmJump(1.5, 5.0).Should().BeFalse("the file ends at 2 s");
     }
 
+    /// <summary>
+    /// A stop needs no target, so every track that still sounds there takes it; past the end of
+    /// all of them there is nothing to stop and nothing is armed.
+    /// </summary>
+    [Fact]
+    public void ArmStop_ArmsEveryTrackThatStillSounds()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        using var group = new GroupSource(SampleRate, Channels);
+        group.AddClip(_wav(3.0), 0.0);
+        using var file = new FileSource(_wav(2.0), 8192, SampleRate, Channels);
+        mixer.AddSource(group);
+        mixer.AddSource(file);
+
+        mixer.ArmStop(1.5).Should().BeTrue();
+        mixer.ArmStop(2.5).Should().BeTrue("the file is over by then, the group stops alone");
+        group.RustGroupTrack!.JumpTaken.Should().Be(0UL);
+
+        mixer.RemoveSource(group.Id);
+        mixer.ArmStop(2.5).Should().BeFalse("nothing sounds there");
+    }
+
     [Fact]
     public void Seek_StaysInsideTheTimeline()
     {

@@ -52,6 +52,20 @@ public partial class FileSource : IRustNativeChainSource, IRustClockedSource
         }
     }
 
+    double? IRustClockedSource.ArmRustNativeStop(ulong id, double atContent)
+    {
+        lock (_rustBackendLock)
+        {
+            if (_rustFileTrack is null) return null;
+
+            double _at = atContent - StartOffset * (_tempo <= 0f ? 1f : _tempo);
+            if (_at < 0.0 || _at >= Duration) return double.NaN;
+
+            _rustFileTrack.ArmStop(id, TimeSpan.FromSeconds(_at));
+            return _at;
+        }
+    }
+
     double IRustClockedSource.RustNativeContentPosition => _rustNativePosition;
 
     void IRustClockedSource.DisarmRustNativeJump()

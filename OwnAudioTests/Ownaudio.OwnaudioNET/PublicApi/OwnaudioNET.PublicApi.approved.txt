@@ -1181,6 +1181,7 @@ namespace OwnaudioNET.Events
         public JumpTakenEventArgs(ulong id, double atSongSeconds, double toSongSeconds, bool late) { }
         public double AtSongSeconds { get; }
         public ulong Id { get; }
+        public bool IsStop { get; }
         public bool Late { get; }
         public double ToSongSeconds { get; }
     }
@@ -1799,6 +1800,7 @@ namespace OwnaudioNET.Mixing
             "hear. A hosted VST3 stays time-aligned on its own through the native bypass.")]
         public void ApplyPluginDelayCompensation() { }
         public bool ArmJump(double atSongSeconds, double toSongSeconds) { }
+        public bool ArmStop(double atSongSeconds) { }
         public void ClearMasterEffects() { }
         public void ClearSources() { }
         public OwnaudioNET.Monitoring.EffectTap CreateEffectTap(System.Guid sourceId, int capacitySamples = 0) { }

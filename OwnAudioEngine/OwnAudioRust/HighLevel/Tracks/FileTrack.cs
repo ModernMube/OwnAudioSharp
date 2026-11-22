@@ -140,6 +140,23 @@ public sealed class FileTrack : IDisposable
         }
     }
 
+    /// <summary>
+    /// When the cursor reaches at, the file fades out over a few milliseconds and stays silent
+    /// until the next seek. Takes the armed jump's place and shows in JumpState the same way.
+    /// </summary>
+    public void ArmStop(ulong id, TimeSpan at)
+    {
+        ulong atFrame = (ulong)Math.Round(Math.Max(0.0, at.TotalSeconds) * _sampleRate);
+
+        lock (_sync)
+        {
+            if (_disposed) { return; }
+
+            int code = OwnAudioNative.ownaudio_v1_file_source_arm_jump(_sourceHandle.DangerousGetHandle(), id, atFrame, ulong.MaxValue);
+            ErrorCodeMapper.ThrowIfError(code, nameof(ArmStop));
+        }
+    }
+
     public void DisarmJump()
     {
         lock (_sync)

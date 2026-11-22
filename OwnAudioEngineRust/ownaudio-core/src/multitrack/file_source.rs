@@ -24,8 +24,11 @@ use crate::decoder::{AudioStreamInfo, StreamingTrack};
 use crate::error::Result;
 use crate::multitrack::track::TrackSource;
 
-/// How long a jump crossfades what would have followed into where it lands.
+/// How long a jump crossfades what would have followed into where it lands, and a stop fades out.
 const JUMP_FADE_MS: u32 = 5;
+
+/// The jump target that is none: at the frame the source fades out and stays silent until a seek.
+pub const STOP: u64 = u64::MAX;
 
 /// What it takes to open the file again for the spare lane.
 struct Opening {
@@ -107,8 +110,13 @@ impl FileSourceControl {
     /// call (cold path) and seeked to `to` on every one, so arm it well ahead: if the frame comes
     /// before the spare is ready, the source does not jump and says so in
     /// [`FileSourceControl::jump_missed`]. One at a time, a new one replaces it; `id` is new each
-    /// time, 0 arms nothing.
+    /// time, 0 arms nothing. A `to` of [`STOP`] is [`FileSourceControl::arm_stop`].
     pub fn arm_jump(&self, id: u64, at: u64, to: u64) -> Result<()> {
+        if to == STOP {
+            self.arm_stop(id, at);
+            return Ok(());
+        }
+
         let mut lanes = self.lock();
         let spare = 1 - self.active.load(Ordering::Acquire);
 
@@ -126,12 +134,23 @@ impl FileSourceControl {
             seek.request(to);
         }
 
+        self.publish(id, at, to);
+        Ok(())
+    }
+
+    /// When the cursor reaches content frame `at`, the source fades out over a few milliseconds
+    /// and stays silent until the next seek. Takes the armed jump's place and answers in
+    /// [`FileSourceControl::jump_taken`] the same way; no second stream is needed for it.
+    pub fn arm_stop(&self, id: u64, at: u64) {
+        self.publish(id, at, STOP);
+    }
+
+    fn publish(&self, id: u64, at: u64, to: u64) {
         self.jump_id.store(0, Ordering::Relaxed);
         fence(Ordering::Release);
         self.jump_at.store(at, Ordering::Relaxed);
         self.jump_to.store(to, Ordering::Relaxed);
         self.jump_id.store(id, Ordering::Release);
-        Ok(())
     }
 
     pub fn disarm_jump(&self) {
@@ -184,6 +203,9 @@ pub struct FileTrackSource {
     jumped: i64,
     fade: Vec<f32>,
     fade_frames: usize,
+    /// Frames of a stop's fade done so far, `None` while no stop came. Past `fade_frames` the
+    /// source is silent; a seek lets it play again.
+    stop_ramp: Option<usize>,
 }
 
 impl FileTrackSource {
@@ -242,6 +264,7 @@ impl FileTrackSource {
             jumped: 0,
             fade: vec![0.0f32; fade_frames * channels],
             fade_frames,
+            stop_ramp: None,
         };
 
         Ok((source, control))
@@ -315,6 +338,30 @@ impl FileTrackSource {
         self.control.finished.store(false, Ordering::Relaxed);
         out.len()
     }
+
+    /// The first `k` frames as they are, then the stop's fade on from where it got to (it may
+    /// have begun a block ago), silence once it is down.
+    fn ramp_down(&mut self, out: &mut [f32], k: usize) -> usize {
+        let ch = self.channels;
+        let (before, after) = out.split_at_mut(k * ch);
+        let got = self.playing_mut().read(before);
+        before[got..].fill(0.0);
+
+        let done = self.stop_ramp.unwrap_or(0);
+        let left = self.fade_frames.saturating_sub(done).min(after.len() / ch);
+        let got = self.playing_mut().read(&mut after[..left * ch]);
+        after[got..].fill(0.0);
+
+        for (f, frame) in after.chunks_exact_mut(ch).take(left).enumerate() {
+            let t = ((done + f) as f32 + 0.5) / self.fade_frames as f32;
+            let gain = (t * std::f32::consts::FRAC_PI_2).cos();
+            frame.iter_mut().for_each(|s| *s *= gain);
+        }
+
+        self.stop_ramp = Some(done + left);
+        self.cursor += (k + left) as u64;
+        out.len()
+    }
 }
 
 impl TrackSource for FileTrackSource {
@@ -328,6 +375,7 @@ impl TrackSource for FileTrackSource {
         let epoch = self.control.seek_epoch.load(Ordering::Acquire);
         if epoch != self.seen_epoch {
             self.seen_epoch = epoch;
+            self.stop_ramp = None;
             self.cursor = self.control.seek_frame.load(Ordering::Relaxed);
             // a seek that crossed a jump's swap went to the lane that stopped playing
             if self.playing().seek_target() != self.cursor {
@@ -335,7 +383,16 @@ impl TrackSource for FileTrackSource {
             }
         }
 
+        if self.stop_ramp.is_some() {
+            return self.ramp_down(out, 0);
+        }
+
         if let Some((id, at, to)) = self.due_jump(out.len() / self.channels) {
+            if to == STOP {
+                self.taken = id;
+                self.control.jump_taken.store(id, Ordering::Release);
+                return self.ramp_down(out, (at - self.cursor) as usize);
+            }
             let spare = &mut self.lanes[1 - self.active];
             let ready = spare
                 .as_mut()
@@ -494,7 +551,10 @@ mod tests {
     fn settle(source: &mut FileTrackSource) {
         for _ in 0..500 {
             source.read(&mut []);
-            let armed = source.control.armed_jump().is_some();
+            let armed = source
+                .control
+                .armed_jump()
+                .is_some_and(|(_, _, to)| to != STOP);
             let spare = &mut source.lanes[1 - source.active];
             let spare_ok = !armed || spare.as_mut().is_some_and(|s| s.primed());
             if source.ready() && spare_ok {
@@ -586,6 +646,42 @@ mod tests {
 
         let landed = heard[0] * 32_768.0;
         assert!((landed - 20_000.0).abs() < 64.0, "landed at {landed}");
+    }
+
+    /// No second stream for a stop: the fade runs on the playing one, across the block boundary.
+    #[test]
+    fn an_armed_stop_fades_out_and_stays_silent_until_a_seek() {
+        let (mut source, control, _wav) = open_ramp();
+        let at = 10 * 512 - 20;
+        control.arm_stop(6, at);
+
+        let heard = play(&mut source, 20);
+        let fade = (44_100 * JUMP_FADE_MS / 1000) as usize;
+
+        assert!(source.lanes[1].is_none(), "no spare opened");
+        assert_eq!(heard[at as usize - 1], ramp(at - 1));
+        for f in 0..fade {
+            let t = (f as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
+            let want = ramp(at + f as u64) * t.cos();
+            assert!(
+                (heard[at as usize + f] - want).abs() < 1e-6,
+                "frame {f} of the fade"
+            );
+        }
+        assert!(
+            heard[at as usize + fade..].iter().all(|&s| s == 0.0),
+            "silent after it"
+        );
+        assert_eq!(control.jump_taken(), 6);
+        assert!(!control.is_finished());
+
+        control.seek_frames(2_000);
+        settle(&mut source);
+        let again = play(&mut source, 1);
+        assert!(
+            (again[0] * 32_768.0 - 2_000.0).abs() < 64.0,
+            "a seek plays again"
+        );
     }
 
     #[test]

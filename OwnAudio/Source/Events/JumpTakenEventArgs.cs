@@ -3,8 +3,8 @@ using System;
 namespace OwnaudioNET.Events
 {
     /// <summary>
-    /// An armed jump (<see cref="Mixing.AudioMixer.ArmJump"/>) happened on every track that took it,
-    /// or its moment passed without that.
+    /// An armed jump (<see cref="Mixing.AudioMixer.ArmJump"/>) or stop (<see cref="Mixing.AudioMixer.ArmStop"/>)
+    /// happened on every track that took it, or its moment passed without that.
     /// </summary>
     public sealed class JumpTakenEventArgs : EventArgs
     {
@@ -23,7 +23,12 @@ namespace OwnaudioNET.Events
         /// </summary>
         public double AtSongSeconds { get; }
 
+        /// <summary>
+        /// NaN for a stop.
+        /// </summary>
         public double ToSongSeconds { get; }
+
+        public bool IsStop => double.IsNaN(ToSongSeconds);
 
         /// <summary>
         /// The boundary went by and not every armed track carried the jump out (or none could

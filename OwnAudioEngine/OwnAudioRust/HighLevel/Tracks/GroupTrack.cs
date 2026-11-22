@@ -223,6 +223,22 @@ public sealed class GroupTrack : IDisposable
         }
     }
 
+    /// <summary>
+    /// When the cursor reaches at, the group fades out over a few milliseconds and stays silent
+    /// until the next seek. Takes the armed jump's place, answers in JumpTaken the same way.
+    /// </summary>
+    public void ArmStop(ulong id, TimeSpan at)
+    {
+        lock (_sync)
+        {
+            if (_disposed) { return; }
+
+            int code = OwnAudioNative.ownaudio_v1_group_source_arm_jump(
+                _sourceHandle.DangerousGetHandle(), id, _toFrames(at), ulong.MaxValue);
+            ErrorCodeMapper.ThrowIfError(code, nameof(ArmStop));
+        }
+    }
+
     public void DisarmJump()
     {
         lock (_sync)

@@ -25,6 +25,7 @@ use rtrb::{Consumer, Producer, RingBuffer};
 use crate::decoder::backend::create_backend;
 use crate::decoder::StreamingTrack;
 use crate::error::{AudioError, Result};
+use crate::multitrack::file_source::STOP;
 use crate::multitrack::track::TrackSource;
 
 /// Most clips a single group holds. The audio-side clip list is allocated at this capacity up
@@ -323,13 +324,19 @@ impl GroupSourceControl {
     /// block, sample for sample, the first few milliseconds crossfaded with what would have
     /// followed. One at a time, a new one replaces it. `id` is non-zero and new every time;
     /// [`GroupSourceControl::jump_taken`] answers with it. A jump whose frame the cursor is
-    /// already past never happens.
+    /// already past never happens. A `to` of [`STOP`] is [`GroupSourceControl::arm_stop`].
     pub fn arm_jump(&self, id: u64, at: u64, to: u64) {
         self.jump_id.store(0, Ordering::Relaxed);
         fence(Ordering::Release);
         self.jump_at.store(at, Ordering::Relaxed);
         self.jump_to.store(to, Ordering::Relaxed);
         self.jump_id.store(id, Ordering::Release);
+    }
+
+    /// When the cursor reaches content frame `at`, the group fades out over a few milliseconds
+    /// and stays silent until the next seek. Takes the armed jump's place, answers the same way.
+    pub fn arm_stop(&self, id: u64, at: u64) {
+        self.arm_jump(id, at, STOP);
     }
 
     pub fn disarm_jump(&self) {
@@ -386,6 +393,9 @@ pub struct GroupTrackSource {
     /// What would have followed a jump's frame, for the crossfade. Sized once, never grown.
     fade: Vec<f32>,
     fade_frames: usize,
+    /// Frames of a stop's fade done so far, `None` while no stop came. Past `fade_frames` the
+    /// group is silent; a seek lets it play again.
+    stop_ramp: Option<usize>,
 }
 
 impl GroupTrackSource {
@@ -430,6 +440,7 @@ impl GroupTrackSource {
                 (sample_rate * JUMP_FADE_MS / 1000).max(1) as usize * channels as usize
             ],
             fade_frames: (sample_rate * JUMP_FADE_MS / 1000).max(1) as usize,
+            stop_ramp: None,
         };
 
         (source, control)
@@ -497,6 +508,27 @@ impl GroupTrackSource {
             }
         }
         self.fade = old;
+    }
+
+    /// The first `k` frames of the block as they are, then the stop's fade on from where it got
+    /// to (it may have begun a block ago), silence once it is down. `out` comes in zeroed.
+    fn ramp_down(&mut self, out: &mut [f32], block_start: u64, k: usize) {
+        let ch = self.channels;
+        let (before, after) = out.split_at_mut(k * ch);
+        self.mix_span(block_start, before);
+
+        let done = self.stop_ramp.unwrap_or(0);
+        let left = self.fade_frames.saturating_sub(done).min(after.len() / ch);
+        self.mix_span(block_start + k as u64, &mut after[..left * ch]);
+
+        for (f, frame) in after.chunks_exact_mut(ch).take(left).enumerate() {
+            let t = ((done + f) as f32 + 0.5) / self.fade_frames as f32;
+            let gain = (t * std::f32::consts::FRAC_PI_2).cos();
+            frame.iter_mut().for_each(|s| *s *= gain);
+        }
+
+        self.stop_ramp = Some(done + left);
+        self.cursor = block_start + (k + left) as u64;
     }
 
     /// Takes on every queued add and remove.
@@ -587,11 +619,20 @@ impl TrackSource for GroupTrackSource {
 
         if self.control.seek_pending.swap(false, Ordering::Acquire) {
             self.cursor = self.control.seek_frame.load(Ordering::Relaxed);
+            self.stop_ramp = None;
         }
 
         let ch = self.channels;
         let frames = out.len() / ch;
         let end = self.end_frame();
+
+        if self.stop_ramp.is_some() && frames > 0 {
+            let out = &mut out[..frames * ch];
+            out.fill(0.0);
+            self.ramp_down(out, self.cursor, 0);
+            self.control.position.store(self.cursor, Ordering::Relaxed);
+            return frames * ch;
+        }
 
         let finished = self.cursor >= end;
         self.control.finished.store(finished, Ordering::Relaxed);
@@ -610,6 +651,12 @@ impl TrackSource for GroupTrackSource {
             .filter(|&(id, at, _)| id != self.taken && at >= block_start && at < block_end);
 
         let produced = match jump {
+            Some((id, at, STOP)) => {
+                self.ramp_down(out, block_start, (at - block_start) as usize);
+                self.taken = id;
+                self.control.jump_taken.store(id, Ordering::Release);
+                frames
+            }
             Some((id, at, to)) => {
                 let k = (at - block_start) as usize;
                 self.splice(out, block_start, k, to);
@@ -940,6 +987,44 @@ mod tests {
         let third = play_blocks(&mut src, 8);
         assert!(third.windows(2).all(|w| w[1] > w[0]), "disarmed: no jump");
         assert_eq!(control.jump_taken(), 1);
+    }
+
+    /// The stop falls twenty frames before a block's end, so its fade runs on into the next one.
+    #[test]
+    fn an_armed_stop_fades_out_across_the_block_and_stays_silent() {
+        let (mut src, control, _wav) = ramp_group(20_000);
+        let at = 8 * 512 - 20;
+        control.arm_stop(4, at);
+
+        let heard = play_blocks(&mut src, 16);
+        let fade = (RATE * JUMP_FADE_MS / 1000) as usize;
+
+        assert_eq!(
+            heard[at as usize - 1],
+            ramp(at - 1),
+            "up to the frame as it was"
+        );
+        for f in 0..fade {
+            let t = (f as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
+            let want = ramp(at + f as u64) * t.cos();
+            assert!(
+                (heard[at as usize + f] - want).abs() < 1e-6,
+                "frame {f} of the fade"
+            );
+        }
+        assert!(
+            heard[at as usize + fade..].iter().all(|&s| s == 0.0),
+            "silent after it"
+        );
+        assert_eq!(control.jump_taken(), 4);
+        assert_eq!(src.take_jump(), 0, "a stop moves nothing");
+
+        control.seek_frames(1_000);
+        assert_eq!(
+            play_blocks(&mut src, 1)[0],
+            ramp(1_000),
+            "a seek plays again"
+        );
     }
 
     #[test]
