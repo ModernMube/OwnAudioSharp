@@ -72,6 +72,11 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Fixed
 
+- **A jump near a block's end crossfades in full.** The 5 ms crossfade of an armed jump was cut
+  to what was left of the block, so a frame in its last 5 ms ended the old stream almost dead — a
+  click. File and clip tracks now read the old stream's 5 ms at the jump and finish the crossfade
+  in the next block, as the stop's fade already does.
+
 - **Tracks come back together after a seek or a start.** Every file track repositions on its own
   prefetch thread, and until it has audio at the new place it renders silence while its position
   keeps counting. A track whose prefetch took longer than a block came in a block late and stayed

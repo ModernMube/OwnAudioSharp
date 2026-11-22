@@ -206,6 +206,9 @@ pub struct FileTrackSource {
     /// Frames of a stop's fade done so far, `None` while no stop came. Past `fade_frames` the
     /// source is silent; a seek lets it play again.
     stop_ramp: Option<usize>,
+    /// Frames of a jump's crossfade done so far, `None` while none runs. A jump near a block's end
+    /// finishes it in the next block, out of what `fade` holds of the old stream.
+    crossfade: Option<usize>,
 }
 
 impl FileTrackSource {
@@ -265,6 +268,7 @@ impl FileTrackSource {
             fade: vec![0.0f32; fade_frames * channels],
             fade_frames,
             stop_ramp: None,
+            crossfade: None,
         };
 
         Ok((source, control))
@@ -298,7 +302,8 @@ impl FileTrackSource {
     }
 
     /// The first `at - cursor` frames from the playing lane, the rest from the spare, which takes
-    /// over; the old stream's next few milliseconds crossfaded (equal power) into the new.
+    /// over; the old stream's next few milliseconds crossfaded (equal power) into the new. All of
+    /// them are read here, so a jump near the block's end crossfades on into the next one.
     fn splice(&mut self, out: &mut [f32], id: u64, at: u64, to: u64) -> usize {
         let ch = self.channels;
         let k = (at - self.cursor) as usize;
@@ -307,10 +312,10 @@ impl FileTrackSource {
         let got = self.playing_mut().read(before);
         before[got..].fill(0.0);
 
-        let fade = self.fade_frames.min(after.len() / ch);
         let mut old = std::mem::take(&mut self.fade);
-        let got_old = self.playing_mut().read(&mut old[..fade * ch]);
-        old[got_old..fade * ch].fill(0.0);
+        let got_old = self.playing_mut().read(&mut old);
+        old[got_old..].fill(0.0);
+        self.fade = old;
 
         self.active ^= 1;
         self.control.active.store(self.active, Ordering::Release);
@@ -318,18 +323,8 @@ impl FileTrackSource {
         let got_new = self.playing_mut().read(after);
         after[got_new..].fill(0.0);
 
-        let frames = after
-            .chunks_exact_mut(ch)
-            .zip(old.chunks_exact(ch))
-            .take(fade);
-        for (f, (new, was)) in frames.enumerate() {
-            let t = (f as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
-            let (fade_in, fade_out) = (t.sin(), t.cos());
-            for (n, &w) in new.iter_mut().zip(was) {
-                *n = *n * fade_in + w * fade_out;
-            }
-        }
-        self.fade = old;
+        self.crossfade = Some(0);
+        self.blend(after);
 
         self.cursor = to + (got_new / ch) as u64;
         self.jumped += to as i64 - at as i64;
@@ -337,6 +332,31 @@ impl FileTrackSource {
         self.control.jump_taken.store(id, Ordering::Release);
         self.control.finished.store(false, Ordering::Relaxed);
         out.len()
+    }
+
+    /// The running crossfade over the start of `out`: the new stream rising, what `fade` holds of
+    /// the old one falling, from where the last block left it.
+    fn blend(&mut self, out: &mut [f32]) {
+        let Some(done) = self.crossfade else {
+            return;
+        };
+        let ch = self.channels;
+        let left = (self.fade_frames - done).min(out.len() / ch);
+
+        let frames = out
+            .chunks_exact_mut(ch)
+            .zip(self.fade[done * ch..].chunks_exact(ch))
+            .take(left);
+        for (f, (new, was)) in frames.enumerate() {
+            let t =
+                ((done + f) as f32 + 0.5) / self.fade_frames as f32 * std::f32::consts::FRAC_PI_2;
+            let (fade_in, fade_out) = (t.sin(), t.cos());
+            for (n, &w) in new.iter_mut().zip(was) {
+                *n = *n * fade_in + w * fade_out;
+            }
+        }
+
+        self.crossfade = (done + left < self.fade_frames).then_some(done + left);
     }
 
     /// The first `k` frames as they are, then the stop's fade on from where it got to (it may
@@ -376,6 +396,7 @@ impl TrackSource for FileTrackSource {
         if epoch != self.seen_epoch {
             self.seen_epoch = epoch;
             self.stop_ramp = None;
+            self.crossfade = None;
             self.cursor = self.control.seek_frame.load(Ordering::Relaxed);
             // a seek that crossed a jump's swap went to the lane that stopped playing
             if self.playing().seek_target() != self.cursor {
@@ -389,6 +410,7 @@ impl TrackSource for FileTrackSource {
 
         if let Some((id, at, to)) = self.due_jump(out.len() / self.channels) {
             if to == STOP {
+                self.crossfade = None;
                 self.taken = id;
                 self.control.jump_taken.store(id, Ordering::Release);
                 return self.ramp_down(out, (at - self.cursor) as usize);
@@ -410,6 +432,7 @@ impl TrackSource for FileTrackSource {
         }
 
         let read = self.playing_mut().read(out);
+        self.blend(&mut out[..read]);
         if read > 0 {
             // Audio is flowing (start, mid-stream, or resumed after a seek), so
             // the source is not finished.
@@ -646,6 +669,30 @@ mod tests {
 
         let landed = heard[0] * 32_768.0;
         assert!((landed - 20_000.0).abs() < 64.0, "landed at {landed}");
+    }
+
+    /// The jump falls twenty frames before a block's end: the crossfade runs on into the next one.
+    #[test]
+    fn a_jump_near_the_blocks_end_crossfades_on_into_the_next() {
+        let (mut source, control, _wav) = open_ramp();
+        let at = 12 * 512 - 20;
+        control.arm_jump(9, at, 1_000).unwrap();
+        settle(&mut source);
+
+        let heard = play(&mut source, 20);
+        let fade = (44_100 * JUMP_FADE_MS / 1000) as usize;
+
+        for f in 0..fade {
+            let t = (f as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
+            let want = ramp(1_000 + f as u64) * t.sin() + ramp(at + f as u64) * t.cos();
+            let got = heard[at as usize + f];
+            assert!(
+                (got - want).abs() < 1e-6,
+                "frame {f} of the crossfade: {got} against {want}"
+            );
+        }
+        assert_eq!(heard[at as usize + fade], ramp(1_000 + fade as u64));
+        assert_eq!(control.jump_taken(), 9);
     }
 
     /// No second stream for a stop: the fade runs on the playing one, across the block boundary.

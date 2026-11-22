@@ -396,6 +396,9 @@ pub struct GroupTrackSource {
     /// Frames of a stop's fade done so far, `None` while no stop came. Past `fade_frames` the
     /// group is silent; a seek lets it play again.
     stop_ramp: Option<usize>,
+    /// Frames of a jump's crossfade done so far, `None` while none runs. A jump near a block's end
+    /// finishes it in the next block, out of what `fade` holds of the old run.
+    crossfade: Option<usize>,
 }
 
 impl GroupTrackSource {
@@ -441,6 +444,7 @@ impl GroupTrackSource {
             ],
             fade_frames: (sample_rate * JUMP_FADE_MS / 1000).max(1) as usize,
             stop_ramp: None,
+            crossfade: None,
         };
 
         (source, control)
@@ -484,30 +488,46 @@ impl GroupTrackSource {
     }
 
     /// The first `k` frames of the block as they were, the rest from `to` on, its first few
-    /// milliseconds crossfaded (equal power) with what would have followed.
+    /// milliseconds crossfaded (equal power) with what would have followed. All of those are
+    /// mixed here, so a jump near the block's end crossfades on into the next one.
     fn splice(&mut self, out: &mut [f32], block_start: u64, k: usize, to: u64) {
         let ch = self.channels;
         let (before, after) = out.split_at_mut(k * ch);
         self.mix_span(block_start, before);
 
-        let fade = self.fade_frames.min(after.len() / ch);
         let mut old = std::mem::take(&mut self.fade);
-        old[..fade * ch].fill(0.0);
-        self.mix_span(block_start + k as u64, &mut old[..fade * ch]);
+        old.fill(0.0);
+        self.mix_span(block_start + k as u64, &mut old);
+        self.fade = old;
         self.mix_span(to, after);
 
-        let frames = after
+        self.crossfade = Some(0);
+        self.blend(after);
+    }
+
+    /// The running crossfade over the start of `out`: the new run rising, what `fade` holds of
+    /// the old one falling, from where the last block left it.
+    fn blend(&mut self, out: &mut [f32]) {
+        let Some(done) = self.crossfade else {
+            return;
+        };
+        let ch = self.channels;
+        let left = (self.fade_frames - done).min(out.len() / ch);
+
+        let frames = out
             .chunks_exact_mut(ch)
-            .zip(old.chunks_exact(ch))
-            .take(fade);
+            .zip(self.fade[done * ch..].chunks_exact(ch))
+            .take(left);
         for (f, (new, was)) in frames.enumerate() {
-            let t = (f as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
+            let t =
+                ((done + f) as f32 + 0.5) / self.fade_frames as f32 * std::f32::consts::FRAC_PI_2;
             let (fade_in, fade_out) = (t.sin(), t.cos());
             for (n, &w) in new.iter_mut().zip(was) {
                 *n = *n * fade_in + w * fade_out;
             }
         }
-        self.fade = old;
+
+        self.crossfade = (done + left < self.fade_frames).then_some(done + left);
     }
 
     /// The first `k` frames of the block as they are, then the stop's fade on from where it got
@@ -620,6 +640,7 @@ impl TrackSource for GroupTrackSource {
         if self.control.seek_pending.swap(false, Ordering::Acquire) {
             self.cursor = self.control.seek_frame.load(Ordering::Relaxed);
             self.stop_ramp = None;
+            self.crossfade = None;
         }
 
         let ch = self.channels;
@@ -652,6 +673,7 @@ impl TrackSource for GroupTrackSource {
 
         let produced = match jump {
             Some((id, at, STOP)) => {
+                self.crossfade = None;
                 self.ramp_down(out, block_start, (at - block_start) as usize);
                 self.taken = id;
                 self.control.jump_taken.store(id, Ordering::Release);
@@ -668,6 +690,7 @@ impl TrackSource for GroupTrackSource {
             }
             None => {
                 self.mix_span(block_start, out);
+                self.blend(out);
                 let produced = (end.min(block_end) - block_start) as usize;
                 self.cursor += produced as u64;
                 produced
@@ -987,6 +1010,33 @@ mod tests {
         let third = play_blocks(&mut src, 8);
         assert!(third.windows(2).all(|w| w[1] > w[0]), "disarmed: no jump");
         assert_eq!(control.jump_taken(), 1);
+    }
+
+    /// The jump falls twenty frames before a block's end, so its crossfade runs on into the next
+    /// one — cut short there, the old run would stop dead after twenty frames.
+    #[test]
+    fn a_jump_near_the_blocks_end_crossfades_on_into_the_next() {
+        let (mut src, control, _wav) = ramp_group(20_000);
+        let at = 16 * 512 - 20;
+        control.arm_jump(8, at, 1_000);
+
+        let heard = play_blocks(&mut src, 24);
+        let fade = (RATE * JUMP_FADE_MS / 1000) as usize;
+
+        for f in 0..fade {
+            let t = (f as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
+            let want = ramp(1_000 + f as u64) * t.sin() + ramp(at + f as u64) * t.cos();
+            let got = heard[at as usize + f];
+            assert!(
+                (got - want).abs() < 1e-6,
+                "frame {f} of the crossfade: {got} against {want}"
+            );
+        }
+        assert_eq!(
+            heard[at as usize + fade],
+            ramp(1_000 + fade as u64),
+            "clean after it"
+        );
     }
 
     /// The stop falls twenty frames before a block's end, so its fade runs on into the next one.
