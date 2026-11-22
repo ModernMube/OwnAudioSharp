@@ -49,7 +49,10 @@ internal sealed partial class RustAudioEngine : IAudioEngine
         get
         {
             lock (_stateLock)
-                return _outputStream is { } _s ? (int)_s.LatencyFrames : 0;
+            {
+                if (_outputStream is { } _s) return (int)_s.LatencyFrames;
+                return _sessionOutputStream is { } _session ? _read(() => (int)_session.LatencyFrames, 0) : 0;
+            }
         }
     }
 
