@@ -915,6 +915,28 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_gated(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// `0` takes the track out of the session's play/pause/stop-all calls, so only its own
+/// play/pause/stop moves it (a pad that sounds whatever the transport does); `1`, the
+/// default, puts it back under the transport.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_track_set_follows_transport(
+    track: *mut OwnAudioTrackHandle,
+    follows: i32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(wrapper) = (unsafe { track_from_ptr(track) }) else {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        };
+        wrapper.shared.set_follows_transport(follows != 0);
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Installs a per-track output-channel routing map: source channel `i` is summed
 /// into physical output channel `map[i]` (for `i < len`), and every output channel
 /// not named by the map receives no contribution from this track (silence). This is

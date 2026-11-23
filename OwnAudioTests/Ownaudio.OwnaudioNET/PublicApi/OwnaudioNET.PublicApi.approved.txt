@@ -2267,6 +2267,7 @@ namespace OwnaudioNET.Sources
         public bool AllowDynamicUpdate { get; set; }
         public override Ownaudio.Core.AudioConfig Config { get; }
         public override double Duration { get; }
+        public bool FollowsTransport { get; set; }
         public override bool IsEndOfStream { get; }
         public override float PitchShift { get; set; }
         public override double Position { get; }

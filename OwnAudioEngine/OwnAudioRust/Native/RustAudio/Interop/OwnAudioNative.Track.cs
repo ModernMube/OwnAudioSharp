@@ -353,6 +353,12 @@ internal static partial class OwnAudioNative
     internal static partial int ownaudio_v1_track_set_gated(IntPtr track, int gated);
 
     /// <summary>
+    /// 0: the session's play/pause/stop-all calls pass the track by. 1 (default): they move it.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_follows_transport(IntPtr track, int follows);
+
+    /// <summary>
     /// Project frames the track's source jumped by since the last position reset.
     /// </summary>
     [LibraryImport(NativeLibraryLoader.LogicalName)]

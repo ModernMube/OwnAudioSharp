@@ -203,11 +203,35 @@ public sealed partial class SampleSource : IRustNativeChainSource
         _rustTrack.SetStretchAlwaysOn(true);
         _rustTrack.Tempo = _tempo;
         _rustTrack.PitchSemitones = _pitchShift;
+        _rustTrack.SetFollowsTransport(_followsTransport);
+        _rustTrack.SetGated(_followsTransport);
         if (_rustMemoryTrack != null) _rustMemoryTrack.Loop = Loop;
     }
 
     private float _tempo = 1.0f;
     private float _pitchShift = 0.0f;
+    private bool _followsTransport = true;
+
+    /// <summary>
+    /// True (the default): the mixer's Start / Pause / Stop start, pause and stop us with the
+    /// rest. False: only our own Play / Pause / Stop do — a one-shot pad sitting on the mixer
+    /// that sounds whatever the transport is doing. A free source isn't held by the resume
+    /// gate after a seek either.
+    /// </summary>
+    public bool FollowsTransport
+    {
+        get => _followsTransport;
+        set
+        {
+            _followsTransport = value;
+            lock (_rustBackendLock)
+            {
+                if (_rustTrack is null) return;
+                _rustTrack.SetFollowsTransport(value);
+                _rustTrack.SetGated(value);
+            }
+        }
+    }
 
     /// <summary>
     /// Tempo multiplier, mirrored onto the native track.

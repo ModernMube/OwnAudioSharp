@@ -3090,6 +3090,16 @@ int32_t ownaudio_v1_track_get_jump_shift_frames(struct OwnAudioTrackHandle *trac
 int32_t ownaudio_v1_track_set_gated(struct OwnAudioTrackHandle *track, int32_t gated);
 
 /**
+ * `0` takes the track out of the session's play/pause/stop-all calls, so only its own
+ * play/pause/stop moves it (a pad that sounds whatever the transport does); `1`, the
+ * default, puts it back under the transport.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ */
+int32_t ownaudio_v1_track_set_follows_transport(struct OwnAudioTrackHandle *track, int32_t follows);
+
+/**
  * Installs a per-track output-channel routing map: source channel `i` is summed
  * into physical output channel `map[i]` (for `i < len`), and every output channel
  * not named by the map receives no contribution from this track (silence). This is

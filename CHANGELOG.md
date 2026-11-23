@@ -7,6 +7,13 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Added
 
+- **A source the transport doesn't move.** `SampleSource.FollowsTransport = false` takes a source
+  out of the mixer's start, pause and stop: it sits on the mixer ready, and only its own `Play()`,
+  `Pause()` and `Stop()` move it — a one-shot pad that sounds whether the song runs, is paused or
+  stopped. The resume gate after a seek leaves it alone too. Native: `TrackShared::follows_transport`,
+  passed by in `play_all` / `pause_all` / `stop_all`; FFI `ownaudio_v1_track_set_follows_transport`,
+  `AudioTrack.SetFollowsTransport`.
+
 - **Jumps the tracks carry out themselves.** `AudioMixer.ArmJump(atSongSeconds, toSongSeconds)`
   arms a jump ahead of time, in song (content) seconds — the markers' own, which a tempo change
   leaves where they are — — a loop's way back, a skipped section, a queued jump — and every track

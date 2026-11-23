@@ -440,7 +440,7 @@ impl MultiTrackMixer {
     /// Must be called from outside the audio thread.
     pub fn play_all(&self) {
         for track in &self.tracks {
-            track.shared.set_state(TrackState::Playing);
+            track.shared.set_transport_state(TrackState::Playing);
         }
     }
 

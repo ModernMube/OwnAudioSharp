@@ -171,6 +171,14 @@ synth.AllowDynamicUpdate = true;
 synth.SubmitSamples(newSamples); // ReadOnlySpan&lt;float&gt;
 synth.Clear();                   // flush buffer</code></pre></div>
 
+<h3 id="follows-transport">Sounding whatever the transport does</h3>
+<p>A source on the mixer moves with it: <code>mixer.Start()</code> starts it, <code>Pause()</code> pauses it, together with every other track on the same block. A one-shot pad or a sound effect wants the opposite — it sits on the mixer ready, and only its own <code>Play()</code>, <code>Pause()</code> and <code>Stop()</code> move it. Set <code>FollowsTransport = false</code> for that; the mixer's start, pause and stop then pass it by, and the resume gate after a seek does not hold it.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var pad = new SampleSource(hit, config) { FollowsTransport = false };
+mixer.AddSource(pad);       // stays quiet: nothing plays it yet
+
+pad.Seek(0); pad.Play();    // the press — the song may be running, paused or stopped
+mixer.Pause();              // the song pauses, the pad rings on</code></pre></div>
+
 <!-- GroupSource -->
 <h2 id="groupsource">GroupSource</h2>
 <p>Several audio files laid out on one timeline and played as a single source — a DAW lane with its clips. The clips are summed in the native engine into one track, so they share one tempo and pitch stage, one effect chain, one volume, pan and route. An effect tail — a reverb, a delay — rings on across a clip edge instead of stopping with it, and a gap between two clips costs nothing.</p>

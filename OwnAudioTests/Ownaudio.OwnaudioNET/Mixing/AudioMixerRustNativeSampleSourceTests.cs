@@ -102,6 +102,30 @@ public sealed class AudioMixerRustNativeSampleSourceTests : IDisposable
         source.RustMemoryTrack!.Loop.Should().BeTrue();
     }
 
+    /// <summary>
+    /// The switch reaches the native track whichever side of the attach it is flipped on; what
+    /// the session's *_all calls then do with it is the Rust command tests' business.
+    /// </summary>
+    [Fact]
+    public void FollowsTransport_ReachesTheNativeTrack_BeforeOrAfterAttach()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        using var early = CreateSampleSource(SampleRate);
+        using var late = CreateSampleSource(SampleRate);
+        early.FollowsTransport = false;
+
+        mixer.AddSource(early);
+        mixer.AddSource(late);
+        late.FollowsTransport = false;
+
+        early.FollowsTransport.Should().BeFalse();
+        late.FollowsTransport.Should().BeFalse();
+        new SampleSource(new float[8], _config).FollowsTransport.Should().BeTrue("a source follows by default");
+
+        var act = () => { mixer.RustSession!.PlayAll(); mixer.RustSession.PauseAll(); mixer.RustSession.StopAll(); };
+        act.Should().NotThrow();
+    }
+
     [Fact]
     public void RemoveSampleSource_RemovesTrack()
     {

@@ -344,9 +344,11 @@ impl MixerController {
     /// render block — a sample-accurate start — without a per-track round-trip.
     /// Works whether or not the mixer has been moved onto the audio thread,
     /// since it touches only the shared (atomic) blocks the controller holds.
+    /// The three `*_all` calls pass by a track that doesn't follow the transport
+    /// ([`TrackShared::set_follows_transport`]).
     pub fn play_all(&self) {
         for (_, shared) in &self.track_registry {
-            shared.set_state(TrackState::Playing);
+            shared.set_transport_state(TrackState::Playing);
         }
     }
 
@@ -358,7 +360,7 @@ impl MixerController {
     /// tracks pause on the same render block without a per-track round-trip.
     pub fn pause_all(&self) {
         for (_, shared) in &self.track_registry {
-            shared.set_state(TrackState::Paused);
+            shared.set_transport_state(TrackState::Paused);
         }
     }
 
@@ -367,7 +369,7 @@ impl MixerController {
     /// per-track round-trip).
     pub fn stop_all(&self) {
         for (_, shared) in &self.track_registry {
-            shared.set_state(TrackState::Stopped);
+            shared.set_transport_state(TrackState::Stopped);
         }
     }
 
@@ -1405,6 +1407,35 @@ mod tests {
         for &s in &out {
             assert!((s - 3.0).abs() < 1e-6, "out={out:?}");
         }
+    }
+
+    #[test]
+    fn the_transport_passes_by_a_track_it_does_not_own() {
+        let (mut ctl, mut mixer) = wired();
+        let (song, _) = ctl.add_track().unwrap();
+        let (pad, pad_shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(song, Some(Box::new(VecSource::new(vec![1.0; 16]))))
+            .unwrap();
+        ctl.set_track_source(pad, Some(Box::new(VecSource::new(vec![2.0; 16]))))
+            .unwrap();
+        pad_shared.set_follows_transport(false);
+
+        ctl.play_all();
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+        assert_eq!(out, [1.0; 4], "play_all left the pad alone");
+
+        pad_shared.set_state(TrackState::Playing);
+        ctl.pause_all();
+        mixer.mix(&mut out);
+        assert_eq!(out, [2.0; 4], "the pad plays on through a pause");
+
+        ctl.stop_all();
+        assert_eq!(pad_shared.state(), TrackState::Playing);
+
+        pad_shared.set_state(TrackState::Stopped);
+        mixer.mix(&mut out);
+        assert_eq!(out, [0.0; 4]);
     }
 
     #[test]

@@ -309,6 +309,18 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
+    /// Off: the session's PlayAll / PauseAll / StopAll leave this track alone and only its own
+    /// Play / Pause / Stop move it — a pad that sounds whether the song runs or not.
+    /// </summary>
+    public void SetFollowsTransport(bool follows)
+    {
+        if (_disposed) { return; }
+
+        int code = OwnAudioNative.ownaudio_v1_track_set_follows_transport(_handle.DangerousGetHandle(), follows ? 1 : 0);
+        ErrorCodeMapper.ThrowIfError(code, nameof(SetFollowsTransport));
+    }
+
+    /// <summary>
     /// Per-track output routing: source channel i lands on output mapping[i], every
     /// other output gets nothing from us. Empty span clears the routing.
     /// </summary>

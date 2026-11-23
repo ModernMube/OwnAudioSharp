@@ -249,6 +249,9 @@ pub struct TrackShared {
     /// Held by the mixer's resume gate after a seek or a start. Off for a live input, whose
     /// monitoring must not drop out because a file track is still decoding.
     gated: AtomicBool,
+    /// Cleared for a track the transport doesn't own — a one-shot pad, say. The session's
+    /// play/pause/stop-all calls pass it by; only its own play/pause/stop moves it.
+    follows_transport: AtomicBool,
     /// Seqlock guarding both routing tables: odd while the control thread is rewriting
     /// one, even when it is settled. The audio thread reads it either side of its
     /// snapshot and retries when the two differ, so it never renders a block from half
@@ -322,6 +325,7 @@ impl TrackShared {
             pending_start_silence: AtomicU64::new(0),
             start_silence_pending: AtomicBool::new(false),
             gated: AtomicBool::new(true),
+            follows_transport: AtomicBool::new(true),
             route_version: AtomicU32::new(0),
             route_len: AtomicUsize::new(0),
             route_map: std::array::from_fn(|_| AtomicU32::new(0)),
@@ -727,6 +731,25 @@ impl TrackShared {
     #[inline]
     pub fn gated(&self) -> bool {
         self.gated.load(Ordering::Relaxed)
+    }
+
+    /// See [`TrackShared::follows_transport`]. Flip it before the track ever plays.
+    #[inline]
+    pub fn set_follows_transport(&self, follows: bool) {
+        self.follows_transport.store(follows, Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn follows_transport(&self) -> bool {
+        self.follows_transport.load(Ordering::Relaxed)
+    }
+
+    /// The transport's own state change: a track it doesn't own keeps what it has.
+    #[inline]
+    pub(crate) fn set_transport_state(&self, state: TrackState) {
+        if self.follows_transport() {
+            self.set_state(state);
+        }
     }
 }
 
