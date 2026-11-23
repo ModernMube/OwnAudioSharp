@@ -41,7 +41,7 @@ public sealed partial class AudioMixer
 
             Log.Info($"[Mixer] Source '{source.Id}' added ({_sources.Count} total)");
 
-            if (_isRunning && source.State != AudioState.Playing)
+            if (_isRunning && source.State != AudioState.Playing && FollowsTransport(source))
             {
                 //On the clock first, otherwise it enters from the head of the file
                 AlignRustSourceToClock(source);

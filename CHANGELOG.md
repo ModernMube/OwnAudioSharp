@@ -10,7 +10,8 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 - **A source the transport doesn't move.** `SampleSource.FollowsTransport = false` takes a source
   out of the mixer's start, pause and stop: it sits on the mixer ready, and only its own `Play()`,
   `Pause()` and `Stop()` move it — a one-shot pad that sounds whether the song runs, is paused or
-  stopped. The resume gate after a seek leaves it alone too. Native: `TrackShared::follows_transport`,
+  stopped. Neither `AddSource` on a running mixer nor `StartPreparedSources` plays it, the
+  mixer's `Stop()` leaves it ringing, and the resume gate after a seek leaves it alone too. Native: `TrackShared::follows_transport`,
   passed by in `play_all` / `pause_all` / `stop_all`; FFI `ownaudio_v1_track_set_follows_transport`,
   `AudioTrack.SetFollowsTransport`.
 

@@ -215,8 +215,8 @@ public sealed partial class SampleSource : IRustNativeChainSource
     /// <summary>
     /// True (the default): the mixer's Start / Pause / Stop start, pause and stop us with the
     /// rest. False: only our own Play / Pause / Stop do — a one-shot pad sitting on the mixer
-    /// that sounds whatever the transport is doing. A free source isn't held by the resume
-    /// gate after a seek either.
+    /// that sounds whatever the transport is doing. Neither AddSource on a running mixer nor
+    /// StartPreparedSources plays it, and the resume gate after a seek doesn't hold it.
     /// </summary>
     public bool FollowsTransport
     {

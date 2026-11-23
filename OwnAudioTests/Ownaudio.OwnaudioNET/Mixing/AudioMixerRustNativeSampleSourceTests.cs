@@ -126,6 +126,34 @@ public sealed class AudioMixerRustNativeSampleSourceTests : IDisposable
         act.Should().NotThrow();
     }
 
+    /// <summary>
+    /// The managed side keeps its hands off too: a free source added to a running mixer, a
+    /// prepared start and a mixer stop leave it where it was.
+    /// </summary>
+    [Fact]
+    public void AFreeSource_IsNeitherStartedNorStoppedByTheMixer()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        using var free = CreateSampleSource(SampleRate);
+        using var song = CreateSampleSource(SampleRate);
+        free.FollowsTransport = false;
+
+        mixer.Start();
+        mixer.AddSource(free);
+        mixer.AddSource(song);
+
+        free.State.Should().NotBe(AudioState.Playing, "a running mixer does not start it on the way in");
+        song.State.Should().Be(AudioState.Playing);
+
+        mixer.StartPreparedSources(0.0);
+        free.State.Should().NotBe(AudioState.Playing, "nor does the transport's start");
+
+        free.Play();
+        mixer.Stop();
+        free.State.Should().Be(AudioState.Playing, "and the transport's stop leaves it ringing");
+        song.State.Should().NotBe(AudioState.Playing);
+    }
+
     [Fact]
     public void RemoveSampleSource_RemovesTrack()
     {

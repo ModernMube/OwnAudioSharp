@@ -76,6 +76,7 @@ public sealed partial class AudioMixer
 
         foreach (var source in _sources.Values)
         {
+            if (!FollowsTransport(source)) continue;
             try { source.Stop(); }
             catch (Exception ex) { Log.Error($"[Mixer] Source '{source.Id}' refused to stop", ex); }
         }
@@ -212,7 +213,7 @@ public sealed partial class AudioMixer
         int _started = 0;
         foreach (var source in _sources.Values.ToArray())
         {
-            if (source.State != AudioState.Playing)
+            if (source.State != AudioState.Playing && FollowsTransport(source))
             {
                 try { source.Play(); _started++; }
                 catch (Exception ex) { Log.Error($"[Mixer] Prepared source '{source.Id}' failed to start", ex); }

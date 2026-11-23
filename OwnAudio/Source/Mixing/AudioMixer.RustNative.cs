@@ -329,6 +329,13 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// False for a source the transport doesn't move (<see cref="SampleSource.FollowsTransport"/>):
+    /// the mixer's start, pause and stop pass it by, on the native side and here alike.
+    /// </summary>
+    internal static bool FollowsTransport(IAudioSource source)
+        => _resolve<SampleSource>(source)?.FollowsTransport ?? true;
+
+    /// <summary>
     /// Digs out whatever T sits behind a mixer source, unwrapping SourceWithEffects on the way.
     /// The wrapper is no BaseAudioSource itself, so a plain cast would read null off every
     /// effect-wrapped track.
