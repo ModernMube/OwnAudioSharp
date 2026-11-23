@@ -65,6 +65,7 @@
     <tr><td><code>PositionChanged</code></td><td>every source</td><td><code>EventArgs</code></td><td>Position moved noticeably. Throttled to ~50 ms.</td></tr>
     <tr><td><code>PlaybackEnded</code></td><td>mixer</td><td><code>EventArgs</code></td><td>Every source has reached its end.</td></tr>
     <tr><td><code>SourceError</code></td><td>mixer</td><td><code>AudioErrorEventArgs</code></td><td>One of the sources on the bus failed.</td></tr>
+    <tr><td><code>JumpTaken</code></td><td>mixer</td><td><code>JumpTakenEventArgs</code></td><td>An armed jump or stop happened, or came too late (<code>Late</code>).</td></tr>
     <tr><td><code>StreamFaulted</code></td><td>mixer</td><td><code>AudioStreamFaultEventArgs</code></td><td>A native stream died — usually an unplugged device. Covers playback and the shared capture.</td></tr>
     <tr><td><code>OutputDeviceChanged</code><br><code>InputDeviceChanged</code></td><td><code>OwnaudioNet.Engine</code></td><td><code>AudioDeviceChangedEventArgs</code></td><td>The engine moved to a different device.</td></tr>
     <tr><td><code>DeviceStateChanged</code></td><td><code>OwnaudioNet.Engine</code></td><td><code>AudioDeviceStateChangedEventArgs</code></td><td>A device was added, removed or changed state.</td></tr>

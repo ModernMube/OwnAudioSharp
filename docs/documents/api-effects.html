@@ -309,8 +309,9 @@ int sampleRate = OwnaudioNet.Engine!.Config.SampleRate;
 bool ready     = await host.InitializeAudioAsync(sampleRate, maxBlockSize: 1024);
 
 // Add to mixer or track effect chain
-mixer.AddMasterEffect(host.GetProcessor());
-// or: trackFx.AddEffect(host.GetProcessor());
+var processor = host.GetProcessor();
+mixer.AddMasterEffect(processor);
+// or: trackFx.AddEffect(processor);
 
 // Plugin UI
 host.OpenEditor();
@@ -332,7 +333,9 @@ await host.SetParametersAsync(new Dictionary&lt;int, double&gt; { { paramId, 0.7
 byte[]? state = await host.GetStateAsync();
 await host.SetStateAsync(state);
 
-// Cleanup
+// Cleanup — on a mixer, take it off and wait until the audio thread lets go
+mixer.RemoveMasterEffect(processor);
+await mixer.WhenEffectReleasedAsync(processor);
 await host.DisposeAsync();
 // or:
 host.Dispose();</code></pre></div>
