@@ -7,7 +7,7 @@ its parameters, and insert it into the OwnAudio effect chain as a standard
 
 Namespace root: `OwnaudioNET.Effects.VST`
 
-The actual native bridge is the **`OwnAudioVst`** package (2.1.0): the
+The actual native bridge is the **`OwnAudioVst`** package (2.1.1): the
 `OwnVST3Host` assembly (`ThreadedVst3Wrapper`, `OwnVst3Wrapper`,
 `VstEditorController`, `PluginScanner`, …) over a JUCE-free native library built
 on the VST3 SDK and Apple's `AUAudioUnit`. This folder is the managed-side

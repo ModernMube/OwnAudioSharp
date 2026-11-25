@@ -78,6 +78,11 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   as `AddSourcePrepared` leaves it. A full queue is waited out a device block at a time while the
   output drains it (up to a second), so a big song no longer needs the caller to pace its adds.
 
+### Changed
+
+- **OwnAudioVst 2.1.1.** Adds `ProcessMidi(ReadOnlySpan<MidiEvent>)` next to the array overload;
+  nothing in OwnAudioSharp changes behaviour.
+
 ### Fixed
 
 - **A jump near a block's end crossfades in full.** The 5 ms crossfade of an armed jump was cut
